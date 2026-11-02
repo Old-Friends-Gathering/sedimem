@@ -71,14 +71,14 @@ async exportRecords({ since, until, status = 'active', kind, limit = 2000 } = {}
 |---|---|---|---|
 | `/api/summary` | – | `{ scope, memoHome, version, policy: { maxActive, nearDupThreshold, scanThreshold, scanDiceThreshold }, stats }` | 顶栏与全局状态 |
 | `/api/brief` | `lines=80` | `{ text, generatedAt }` | 「现在注入给 Agent 的是什么」 |
-| `/api/today` | `date=YYYY-MM-DD`（缺省=今天） | `{ date, counts: {created,superseded,forgotten,merged,hit}, timeline: [{ts, op, id, label, action, reason}] }` | 今日页主表 |
+| `/api/today` | `date=YYYY-MM-DD`（缺省=今天）、`tzOffset=480`（分钟，默认 0=UTC） | `{ date, counts: {created,superseded,forgotten,merged,hit}, timeline: [{ts, op, id, label, action, reason}] }` | 今日页主表 |
 | `/api/records` | `status, kind, since, limit, q` | `{ records, total, limited }` | 图谱节点、详情面板 |
 | `/api/graph` | `limit=300, days=90` | `{ nodes: [{ id, label, kind, status, subject, createdAt, hits, degree }], edges: [{ from, to, type, weight }], sampled: { shown, total } }` | 图谱页 |
 | `/api/hygiene` | – | `{ candidates: [cluster], merged: [{ ts, loserId, winnerId }], superseded: [...], suspicious: { count }, series: [{ date, dupRatio, conflictRate, active, total }], doctor: {...} }` | 卫生页 |
-| `/api/timeline` | `days=30` | `{ series: [{ date, active, total, created, superseded, merged, dupRatio, conflictRate }] }` | 趋势折线 |
+| `/api/timeline` | `days=30`、`tzOffset=480` | `{ series: [{ date, active, total, created, superseded, merged, dupRatio, conflictRate }] }` | 趋势折线 |
 
 约定：
-- 所有时间字段一律 **UTC ISO8601 字符串**（UI 负责转本地时区显示）。
+- 所有时间字段一律 **UTC ISO8601 字符串**；「哪一天」由 `tzOffset`（分钟，东为正）换算成 `[from, to)` UTC 时刻后再过滤，服务端不猜时区（用户决策：按自然日）。
 - 所有响应带 `{ "ok": true, ... }`；错误统一 `{ ok: false, code, message }` + 4xx/5xx（`E_INVALID_ARG` → 400，`E_CORRUPT_JSONL` → 500 且带 `file/line`）。
 - `label` 的生成规则在服务端（`subject/predicate` 优先，unstructured 用 `text` 前 60 字），**UI 不拼接语义**，避免两端规则漂移。
 
@@ -104,12 +104,14 @@ async exportRecords({ since, until, status = 'active', kind, limit = 2000 } = {}
 
 ### 5.2 图谱（`#/graph`）
 
-1. **画布**：canvas 绘制的力导向图（手写 ~120 行：斥力 + 弹簧 + 向心 + 阻尼，60fps 上限，`requestAnimationFrame` 逐帧 tick）。
-2. **节点**：颜色 = `kind`（fact/pref/decision/gotcha/state 五色）；形状/描边 = 状态（active 实心、superseded 半透明加斜线、disputed 红描边、tombstone 灰色小点且默认隐藏）；半径 = `sqrt(hits)+3`（被回忆过的更大）。
-3. **交互**：拖拽节点、滚轮缩放、点击节点 → 右侧详情面板（全文、slot、时间、版本链上下游、来源 agent）；点击边 → 显示 `type/weight/strength`。
-4. **过滤器**（顶部）：scope（只读当前）、kind 多选、状态多选、时间窗（7/30/90/全部）、文本框即时过滤 label。
-5. **采样**：节点上限 300。超出时按「最近创建优先 + hits 降序」采样，并在画布右上角常驻提示 `已采样 300 / 1 284 条，缩小时间窗可看全`。**绝不静默截断**。
-6. **性能**：1000 节点以内 tick 预算 16ms；超过上限只降不采样之外的额外处理（不做 LOD、不做 WebGL）。
+**必须是活的**（用户 2026-11-02 明确要求"动态"），不是静态布局图：
+
+1. **实时力导向**：`requestAnimationFrame` 每帧跑一次模拟（斥力 O(n²) 但 n≤300 可接受；弹簧 + 向心 + 阻尼 0.85），`alpha` 衰减到 0.005 停止；拖拽节点时该节点固定（`fx/fy`），松手后重新加入模拟。
+2. **交互**：拖拽节点 / 滚轮缩放（0.4×–2.5×）/ 拖拽空白平移 / 点击节点开右侧详情（该节点的全文、slot、版本链上下游、来源 agent、命中次数）/ 双击节点锁定或释放。
+3. **边默认只开两类**（用户 2026-11-02 决策）：默认 `same-entity` + `supersedes`；工具栏有「全开」开关，一次点亮 `duplicate-of` + `disputed-with`（也可单独勾）。开关状态存 `localStorage`（只存偏好，不存正文）。
+4. **节点**：颜色 = `kind`（五色）；外观 = 状态（active 实心、superseded 半透明 + 斜线、tombstoned 灰点且默认隐藏、disputed 红描边）；半径 = `sqrt(hits)+3`。
+5. **采样**：节点上限 300，按「最近创建优先 + hits 降序」采样，画布右上角常驻 `已采样 300 / 1 284 条`。**绝不静默截断**。
+6. **性能预算**：300 节点 60fps；超过 300 不降级渲染（采样已经封顶）。
 
 ### 5.3 卫生（`#/hygiene`）
 
@@ -146,6 +148,8 @@ async exportRecords({ since, until, status = 'active', kind, limit = 2000 } = {}
 
 ## 9. 分阶段交付
 
+> 施工级任务分解（谁改哪些文件、并行范围、风险与回滚）见 [`plans/v0.2-web-ui-plan.md`](plans/v0.2-web-ui-plan.md)。
+
 ### v0.1.3（补丁，先修数据面；1 天内）
 
 1. metrics 按 scope 分文件（含旧文件迁移读取）+ 单测。
@@ -179,9 +183,14 @@ async exportRecords({ since, until, status = 'active', kind, limit = 2000 } = {}
 6. 不引入图表库/图算法库（手写 200 行内解决）。
 7. 不做暗色/亮色主题切换（跟系统 `prefers-color-scheme` 即可）。
 
-## 11. 未决问题（需用户拍板）
+## 11. 决策记录（用户 2026-11-02 拍板）
 
-1. **访问范围**：只本机 `127.0.0.1:7788` 够吗？还是想在手机/平板上看（需要局域网绑定 + 简单 token）？
-2. **图谱边的优先级**：默认同时画「同实体 + 版本链 + 重复候选 + 冲突」四类，会不会太密？建议默认只开前两类，重复候选单独开关。
-3. **「每天记了什么」的粒度**：按自然日够吗？还是想要「按会话」（需要给事件加 session id，属数据层变更）。
-4. **是否需要日报导出**：把「今日」页导出成 Markdown 追加进 `brief/` 或发到某处（会引入外部依赖，默认不做）。
+| # | 问题 | 决策 | 对设计的影响 |
+|---|---|---|---|
+| D1 | 访问范围 | **仅本机** `127.0.0.1`，不做 token、不做局域网 | 无鉴权层；绑定地址写进单测 |
+| D2 | 图谱边 | **两者都要**：默认只开「同实体 + 版本链」，提供「全开」开关点亮「重复候选 + 冲突」 | §5.2 第 3 条；开关持久化到 localStorage |
+| D3 | 图谱形态 | **必须动态**：实时模拟 + 拖拽 + 点击看详情 | §5.2 第 1–2 条（否决静态布局 / 一次性动画） |
+| D4 | 粒度 | **自然日** | `/api/today`、`/api/timeline` 增 `tzOffset` 参数 |
+| D5 | 日报导出 | **不做** | §10 第 5 条维持 |
+
+四个问题全部关闭，不再留"待定项"。
