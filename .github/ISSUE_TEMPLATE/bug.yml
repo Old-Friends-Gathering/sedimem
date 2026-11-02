@@ -1,0 +1,29 @@
+name: 缺陷
+description: 行为与契约/文档不符，或门禁假通过。
+title: "[bug] "
+labels: ["bug"]
+body:
+  - type: textarea
+    id: repro
+    attributes:
+      label: 最小复现
+      description: 命令、输入、Commit、Node 版本。能复现的脚本优先（贴到 `tests/` 更佳）。
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: 期望 vs 实际
+      description: 期望行为引用契约条目（docs/02 §几 / eval I 几），不要写"应该正常"。
+    validations:
+      required: true
+  - type: input
+    id: env
+    attributes:
+      label: 环境
+      placeholder: macOS 15 / Node 24.21.0 / v0.1.1
+  - type: textarea
+    id: evidence
+    attributes:
+      label: 证据
+      description: 日志、`eval/results` 片段、失败用例输出（注意脱敏：别贴真实记忆正文与个人路径）。

@@ -298,8 +298,10 @@ try {
 }
 
 const resultFile = join(RESULTS_DIR, `v${version}-${ts}.json`);
-writeFileSync(resultFile, JSON.stringify(report, null, 2));
-writeFileSync(join(RESULTS_DIR, 'LATEST.json'), JSON.stringify(report, null, 2));
+// 末尾补换行：Q8 编码卫生门禁要求所有文件以 \n 结束（历史上这里漏了，导致跑完 eval 就红）
+const serialize = (o) => JSON.stringify(o, null, 2) + '\n';
+writeFileSync(resultFile, serialize(report));
+writeFileSync(join(RESULTS_DIR, 'LATEST.json'), serialize(report));
 
 // ---------- 输出 ----------
 if (!jsonOut) {

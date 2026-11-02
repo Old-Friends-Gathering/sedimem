@@ -1,0 +1,11 @@
+version: 2
+updates:
+  # 本项目零运行时依赖；这里只跟 GitHub Actions 的版本，避免 action 被弃用后门禁静默失效。
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+    labels: ["chore", "dependencies"]
+    commit-message:
+      prefix: "chore(actions)"

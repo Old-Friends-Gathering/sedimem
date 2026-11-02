@@ -1,0 +1,8 @@
+# 所有改动默认由维护者评审；后续多人协作时按目录细化。
+* @Yeager-Nan7
+
+# 契约与门禁属于"改了就影响全局"，必须有意识评审
+/docs/02-data-model-and-contract.md @Yeager-Nan7
+/docs/07-quality-and-security.md @Yeager-Nan7
+/tools/ @Yeager-Nan7
+/.github/ @Yeager-Nan7

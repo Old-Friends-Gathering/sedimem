@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: 安全漏洞（不要开公开 issue）
+    url: https://github.com/Old-Friends-Gathering/strata/security/advisories/new
+    about: 凭据泄露、记忆数据越权/外泄等，请走私密漏洞报告。
+  - name: 使用与排障
+    url: https://github.com/Old-Friends-Gathering/strata/blob/main/docs/06-usage.md
+    about: 三端接入、分库对不齐、nightly 维护等先看使用文档。

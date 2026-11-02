@@ -1,0 +1,36 @@
+name: quality
+
+# 门禁 2/3：工程质量。与 ci 的区别：ci 看「行为对不对」，quality 看「结构是否在腐化」。
+# 具体 8 项检查见 tools/quality-check.mjs 与 docs/07-quality-and-security.md。
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: quality-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  quality:
+    name: quality
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: 质量门禁（8 项）
+        run: node tools/quality-check.mjs --json | tee quality-report.json
+      - name: 归档质量报告
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: quality-report
+          path: quality-report.json
+          if-no-files-found: warn

@@ -61,3 +61,33 @@ G4  两份审核报告无「阻断」级意见；阻断项全部修复或写 ADR
 G5  docs/02 契约与实现一致（Lead 逐条核对导出签名）
 G6  CHANGELOG + 版本索引更新
 ```
+
+## 6. issue → MR（2026-11-02 起为强制流程）
+
+上面的 G1–G6 是"这一版能不能放行"。从 v0.1.1 起，**每个功能/修复都必须先有 issue，才有对应 MR**：
+
+```
+Issue（feature/bug/chore 模板，验收标准必须可机械检验）
+  → 分支 <type>/<issue号>-<短描述>
+  → MR 正文 `Closes #N`（拆分用 `Refs #N`）
+  → 四个 workflow 全绿 + CODEOWNERS 评审
+  → 合入 main
+```
+
+- **执行点**：`.github/workflows/issue-link.yml` 在 PR 上校验正文 + 校验目标 issue 存在且 open；
+  `main` 分支保护要求 `test (22)`、`test (24)`、`eval (I1–I12)`、`quality`、`security`、`issue-link` 全绿。
+- **豁免**：仅 `no-issue` 标签（docs/CI/依赖升级），且正文必须写豁免理由。
+- **为什么这么严**：这个仓库的产出会长期沉淀事实，"没有 issue 的改动"无法被事后复盘——
+  三个月后没人说得清某条去重规则为什么是 0.85 而不是 0.8。issue 是决策的锚点。
+- 门禁的指标定义与阈值见 `docs/07-quality-and-security.md`（本文件只管流程，不管数字）。
+
+## 7. 评审角色到门禁的映射
+
+| 角色（§1） | 主要靠哪个门禁兜住 | 人工还要看什么 |
+|---|---|---|
+| 架构 | `quality` Q5（契约覆盖）、Q2（规模） | 是否该新增 Port 而不是改 core |
+| 实现 | `ci` `test`、`coverage` | 错误处理是否吞错、是否破坏 append-only |
+| 测试 | `ci` `eval` | 断言是否被放宽（反作弊） |
+| 安全 | `security` S1–S8 + CodeQL | 读路径是否绕过 suspicious 遮蔽 |
+| 文档 | `quality` Q6（链接）、Q7（版本一致性） | 契约是否先于实现改 |
+| 流程 | `issue-link` | issue 的验收标准是否真的可检验 |

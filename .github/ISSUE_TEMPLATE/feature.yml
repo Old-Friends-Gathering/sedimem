@@ -1,0 +1,62 @@
+name: 功能 / 设计变更
+description: 新能力、行为变更、契约变更。先有 issue 才有 MR。
+title: "[feat] "
+labels: ["enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        本仓库流程是 **issue → MR**：没有本 issue 就不会有对应 MR（CI 的 `issue-link` 门禁会拦）。
+        写完后请确认"验收标准"可被 `eval/` 或测试机械检验，而不是"看起来对"。
+  - type: textarea
+    id: problem
+    attributes:
+      label: 要解决的问题
+      description: 现状哪里不够用？谁受影响？（避免只写"加一个功能"）
+      placeholder: 例：DSH 会话里写的记忆落在 dir:desktop 分库，Claude/Codex 按项目 cwd 解析 → 三端不共享。
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: 方案与边界
+      description: 打算怎么做、**明确不做什么**（不做的事写清楚，避免范围蔓延）。
+    validations:
+      required: true
+  - type: textarea
+    id: acceptance
+    attributes:
+      label: 验收标准（可机械检验）
+      description: 每条都要能被测试/评测/门禁验证。对应到 `tests/` 或 `eval/cases/` 的哪一条？
+      placeholder: |
+        1. 20 句同义改写只留 1 条 active（eval I7）
+        2. 三端 shared scope 一致（tests/injection/i13-*.test.js）
+    validations:
+      required: true
+  - type: dropdown
+    id: contract
+    attributes:
+      label: 是否改动对外契约
+      description: 对外契约 = docs/02（MemoryRecord 不变式、模块签名、CLI 子命令、MCP 工具）
+      options:
+        - 否（纯内部实现）
+        - 是（已在 docs/02 写清并附 ADR 段）
+        - 是（还没写，本 issue 需要先补契约）
+    validations:
+      required: true
+  - type: textarea
+    id: security
+    attributes:
+      label: 安全与隐私影响
+      description: 是否触碰凭据、个人路径、记忆正文外泄、跨分库污染？没有就写"无"。
+    validations:
+      required: true
+  - type: checkboxes
+    id: dod
+    attributes:
+      label: 完成定义
+      options:
+        - label: 有对应的注入式/单元测试（先红后绿）
+        - label: 本地跑过三条门禁（quality / security / coverage）
+        - label: 文档同步（docs/02 契约 + CHANGELOG + DELTA）
+        - label: 有回滚或降级路径

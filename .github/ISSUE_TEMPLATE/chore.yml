@@ -1,0 +1,26 @@
+name: 工程杂务
+description: CI、门禁、脚本、文档、依赖升级等不改变运行时行为的工作。
+title: "[chore] "
+labels: ["chore"]
+body:
+  - type: textarea
+    id: what
+    attributes:
+      label: 做什么、为什么
+      description: 说明不做会有什么具体代价（例如"每次更新要手工改三端配置，已漏过一次"）。
+    validations:
+      required: true
+  - type: textarea
+    id: impact
+    attributes:
+      label: 对门禁/流程的影响
+      description: 是否新增/修改门禁？是否需要同步 docs/05、docs/07、CONTRIBUTING？
+  - type: checkboxes
+    id: scope
+    attributes:
+      label: 范围
+      options:
+        - label: CI / GitHub Actions
+        - label: 门禁脚本（tools/）
+        - label: 文档（docs/）
+        - label: 三端客户端配置模板（versions/*/configs/）

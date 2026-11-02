@@ -1,0 +1,60 @@
+name: security
+
+# 门禁 3/3：安全。
+# - secrets:  自研零依赖扫描（个人路径/凭据/内部域名/超大文件/许可证）
+# - codeql:   GitHub 官方静态分析（公开仓库免费），目标 security-and-quality
+# - 依赖审计：本项目零运行时依赖（quality 门禁 Q1 保证），故不做 npm audit；
+#             若将来引入依赖，Q1 会先失败，届时再补 dependency-review。
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  schedule:
+    - cron: '0 3 * * 1' # 每周一 03:00 UTC 全量重扫
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: security-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  secrets:
+    name: security
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # 历史面扫描需要完整历史
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: 安全门禁（8 项）
+        run: node tools/security-check.mjs --json | tee security-report.json
+      - name: 归档安全报告
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: security-report
+          path: security-report.json
+          if-no-files-found: warn
+
+  codeql:
+    name: codeql
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      security-events: write
+      actions: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: github/codeql-action/init@v3
+        with:
+          languages: javascript-typescript
+          queries: security-and-quality
+      - uses: github/codeql-action/analyze@v3
+        with:
+          category: /language:javascript-typescript

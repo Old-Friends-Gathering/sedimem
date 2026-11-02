@@ -1,0 +1,75 @@
+name: issue-link
+
+# 门禁 0：流程。每条 MR 必须挂在一条 issue 上（用户明确要求：功能先有 issue，才有 MR）。
+#
+# 判定规则（任一满足即通过）：
+#   1. PR 正文含 closing 关键字 + issue 号：Closes/Fixes/Resolves #123（大小写不敏感）
+#   2. 或正文含 `Refs #123` / `Part of #123`（同一 issue 拆多个 MR 时用）
+#   3. 或 PR 带 `no-issue` 标签（仅限 docs/CI/依赖升级这类不改变行为的改动，且必须在 PR 里说明理由）
+# 并且：被引用的 issue 必须存在且处于 open 状态（防止挂到已关闭的旧 issue 上蒙过门禁）。
+
+on:
+  pull_request:
+    types: [opened, edited, reopened, synchronize, ready_for_review, labeled, unlabeled]
+
+permissions:
+  contents: read
+  issues: read
+  pull-requests: read
+
+concurrency:
+  group: issue-link-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  issue-link:
+    name: issue-link
+    runs-on: ubuntu-latest
+    steps:
+      - name: 校验 MR 关联 issue
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const pr = context.payload.pull_request;
+            const body = pr.body || '';
+            const labels = (pr.labels || []).map((l) => l.name);
+            const fail = (msg) => {
+              core.setFailed(msg);
+            };
+
+            if (labels.includes('no-issue')) {
+              core.info('PR 带 no-issue 标签：跳过 issue 关联校验（PR 正文须说明为什么不需要 issue）。');
+              if (!/no-issue|不需要 issue|流程豁免/i.test(body)) {
+                return fail('带 no-issue 标签时，PR 正文必须说明豁免理由（便于事后审计）。');
+              }
+              return;
+            }
+
+            // Closes/Fixes/Resolves #N 或 Refs/Part of #N
+            const strong = /(?:clos(?:e|es|ed)|fix(?:e|es|ed)|resolv(?:e|es|ed))\s*:?\s*#(\d+)/i;
+            const weak = /(?:refs?|references?|part\s+of|related\s+to)\s*:?\s*#(\d+)/i;
+            const m = body.match(strong) || body.match(weak);
+            if (!m) {
+              return fail([
+                '本 MR 没有关联 issue。',
+                '',
+                '规则：功能/修复必须先有 issue，才能有对应 MR。请在 PR 正文写 `Closes #<issue号>`',
+                '（同一 issue 拆多个 MR 用 `Refs #<issue号>`）。',
+                '确属 docs/CI/依赖升级等不改变行为的改动，请加 `no-issue` 标签并在正文说明理由。',
+              ].join('\n'));
+            }
+
+            const issueNumber = Number(m[1]);
+            const { data: issue } = await github.rest.issues.get({
+              owner: context.repo.owner, repo: context.repo.repo, issue_number: issueNumber,
+            });
+            if (issue.pull_request) {
+              return fail(`#${issueNumber} 是一个 PR，不是 issue。请关联到真正的 issue。`);
+            }
+            if (issue.state !== 'open') {
+              return fail(`#${issueNumber} 当前状态是 ${issue.state}，不能作为新 MR 的挂载点。请重新开一条 issue 或改为关联仍 open 的 issue。`);
+            }
+            core.info(`已关联 issue #${issueNumber}：${issue.title}`);
+            if (!strong.test(body)) {
+              core.notice(`本 MR 使用弱关联（Refs/Part of #${issueNumber}），合并后 issue 不会自动关闭 —— 确认这是有意拆分。`);
+            }
