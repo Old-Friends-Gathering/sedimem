@@ -1,0 +1,304 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>strata · 记忆观察台（线框图 / mock data）</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data:; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline'">
+<style>
+  :root{
+    --bg:#0f1115; --panel:#161922; --panel2:#1c2029; --line:#262b36;
+    --fg:#e7e9ee; --dim:#9aa3b2; --faint:#6b7484;
+    --fact:#5b9cf5; --pref:#c084fc; --decision:#34d399; --gotcha:#fbbf24; --state:#94a3b8;
+    --dup:#f97316; --bad:#ef4444; --ok:#22c55e;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--fg);
+       font:14px/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Hiragino Sans GB",sans-serif}
+  header{display:flex;align-items:center;gap:16px;padding:14px 20px;border-bottom:1px solid var(--line);
+         background:linear-gradient(180deg,#14171f,#0f1115)}
+  .brand{font-weight:700;letter-spacing:.5px}
+  .brand small{color:var(--faint);font-weight:400;margin-left:8px}
+  .scope{margin-left:auto;display:flex;gap:10px;align-items:center}
+  .chip{background:var(--panel2);border:1px solid var(--line);border-radius:999px;padding:3px 10px;color:var(--dim);font-size:12px}
+  .chip b{color:var(--fg);font-weight:600}
+  nav{display:flex;gap:4px;padding:10px 20px 0}
+  nav button{background:transparent;border:1px solid transparent;border-bottom:none;color:var(--dim);
+             padding:8px 16px;border-radius:8px 8px 0 0;cursor:pointer;font:inherit}
+  nav button[aria-selected="true"]{background:var(--panel);border-color:var(--line);color:var(--fg)}
+  main{padding:0 20px 40px}
+  section{display:none;background:var(--panel);border:1px solid var(--line);border-radius:0 10px 10px 10px;padding:18px}
+  section.on{display:block}
+  h2{margin:0 0 4px;font-size:15px;font-weight:600}
+  .sub{color:var(--faint);font-size:12px;margin-bottom:16px}
+  .cards{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:18px}
+  .card{background:var(--panel2);border:1px solid var(--line);border-radius:10px;padding:12px 14px}
+  .card .n{font-size:24px;font-weight:700;line-height:1.1}
+  .card .k{color:var(--dim);font-size:12px;margin-top:4px}
+  .n.created{color:var(--fact)} .n.superseded{color:var(--gotcha)}
+  .n.forgotten{color:var(--dim)} .n.merged{color:var(--ok)}
+  table{width:100%;border-collapse:collapse}
+  td{padding:8px 6px;border-top:1px solid var(--line);vertical-align:top}
+  td.t{color:var(--faint);width:62px;font-variant-numeric:tabular-nums}
+  td.b{width:78px}
+  .badge{display:inline-block;border-radius:6px;padding:1px 7px;font-size:11px;border:1px solid}
+  .b-created{color:var(--fact);border-color:#2f4c78;background:#16233a}
+  .b-superseded{color:var(--gotcha);border-color:#5a4a1c;background:#2a2410}
+  .b-forgotten{color:var(--dim);border-color:#3a404e;background:#20242d}
+  .b-merged{color:var(--ok);border-color:#2c5238;background:#122a1b}
+  .reason{color:var(--faint);font-size:12px;margin-top:2px}
+  .hitrow td{color:var(--faint);font-size:12px;background:#141821}
+  .toolbar{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px}
+  .toolbar .chip{cursor:default}
+  .wrap{display:grid;grid-template-columns:1fr 320px;gap:14px}
+  .canvas{position:relative;background:radial-gradient(600px 360px at 50% 40%,#191d27,#11141b);
+          border:1px solid var(--line);border-radius:10px;overflow:hidden}
+  .note{position:absolute;right:10px;top:10px;background:#1b202bcc;border:1px solid var(--line);
+        border-radius:8px;padding:5px 9px;color:var(--dim);font-size:11px}
+  aside{background:var(--panel2);border:1px solid var(--line);border-radius:10px;padding:14px}
+  aside h3{margin:0 0 8px;font-size:13px;color:var(--dim);font-weight:600}
+  .kv{display:grid;grid-template-columns:76px 1fr;gap:6px 8px;font-size:12px;margin-bottom:12px}
+  .kv dt{color:var(--faint)} .kv dd{margin:0;color:var(--fg)}
+  .body{background:#12151d;border:1px solid var(--line);border-radius:8px;padding:10px;
+        font-size:12px;color:#cfd6e4;white-space:pre-wrap}
+  .legend{display:flex;gap:14px;flex-wrap:wrap;color:var(--faint);font-size:11px;margin-top:10px}
+  .legend i{display:inline-block;width:10px;height:10px;border-radius:50%;margin-right:5px;vertical-align:-1px}
+  .legend .dash{width:16px;height:0;border-top:2px dashed var(--dup);vertical-align:3px;border-radius:0}
+  .legend .red{width:16px;height:0;border-top:2px dashed var(--bad);vertical-align:3px;border-radius:0}
+  .cluster{border:1px solid var(--line);border-radius:10px;padding:12px;margin-bottom:10px;background:var(--panel2)}
+  .cluster h4{margin:0 0 6px;font-size:13px}
+  .cluster .m{color:var(--faint);font-size:12px;margin-bottom:8px}
+  .pair{display:grid;grid-template-columns:1fr 60px 60px 70px;gap:6px;font-size:12px;
+        padding:4px 0;border-top:1px dashed #232833;color:var(--dim)}
+  .strong{color:var(--dup)} .weak{color:var(--faint)}
+  .ghost{opacity:.45}
+  .foot{color:var(--faint);font-size:12px;margin-top:16px;padding-top:12px;border-top:1px solid var(--line)}
+</style>
+</head>
+<body>
+<header>
+  <div class="brand">strata<small>记忆观察台 · 线框图（假数据）</small></div>
+  <div class="scope">
+    <span class="chip">scope <b>repo:strata</b></span>
+    <span class="chip">v0.2.0 · 只读</span>
+    <span class="chip">127.0.0.1:7788</span>
+  </div>
+</header>
+
+<nav>
+  <button id="tab-today" onclick="show('today')">今日</button>
+  <button id="tab-graph" aria-selected="true" onclick="show('graph')">图谱</button>
+  <button id="tab-hygiene" onclick="show('hygiene')">卫生</button>
+</nav>
+
+<main>
+<!-- ============ 今日 ============ -->
+<section id="today">
+  <h2>2026-11-02 · 今天库里的变化</h2>
+  <div class="sub">按 events.jsonl 归并；命中（hit）折叠在末尾，不占主体。</div>
+  <div class="cards">
+    <div class="card"><div class="n created">5</div><div class="k">新增 created</div></div>
+    <div class="card"><div class="n superseded">2</div><div class="k">被取代 superseded</div></div>
+    <div class="card"><div class="n forgotten">1</div><div class="k">删除（墓碑）</div></div>
+    <div class="card"><div class="n merged">1</div><div class="k">合并 merge</div></div>
+  </div>
+  <table>
+    <tr><td class="t">16:05</td><td class="b"><span class="badge b-created">新增</span></td>
+        <td>真相层 items/&lt;scope&gt;.jsonl 只追加，索引与 brief 是派生层
+            <div class="reason">reason: no duplicate contentHash and no same-slot peer</div></td></tr>
+    <tr><td class="t">16:05</td><td class="b"><span class="badge b-created">新增</span></td>
+        <td>DSH 常驻进程 cwd 固定，不加 memory_scope 对齐会写进 dir:desktop
+            <div class="reason">kind: gotcha · agent: cli</div></td></tr>
+    <tr><td class="t">15:42</td><td class="b"><span class="badge b-superseded">取代</span></td>
+        <td>去重阈值改回 0.85（原 0.60 误杀真实改写）
+            <div class="reason">旧记录 01M6D… 置 validTo，新记录继任</div></td></tr>
+    <tr><td class="t">14:20</td><td class="b"><span class="badge b-merged">合并</span></td>
+        <td>「用 JSONL 存」+「只追加不就地改」判为同一条
+            <div class="reason">curate_apply · merge · active 3 → 2</div></td></tr>
+    <tr><td class="t">11:03</td><td class="b"><span class="badge b-forgotten">删除</span></td>
+        <td>临时试验：把 brief 行数调到 500
+            <div class="reason">reason: 试验结论已并入 08 文档，无需保留过程</div></td></tr>
+    <tr class="hitrow"><td class="t">全天</td><td class="b"><span class="badge b-forgotten">命中</span></td>
+        <td colspan="2">今天这些记忆被读过 23 次（点开展开明细）</td></tr>
+  </table>
+  <div class="foot">空状态示例：当天无变化时显示「今天没有写入。上次写入是 2026-10-28（5 天前）」，不留白页。</div>
+</section>
+
+<!-- ============ 图谱 ============ -->
+<section id="graph" class="on">
+  <h2>记忆图谱</h2>
+  <div class="sub">节点 = 记录；边 = 同实体 / 版本链 / 近重复候选 / 冲突。颜色按 kind，透明度按状态。</div>
+  <div class="toolbar">
+    <span class="chip">kind: <b>全部</b></span>
+    <span class="chip">状态: <b>active + superseded</b></span>
+    <span class="chip">时间窗: <b>90 天</b></span>
+    <span class="chip">边: <b>同实体 ✓</b> <b>版本链 ✓</b> <b>重复候选 ✓</b> <b>冲突 ✓</b></span>
+  </div>
+  <div class="wrap">
+    <div class="canvas">
+      <div class="note">已采样 14 / 14 条</div>
+      <svg id="sg" viewBox="0 0 720 520" style="width:100%;height:auto;display:block" role="img" aria-label="记忆关系图">
+        <!-- 边：同实体 -->
+        <g stroke="#3a4150" stroke-width="1.2">
+          <line x1="300" y1="250" x2="390" y2="330"></line>
+          <line x1="300" y1="250" x2="250" y2="340"></line>
+          <line x1="390" y1="330" x2="250" y2="340"></line>
+          <line x1="180" y1="240" x2="120" y2="320"></line>
+          <line x1="470" y1="220" x2="560" y2="290"></line>
+          <line x1="520" y1="380" x2="420" y2="430"></line>
+        </g>
+        <!-- 边：版本链 -->
+        <g stroke="#5b9cf5" stroke-width="2" fill="none">
+          <path d="M390,330 Q345,282 300,250" marker-end="url(#arrow)"></path>
+        </g>
+        <!-- 边：近重复候选 -->
+        <g stroke="#f97316" stroke-width="2" stroke-dasharray="6 5" fill="none">
+          <line x1="520" y1="380" x2="420" y2="430"></line>
+        </g>
+        <!-- 边：冲突 -->
+        <g stroke="#ef4444" stroke-width="2" stroke-dasharray="3 4" fill="none">
+          <line x1="250" y1="340" x2="666" y2="452"></line>
+        </g>
+        <defs>
+          <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto">
+            <path d="M0,0 L10,5 L0,10 z" fill="#5b9cf5"></path>
+          </marker>
+        </defs>
+        <!-- 节点 -->
+        <g font-size="11" text-anchor="middle" font-family="-apple-system,PingFang SC,sans-serif">
+          <g><circle cx="300" cy="250" r="13" fill="#5b9cf5"></circle>
+             <text x="300" y="230" fill="#cfd6e4">真相层 = JSONL</text>
+             <text x="300" y="272" fill="#6b7484" font-size="10">fact · 读 9 次</text></g>
+          <g class="ghost"><circle cx="390" cy="330" r="10" fill="none" stroke="#5b9cf5" stroke-width="1.5"></circle>
+             <line x1="383" y1="337" x2="397" y2="323" stroke="#5b9cf5" stroke-width="1.5"></line>
+             <text x="390" y="310" fill="#9aa3b2">旧表述（已失效）</text></g>
+          <g><circle cx="250" cy="340" r="11" fill="#5b9cf5"></circle>
+             <text x="250" y="364" fill="#cfd6e4">只追加不就地改</text></g>
+          <g><circle cx="180" cy="240" r="12" fill="#5b9cf5"></circle>
+             <text x="180" y="220" fill="#cfd6e4">索引是派生层</text></g>
+          <g><circle cx="120" cy="320" r="9" fill="#5b9cf5"></circle>
+             <text x="120" y="342" fill="#cfd6e4">brief 渲染</text></g>
+          <g><circle cx="470" cy="220" r="14" fill="#fbbf24"></circle>
+             <text x="470" y="197" fill="#cfd6e4">DSH cwd 分库坑</text>
+             <text x="470" y="243" fill="#6b7484" font-size="10">gotcha · 读 14 次</text></g>
+          <g><circle cx="560" cy="290" r="11" fill="#34d399"></circle>
+             <text x="560" y="314" fill="#cfd6e4">memory_scope 工具</text></g>
+          <g><circle cx="520" cy="380" r="10" fill="#34d399"></circle>
+             <text x="520" y="404" fill="#cfd6e4">在线阈值 0.85</text></g>
+          <g><circle cx="420" cy="430" r="11" fill="#34d399"></circle>
+             <text x="420" y="454" fill="#cfd6e4">中文二元组度量</text></g>
+          <g><circle cx="300" cy="455" r="10" fill="#34d399"></circle>
+             <text x="300" y="479" fill="#cfd6e4">投毒防线</text></g>
+          <g><circle cx="196" cy="440" r="9" fill="#94a3b8"></circle>
+             <text x="196" y="462" fill="#cfd6e4">配额 5000</text></g>
+          <g><circle cx="620" cy="196" r="10" fill="#c084fc"></circle>
+             <text x="620" y="174" fill="#cfd6e4">偏好中文回答</text></g>
+          <g><circle cx="666" cy="452" r="10" fill="none" stroke="#ef4444" stroke-width="2"></circle>
+             <text x="666" y="476" fill="#cfd6e4">冲突候选（落败）</text></g>
+        </g>
+      </svg>
+      <div class="legend" style="padding:0 12px 12px">
+        <span><i style="background:#5b9cf5"></i>fact</span>
+        <span><i style="background:#c084fc"></i>pref</span>
+        <span><i style="background:#34d399"></i>decision</span>
+        <span><i style="background:#fbbf24"></i>gotcha</span>
+        <span><i style="background:#94a3b8"></i>state</span>
+        <span class="dash"></span><span>近重复候选</span>
+        <span class="red"></span><span>冲突</span>
+      </div>
+    </div>
+    <aside>
+      <h3>选中的节点</h3>
+      <dl class="kv">
+        <dt>id</dt><dd>01M6DMMNJVB820HKF0T8JY5NRS</dd>
+        <dt>slot</dt><dd>fact · strata · truth-layer</dd>
+        <dt>kind</dt><dd style="color:#5b9cf5">fact</dd>
+        <dt>状态</dt><dd>active · 读 9 次</dd>
+        <dt>来源</dt><dd>cli · validFrom 16:05</dd>
+      </dl>
+      <div class="body">真相层 items/&lt;scope&gt;.jsonl 只追加，
+索引与 brief 都是派生层，可随时重建。</div>
+      <h3 style="margin-top:14px">版本链（2）</h3>
+      <div style="font-size:12px;color:#9aa3b2;line-height:1.7">
+        ← 旧表述「用 JSONL 存」<span style="color:#6b7484">（superseded 15:42）</span>
+      </div>
+      <h3 style="margin-top:14px">关联边（3）</h3>
+      <div style="font-size:12px;color:#9aa3b2;line-height:1.8">
+        同实体 → 只追加不就地改<br>
+        同实体 → 索引是派生层<br>
+        版本链 → 旧表述
+      </div>
+    </aside>
+  </div>
+  <div class="foot">采样上限 300：超出时按「最近创建 + 命中次数」取，并常驻提示「已采样 300 / 1 284」，绝不静默截断。</div>
+</section>
+
+<!-- ============ 卫生 ============ -->
+<section id="hygiene">
+  <h2>库的卫生状况</h2>
+  <div class="sub">待裁决 = 词法只报候选不判决；清理史 = 合并与失效；趋势看 30 天。</div>
+
+  <h2 style="font-size:13px;color:#9aa3b2;margin:6px 0 8px">待裁决候选（2 簇）</h2>
+  <div class="cluster">
+    <h4>簇 #1 · 3 条 · 主题：JSONL 存储</h4>
+    <div class="m">maxContainment 0.62 · maxDice 0.41 · 建议：把 3 条合成 1 条（保留最长表述）</div>
+    <div class="pair"><span>「真相层用 append-only JSONL 存」↔「记忆的底层是只追加的 JSONL 文件」</span><span class="strong">c 0.62</span><span class="strong">d 0.41</span><span class="strong">strong</span></div>
+    <div class="pair"><span>「真相层用 append-only JSONL 存」↔「条目不可原地修改」</span><span>c 0.44</span><span class="weak">d 0.28</span><span class="weak">weak</span></div>
+    <div class="pair"><span>「记忆的底层是只追加的 JSONL 文件」↔「条目不可原地修改」</span><span class="weak">c 0.38</span><span class="weak">d 0.26</span><span class="weak">weak</span></div>
+    <div class="m" style="margin:8px 0 0">→ 复制给 Agent：<code style="color:#cfd6e4">memory_dedupe_scan</code> 后对 #1 用 <code style="color:#cfd6e4">memory_curate</code> 裁决</div>
+  </div>
+  <div class="cluster">
+    <h4>簇 #2 · 2 条 · 主题：去重阈值</h4>
+    <div class="m">containment 0.55 · dice 0.33 · 建议：merge（保留「宁漏不误杀」那句）</div>
+  </div>
+
+  <h2 style="font-size:13px;color:#9aa3b2;margin:18px 0 8px">清理史（最近 30 天）</h2>
+  <table>
+    <tr><td class="t">今天</td><td class="b"><span class="badge b-merged">合并</span></td>
+        <td>3 → 2 · 败者 01M6D… 置 superseded · 真相层仍保留全部行</td></tr>
+    <tr><td class="t">昨天</td><td class="b"><span class="badge b-superseded">失效</span></td>
+        <td>「阈值 0.60」被「阈值 0.85」取代（原因：误杀真实改写）</td></tr>
+    <tr><td class="t">10-28</td><td class="b"><span class="badge b-forgotten">删除</span></td>
+        <td>2 条试验记录墓碑化（quota 淘汰，tags: quota）</td></tr>
+  </table>
+
+  <h2 style="font-size:13px;color:#9aa3b2;margin:18px 0 8px">趋势（30 天）</h2>
+  <svg viewBox="0 0 1200 150" style="width:100%;height:auto;display:block" role="img" aria-label="冗余率与冲突率趋势">
+    <g stroke="#222836" stroke-width="1">
+      <line x1="60" y1="120" x2="1180" y2="120"></line>
+      <line x1="60" y1="80" x2="1180" y2="80"></line>
+      <line x1="60" y1="40" x2="1180" y2="40"></line>
+    </g>
+    <g fill="#6b7484" font-size="11" font-family="-apple-system,sans-serif">
+      <text x="18" y="124">0%</text><text x="18" y="84">5%</text><text x="18" y="44">10%</text>
+    </g>
+    <polyline fill="none" stroke="#f97316" stroke-width="2" points="60,112 247,108 435,96 622,102 809,72 997,66 1180,58"></polyline>
+    <polyline fill="none" stroke="#ef4444" stroke-width="2" points="60,118 247,118 435,116 622,112 809,114 997,110 1180,108"></polyline>
+    <polyline fill="none" stroke="#5b9cf5" stroke-width="1.5" stroke-dasharray="4 4" points="60,118 247,112 435,104 622,98 809,88 997,80 1180,72"></polyline>
+  </svg>
+  <div class="legend">
+    <span><span class="dash" style="border-color:#f97316"></span> dupRatio（冗余率）</span>
+    <span><span class="dash" style="border-color:#ef4444"></span> conflictRate（冲突率）</span>
+    <span><span class="dash" style="border-color:#5b9cf5"></span> active 占比（相对配额）</span>
+  </div>
+
+  <h2 style="font-size:13px;color:#9aa3b2;margin:18px 0 8px">体检摘要（doctor）</h2>
+  <table>
+    <tr><td class="b"><span class="badge b-created">ok</span></td><td>148 条记录 · 无损坏行 · 无重复 contentHash</td></tr>
+    <tr><td class="b"><span class="badge b-superseded">warn</span></td><td>2 条记录被标记 suspicious（默认不在 brief 中渲染原文）</td></tr>
+    <tr><td class="b"><span class="badge b-forgotten">info</span></td><td>配额 148 / 5000（3%），无需淘汰</td></tr>
+  </table>
+</section>
+</main>
+
+<script>
+  function show(id){
+    for (const s of ['today','graph','hygiene']) {
+      document.getElementById(s).classList.toggle('on', s === id);
+      const b = document.getElementById('tab-' + s);
+      if (s === id) { b.setAttribute('aria-selected','true'); } else { b.removeAttribute('aria-selected'); }
+    }
+  }
+</script>
+</body>
+</html>
