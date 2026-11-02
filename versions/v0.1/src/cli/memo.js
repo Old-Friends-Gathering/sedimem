@@ -27,6 +27,9 @@ const USAGE = `memo —— 本地跨会话记忆系统 v0.1
   memo doctor [--json]
   memo reindex
   memo curate export [--limit 20]
+  memo curate prompt  [--limit N] [--json]              # 生成裁决任务包（docs/10）
+  memo curate status                                  # 列出批次与进度
+  memo curate apply   --file <任务包.json>              # 应用裁决（严格校验）
   memo curate apply <batchId> --decisions <file|->
   memo dedupe scan [--threshold 0.45] [--dice 0.15] [--limit 50] [--json]   # 只读：近重复候选簇（裁决 22/23/26）
   memo dedupe apply --file decisions.json                     # decisions.json: {batchId?, decisions:[{ids:[...]|pairIndex, decision, note}]}
@@ -324,7 +327,46 @@ async function cmdDedupe(sub, opts, asJson) {
   }
 }
 
-async function cmdCurate(sub, positional, opts) {
+/** memo curate（B 路，docs/10）：prompt/status 为新增；apply 兼容两个形状——
+ *  旧：`curate apply <batchId> --decisions <file|->`；新：`curate apply --file <pkg.json>`。 */
+async function cmdCurate(sub, positional, opts, asJson) {
+  // 新增子命令走 src/cli/curate.js（任务包生成/状态/严格校验应用）
+  if (sub === 'prompt' || sub === 'status' || (sub === 'apply' && opts.file !== undefined)) {
+    const curate = await import('./curate.js');
+    const service = await loadService();
+    try {
+      if (sub === 'prompt') {
+        const out = await curate.curatePrompt(service, {
+          limit: parseNumber(opts, 'limit'), json: asJson,
+        });
+        if (asJson) printJson(out);
+        return;
+      }
+      if (sub === 'status') {
+        const out = await curate.curateStatus(service);
+        if (asJson) {
+          printJson(out);
+          return;
+        }
+        if (out.batches === 0) {
+          process.stdout.write('待处理批次: 0\n');
+          return;
+        }
+        process.stdout.write(`待处理批次: ${out.batches}\n`);
+        for (const r of out.rows) {
+          process.stdout.write(`  ${r.batchId}  ${r.total} 对 / 已裁决 ${r.decided}  → ${r.state}\n`);
+        }
+        return;
+      }
+      // curate apply --file <pkg.json>
+      const file = requireOpt(opts, 'file', 'memo curate apply --file <任务包.json>');
+      const result = await curate.curateApplyFile(service, file);
+      printJson(result);
+      return;
+    } finally {
+      await service.close();
+    }
+  }
   const service = await loadService();
   try {
     if (sub === 'export') {
@@ -552,7 +594,7 @@ async function main() {
       await withStats(asJson, (s) => s.reindex());
       return 0;
     case 'curate':
-      await cmdCurate(positional[0], positional.slice(1), opts);
+      await cmdCurate(positional[0], positional.slice(1), opts, asJson);
       return 0;
     case 'dedupe':
       await cmdDedupe(positional[0], opts, asJson);

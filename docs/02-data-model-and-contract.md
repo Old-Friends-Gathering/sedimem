@@ -505,3 +505,47 @@ await svc.exportRecords({ since, until, status = 'active', kind, limit = 2000 })
 | `src/api/read-only.js` | `queryEvents(service, args)` | 裁决 30 的事件只读查询（`Nightly`/Web 共用） |
 | `src/api/read-only.js` | `queryExportRecords(service, args)` | 裁决 30 的记录导出（含遮蔽与 `limited` 语义） |
 | `src/api/service.js` | `refreshView()` | 裁决 39 的读路径刷新（方法，非模块级 export） |
+
+### 3.12 第十轮裁决 45–47（v0.2.1：索引后端可插拔 / curate 任务包 / 身份常量单点）
+
+> 来源：issue #20（SQLite FTS5 索引）与 #21（curate 裁决任务包）。设计细节见 `docs/09-sqlite-index.md`、`docs/10-curate-auto.md`；
+> 本节只冻结**跨模块必须一致**的语义。
+
+**裁决 45（IndexPort 只有一个注入点，索引是纯派生层）**
+
+- `MemoryService` 不得自行 `new InvertedIndex()`；索引一律由 `src/index/create-index.js` 的 `createIndex({policy, memoHome, scope, clock})` 构造。
+- IndexPort 契约（与 `src/index/inverted-index.js` 完全一致，两种后端不得有第二套语义）：`build(records)`、`add(record)`（同 id 覆盖、无 id 抛 `E_INVALID_RECORD`）、`remove(id)`、`search(query,{limit,filter})` → `{id,score}[]`（只返回 `score>0`，score 降序、同分 id 升序，**先打分后 filter**，`limit` **缺省默认 10 且两个后端必须一致**——要全量就显式传 `index.size`）、`get size()`。
+- `policy.index.backend`: `memory`（默认）| `sqlite`。选 `sqlite` 但运行时不具备 `node:sqlite` 或 FTS5 → **启动即抛 `E_INDEX_UNAVAILABLE`**；禁止静默降级（静默降级会让「开了 sqlite 却慢」变成玄学）。
+- 索引文件 `$MEMO_HOME/index/<scopeKeyOf(scope)>.sqlite`（WAL）；`docs` 表 + `docs_fts` external-content + 三个触发器；损坏（打开失败或 `docs` 与 `fts` 行数不符）→ 删三个文件重建并告警。
+- 检索一致性由 I16 保证：同批查询两后端 top-k 集合相等（同分并列允许多解）。
+
+**裁决 46（curate 任务包 = 幂等键 + 严格校验 + 只读候选来源）**
+
+- 候选**只能来自** `service.dedupeScan()`（裁决 26/27 的 pairs/metrics/basis/strength）；CLI 与 MCP 不得各自重算相似度。
+- 任务包落盘 `$MEMO_HOME/curate/<batchId>.md`（人读）+ `<batchId>.json`（机读）；`batchId` 形如 `batch-<ISO 去冒号>-<4 位随机>`，是**幂等键**：同一批次重复 apply 只把已裁决对计 `skipped`，不重复写事件。
+- `apply` 的校验顺序与原子性：V1 解析 → V2 批次存在 → V3 `decision ∈ {merge,a_wins,b_wins,keep_both}` → V4 `ids` 必须等于任务包内某一对（排序后比对，与顺序无关）→ V5 同 pair 不重复；**任一失败一条都不落盘**（`E_INVALID_ARG` 带人话）。V6（记录已 tombstone/superseded）不是错误，记 `skipped` 并报告。
+- `memo curate status` 的进度**只从事件流** `curate_apply` 按裁决键（裁决 36）聚合，不引入状态文件（状态文件必然与真相层漂移）。
+- 无候选时 `curate prompt` 正常退出 0 并打印说明，不报错。
+
+**裁决 47（身份模式常量单点定义，CLI/MCP 共用）**
+
+- `AGENT_PATTERN`（`^[a-z0-9][a-z0-9._-]{0,31}$`）与 `RESERVED_AGENTS`（`root|system|admin|sudo|superuser`）只允许在 `src/core/record.js` 定义，`src/cli/memo.js` 与 `src/mcp/server.js` 必须 import 复用。
+- 起因：v0.1.3 的 CLI 曾自己维护一份 6 值枚举（`dsh|codex|claude|cli|test|unknown`），与裁决 25「agent 是自由标签」冲突，导致 `--agent cli-writer` 被拒——典型的「同一规则两处实现必然漂移」。
+
+**第十轮导出登记（Q5 契约覆盖用）**
+
+| 模块 | 导出 | 职责 |
+|---|---|---|
+| `src/index/create-index.js` | `createIndex({policy, memoHome, scope, clock, sqliteModule})` | 裁决 45 的唯一索引构造点；`sqliteModule` 仅测试注入 |
+| `src/index/sqlite-index.js` | `SqliteIndex` | FTS5 + BM25 的 IndexPort 实现（WAL、单事务、损坏自愈） |
+| `src/index/sqlite-index.js` | `buildMatchExpr(query)` | 查询构造纯函数（同源 `tokenize()` → 字面量 → ` OR `；空则 `null`） |
+| `src/api/mask.js` | `SUSPICIOUS_MASK` | 裁决 42 的占位串（`'[suspicious withheld]'`），UI/服务端共用 |
+| `src/cli/curate.js` | `curatePrompt(service,{limit,json})` | 裁决 46：生成任务包（md + json）并返回摘要 |
+| `src/cli/curate.js` | `curateApplyFile(service, filePath)` | 裁决 46：校验（V1–V5）后逐条 apply，返回 `{applied,skipped,results}` |
+| `src/cli/curate.js` | `curateStatus(service)` | 裁决 46：按事件流聚合批次进度 |
+| `src/cli/curate.js` | `validateDecisions(pkg, decisions)` | V3–V5 的纯校验（可单测，不碰 IO） |
+| `src/cli/curate.js` | `pairKeyOf(ids)` | 排序后拼 pair 键（裁决 36 的裁决键同源） |
+| `src/cli/curate.js` | `pairsFromScan(scan)` | 把 `dedupeScan` 结果投影成任务包 pairs（唯一来源） |
+| `src/cli/curate.js` | `readBatchPkg(memoHome, batchId)` | 读机读任务包；缺失/损坏返回 `null`（不抛） |
+| `src/core/record.js` | `AGENT_PATTERN` | 裁决 47 的唯一身份正则 |
+| `src/core/record.js` | `RESERVED_AGENTS` | 裁决 47 的保留名集合 |

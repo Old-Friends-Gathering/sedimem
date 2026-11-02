@@ -7,7 +7,7 @@ import { createRecord, validateRecord, withPatch } from '../core/record.js';
 import { resolveScope } from '../core/scope.js';
 import { JsonlStore } from '../storage/jsonl-store.js';
 import { withLock } from '../storage/lock.js';
-import { InvertedIndex } from '../index/inverted-index.js';
+import { createIndex } from '../index/create-index.js';
 import { decideWrite } from '../hygiene/write-gate.js';
 import { monotonicDecay, clusterNearDuplicates } from '../hygiene/conflict.js';
 import { expiryFor, isExpired } from '../hygiene/decay.js';
@@ -44,12 +44,13 @@ export async function createMemoryService({
   store, index, quota,
 } = {}) {
   if (!memoHome) throw invalid('createMemoryService: memoHome is required');
+  const resolvedScope = scope ?? resolveScope({ cwd, env: process.env }).scope;
   const service = new MemoryService({
     memoHome,
-    scope: scope ?? resolveScope({ cwd, env: process.env }).scope,
+    scope: resolvedScope,
     clock,
     store: store ?? new JsonlStore({ memoHome }),
-    index: index ?? new InvertedIndex({ clock }),
+    index: index ?? createIndex({ policy: POLICY, memoHome, scope: resolvedScope, clock }),
     quota: quota ?? new QuotaPolicy({}),
   });
   await service._init();

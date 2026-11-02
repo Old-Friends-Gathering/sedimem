@@ -38,7 +38,7 @@ class IndexPort {
 
 - `search` 只返回 `score > 0` 的结果，按 score 降序、同分按 id 升序；
 - `filter(record)` 收到完整记录，返回 false 才过滤；实现必须**在打分后**过滤（保持与内存实现同一语义）；
-- `limit` 为 `undefined` 时不截断；
+- `limit` 缺省时默认 10（**与 `InvertedIndex` 完全一致**；两个后端默认值相反会让「端口可替换」在边界上失效）。要取全部就显式传 `limit: index.size`；
 - `add` 收到无 `id` 的记录必须抛 `E_INVALID_RECORD`（fail-loud，不静默丢）。
 
 ## 3. 存储布局
@@ -73,6 +73,12 @@ create virtual table if not exists docs_fts using fts5(
 
 - **不存真相**：`docs` 只是检索用的派生副本。真相层始终是 `items/<scope>.jsonl`；删掉整个 `index/` 目录只会让下次启动变慢。
 
+> **持久化的真实边界（审核 S2 后如实写明）**：当前版本 `MemoryService` 每次启动都会 `index.build(records)` 全量重写 `docs`，
+> 所以 `.sqlite` 文件的作用是「跨进程/跨请求的检索落点 + 损坏可重建的缓存」，**不是**启动加速手段——启动成本与
+> `memory` 后端同阶（实测 5000 条 build：内存 27ms / sqlite 91ms）。
+> 想跳过重建就必须能从 `docs` 表回填 `_records`，那要求表里存全字段；这是 v0.2.2 的事（见 DELTA）。
+> 在那之前，**绕过 `build()` 直接 `search()` 会抛 `E_INDEX_STALE`**，而不是静默返回空结果。
+
 ## 4. 检索语义
 
 ### 4.1 BM25
@@ -97,6 +103,7 @@ score = -rank;  // 转成正分，与 InvertedIndex 的方向一致
 1. 用与内存索引**同一个** `tokenize()` 切词（保证中英文切法一致）；
 2. 每个 token 包成 `"token"` 字面量（内部 `"` 双写转义）；
 3. token 之间用 ` OR ` 连接（不是 AND——内存实现是「命中任一词即累加分数」，用 AND 会让结果集小于内存索引，破坏 G2）；
+   最多取前 `MAX_QUERY_TOKENS = 256` 个 token（实测 50k 词项的 OR 表达式 848ms，无上限即无界放大）；
 4. token 数 0 → 返回 `null`，`search` 直接返回 `[]`。
 
 中文：`unicode61` 按字切词，`tokenize()` 对中文也按单字 + 二元组处理（见 `core/hash.js`）；两侧都用同一 `tokenize()` 输出做 OR，所以在同一批查询上结果集合可对齐。
@@ -125,7 +132,7 @@ score = -rank;  // 转成正分，与 InvertedIndex 的方向一致
 | 失败模式 | 症状 | 防线 |
 |---|---|---|
 | WAL 文件残留/损坏 | 打开即抛 | 捕获 `SQLITE_CORRUPT` → 删库重建 + 打 `index_rebuilt` 事件 |
-| FTS 与 docs 不同步（进程被杀在事务中间） | 检索漏记录 | 所有写操作在单事务内（`docs` + 触发器）；`doctor` 比对 `docs` 行数与 `fts` 行数 |
+| FTS 与 docs 不同步（进程被杀在事务中间） | 检索漏记录 | 所有写操作在单事务内（`docs` + 触发器）；打开时跑 FTS5 `integrity-check`（**不能**用 `count(docs_fts)` 比对——external-content 表的 count 读的就是 docs，恒相等，是假检查） |
 | 索引比真相层旧 | 新写入的记录搜不到 | 写入路径 `add()` 与 `_records` 同临界区；`doctor` 的 `index_inconsistent` 已有 |
 | 查询构造出错 | 语法错 / 结果集偏移 | `buildMatchExpr` 纯函数 + 单测覆盖注入字符 |
 | Node 版本无 `node:sqlite` | 启动失败 | fail-loud + docs/06 排障表补一行 |
@@ -141,6 +148,8 @@ score = -rank;  // 转成正分，与 InvertedIndex 的方向一致
 5. 无 id 记录 `add` 抛 `E_INVALID_RECORD`
 6. `buildMatchExpr` 纯函数：中文/英文/混合/空串/特殊字符
 7. 删库重建：删掉 `.sqlite` 后 `build` 能重建（等价于 `memo reindex`）
+8. 绕过 `build` 直接 `search` → 抛 `E_INDEX_STALE`（不静默返回空）
+9. 超长查询被截断到 `MAX_QUERY_TOKENS`，不出现秒级放大
 
 **注入用例 I16** `tests/injection/i16-index-parity.test.js`
 

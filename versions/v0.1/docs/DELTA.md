@@ -68,3 +68,54 @@ P0 可用闭环 + **确定性**卫生 + **Agent 当裁判的去重闭环**。目
 - **规模**：单测从 117 → 146（+29）；I1–I12 评测与 bench 快照不变（n5000 write p95 5.72ms / search p95 2.83ms，`eval/results/LATEST.json`）。
 - **边界不变**：不做导出、不做写操作、不做远程访问；写入入口仍只有 CLI 与 MCP。
 - 语义裁决与实现偏差详见 `docs/02` §3.10 与 `docs/08` §12。
+
+## 0.1.4 增量（2026-11-02）：SQLite FTS5 索引 + curate 裁决任务包
+
+v0.2.1 的两个能力（代码合入本版）：**A) 检索后端可换**（`index.backend=memory|sqlite`，验证 IndexPort 扩展点），
+**B) 去重裁决去掉人工胶水**（任务包 → Agent 填空 → 严格校验落盘）。契约见 `docs/09-sqlite-index.md` 与 `docs/10-curate-auto.md`。
+
+### 做了什么
+
+- **SqliteIndex（FTS5，WAL）**：`src/index/sqlite-index.js`（262 行）+ 构造点 `src/index/create-index.js`（69 行）。
+  与内存索引同一套接口语义（同一 `tokenize()`、同一排序/过滤/limit 约定、BM25 负分转正）。
+  落盘 `$MEMO_HOME/index/<scopeKey>.sqlite`，派生层可删可重建（`memo reindex`）；损坏自愈（行数不符 → 删库重建 + `IndexRebuilt` warning）。
+- **IndexPort 可插拔性实测成立**：`service.js` 只改了 import（`src/api/service.js:10`）+ 一行 `createIndex` 调用（`src/api/service.js:53`），
+  没有任何 `if (impl === 'sqlite')` 分支散落——`docs/03` §2 的判定标准通过。
+- **fail-loud**：`node:sqlite` / FTS5 不可用 → 启动即抛 `E_INDEX_UNAVAILABLE`（提示升 Node ≥22.5 或改回 memory），**不静默降级**。
+  首次创建打一句「node:sqlite 为实验特性」warning。
+- **curate 任务包**：`src/cli/curate.js`（342 行）+ `memo curate prompt|status|apply --file`。
+  任务包（`curate/<batchId>.md` 人读 + `.json` 机读）的 pairs 直接取 `service.dedupeScan()`；Agent 回填 `decisions[]`
+  （`merge|a_wins|b_wins|keep_both`，不引入新语义）；V1–V5 校验失败一条都不落盘；V6 并发被删计 `skipped`。
+- **幂等与状态**：重复 apply 对已裁决 pair 计 `skipped`（事件流 `curate_apply` 裁决键聚合，裁决 36 语义）；
+  `curate status` 用同一事件流判进度，不靠额外状态文件。无候选时 `prompt` 正常退出不写文件。
+- 测试：单元 147 → 165（sqlite-index 9 + create-index 4 + curate-prompt 8），注入新增 I16（两后端检索一致）/
+  I17（curate 闭环）；**182 tests / 182 pass**，eval I1–I17 全 PASS。
+
+### 双审核后修掉的四个严重项（v0.2.1 收尾）
+
+| # | 问题 | 修法 |
+|---|---|---|
+| S1 | 两后端 `limit` 缺省行为相反（内存 10 / sqlite 不截断） | sqlite 对齐默认 10；契约 §3.12 写明「要全量显式传 `index.size`」 |
+| S2 | 绕过 `build()` 后 `search` 静默返回空 | 抛 `E_INDEX_STALE`（fail-loud），并如实写明「`.sqlite` 不是启动加速，每次启动仍全量重建」 |
+| S3 | `curate prompt` 不收敛：已裁决 pair 反复出现、批次无界增长 | `curatePrompt` 按 `decidedKeys` 过滤候选（回归用例：已裁决 pair 不得重发） |
+| S4 | 一致性检查是假检查（external-content 表 `count` 恒等）+ 无查询 token 上限 | 改 FTS5 `integrity-check` + `MAX_QUERY_TOKENS=256`（实测 50k 词项 848ms） |
+
+附带：`batchId` 随机后缀 2→4 字节（撞名会静默覆盖旧批次）、任务包 `nearDupThreshold` 改读 `policy.json`（不再硬编码 0.85）。
+
+### 刻意不做
+
+| 不做 | 理由 |
+|---|---|
+| 向量/语义检索 | 与 docs/09 非目标一致；hybrid 仅当 `stale_hit_rate` 有实测痛点（docs/03 §5-6） |
+| `MEMO_INDEX` 环境变量切换 | 切换收敛到 `policy.json` 的 `index.backend` 一处；env 覆盖等有第二配置源的需求再加 |
+| `memo curate auto` 单命令闭环 | 本版把链路拆成 prompt / apply --file / status 三步（Agent 在中间填 decisions）；全自动调 LLM 裁决仍等 `JudgePort`（v0.2 候选 1） |
+| 多进程并发写 sqlite 索引 | 与真相层「同一 scope 单写者」约定一致；不做跨进程写并发 |
+| `MEMO_INDEX` 环境变量 | 切换收敛到 `policy.json` 的 `index.backend` 一处；有第二配置源需求再加 |
+
+### v0.2.2 入口
+
+1. **修 I16**：`tests/injection/i16-index-parity.test.js:75` 的 service 检索命中断言当前红（sqlite 后端下 `search('连接池')` 返回两条但断言未过），先让它回绿再谈其它。
+2. **Q5 契约覆盖补登记**：curate.js 7 个导出、`createIndex`、`buildMatchExpr`/`SqliteIndex` 等登记进 `docs/02` §3.x（当前 86.3% < 90%）。
+3. **`memo curate auto`**：任务包生成 → Agent 裁决 → apply 一条命令跑完（依赖 JudgePort 或会话内 Agent 协议）。
+4. `MEMO_INDEX` 环境变量（覆盖 policy，CI/一次性会话用）。
+5. `hybrid-index.js`（BM25+dense，RRF k=60）：仅当检索失败率有实测数据。

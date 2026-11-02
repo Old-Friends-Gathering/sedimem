@@ -136,3 +136,58 @@ node src/cli/memo.js serve --port 7788     # 默认 127.0.0.1:7788；--no-ui 只
 | 打开是 404 / 提示 ui 缺失 | `versions/v0.1/ui/` 目录不完整（拷贝/打包时漏了）；补齐目录后刷新；`--no-ui` 模式下本来就不出页面，只给 `/api/*` |
 | 页面数字和预期对不上 | 先看页眉 scope：**页面显示的是 `memo serve` 启动进程按 cwd 解析出的那个分库**（与 CLI 同规则）。scope 不对就到目标项目目录重新 `serve`，或设 `MEMO_SCOPE` 后再启动 |
 | 图谱某些节点没标签 | 标签防重叠跳过（见 `docs/08` §12 偏差 b）；点节点看详情即可 |
+
+## 8. 换检索后端（v0.1.4 起：memory | sqlite）
+
+默认内存倒排索引（BM25，纯 JS）。数据量大时可以切到 SQLite FTS5 后端，行为语义不变（同一套
+IndexPort 契约：同一 `tokenize()` 切词、同一排序与过滤约定）。
+
+**切换**：改 `versions/v0.1/config/policy.json`：
+
+```json
+{ "index": { "backend": "sqlite" } }
+```
+
+- `memory`（默认）：与历史版本行为完全一致，不落盘。
+- `sqlite`：FTS5 + WAL，落盘 `$MEMO_HOME/index/<scopeKey>.sqlite`（连同 `.sqlite-wal` / `.sqlite-shm`）。
+  它是**派生层，不存真相**——真相层始终是 `items/<scope>.jsonl`，删掉整个 `index/` 目录只会让下次启动重建变慢。
+- **删除重建**：删掉 `.sqlite`（或整个 `index/` 目录）后跑 `memo reindex` 全量重建；索引损坏（打开即错、
+  `docs`/`docs_fts` 行数不符）时启动会**自动删库重建空索引**并发 `IndexRebuilt` warning，然后 `reindex` 补数据。
+  `memo doctor` 的 `index_inconsistent` 仍兜底比对索引与真相层。
+- **node:sqlite 是实验特性**（Node ≥ 22.5 才有，API 可能变化）：首次成功创建 sqlite 索引时会打一句
+  warning 提醒（`MEMO_QUIET=1` 可静默，测试用）。
+- **不可用时 fail-loud，绝不静默降级**：当前 Node 没有 `node:sqlite`、或编译时把 FTS5 裁掉了 →
+  **启动即抛 `E_INDEX_UNAVAILABLE`**，错误信息附修法（升级 Node ≥ 22.5，或把 `index.backend` 改回
+  `memory`）。不会悄悄退回内存索引——否则「我明明开了 sqlite 却还是慢」会变成玄学。
+- **回滚** = 把 `index.backend` 改回 `memory`，一条配置，零数据风险（索引随时可删可重建）。
+- 同一 scope 同时只应有一个写者（与真相层锁一致），不做多进程并发写索引。
+
+## 9. 用 Agent 裁决重复记忆（v0.1.4 起：curate 任务包）
+
+把「候选 → 裁决 → 落盘」固定成三步，Agent 不用手工拼 JSON：
+
+```bash
+cd strata/versions/v0.1
+node src/cli/memo.js curate prompt            # 1. 生成裁决任务包
+#    → $MEMO_HOME/curate/<batchId>.md（人读：裁决表 + 全文对照）
+#    → 同名 .json（机读：Agent 只回填这个，避免从 Markdown 反解析）
+# 2. 打开 .md 看每对的 containment/dice/strength 与全文，在 .json 的 decisions[] 里回填：
+#    { "ids": ["<idA>", "<idB>"], "decision": "merge", "note": "理由" }
+node src/cli/memo.js curate apply --file <batchId>.json   # 3. 严格校验后落盘
+node src/cli/memo.js curate status            # 看各批次进度（未开始/进行中/已完成）
+```
+
+约定与边界：
+
+- `decision` 取值 `merge` | `a_wins` | `b_wins` | `keep_both`（a = ids[0]，与 `memory_curate` 一致，
+  不引入新语义）。任务包里的「建议」列只是默认动作（strong→merge、weak→keep_both），不是判决。
+- **没有候选时正常退出**：`curate prompt` 打印「当前没有待裁决的近重复候选」，不写文件、exit 0。
+- **校验严格且原子**：`--file` 不是合法 JSON、batchId 未知、decision 非法、ids 与任务包任何一对不符、
+  同一 pair 出现两次 → `E_INVALID_ARG`，**一条都不落盘**；裁决后记录已被并发删除/打墓碑 → 该条计
+  `skipped` 并在输出里报告，不整体失败。
+- **重复 apply 幂等**：同一任务包再 apply 一次，已裁决过的 pair 全部计 `skipped`
+  （按事件流 `curate_apply` 的裁决键聚合，不重复写事件）；`curate status` 的进度也来自同一事件流，
+  不靠额外状态文件。
+- 任务包文件被删 → apply 报「未知批次」，重新 `curate prompt` 即可。
+- MCP 侧等价物仍是 `memory_dedupe_scan` + `memory_curate(apply)`（同一份 `service.dedupeScan()` /
+  `service.curateApply()` 数据与语义，见 `docs/10` §5）。

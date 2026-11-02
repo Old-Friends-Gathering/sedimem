@@ -9,7 +9,7 @@ v0.1 刻意用最笨的实现（纯 JS 倒排索引、规则化裁决、无 embe
 | Port | v0.1 实现 | 未来可能实现 | 切换方式 |
 |---|---|---|---|
 | `StoragePort` | `storage/jsonl-store.js` | sqlite、S3、git+merge | `MEMO_STORAGE=` 或注入 |
-| `IndexPort` | `index/inverted-index.js` | `sqlite-index.js`（FTS5）、`hybrid-index.js`（BM25+dense，RRF k=60） | `MEMO_INDEX=` |
+| `IndexPort` | `index/inverted-index.js` | `sqlite-index.js`（FTS5，**v0.2.1 已落地**）、`hybrid-index.js`（BM25+dense，RRF k=60） | `config/policy.json` 的 `index.backend` |
 | `JudgePort` | `hygiene/conflict.js` 规则 | `judge-llm.js`（读 curate 批次，调本地/远端模型） | `MEMO_JUDGE=` |
 | `RendererPort` | `render/brief.js` | 预算自适应渲染（FlexA-Mem 式：时间线+细节） | `MEMO_RENDER=` |
 | `ClockPort` | `core/clock.js` | 测试假时钟、可回放时钟 | 依赖注入 |
@@ -40,11 +40,16 @@ v0.1 刻意用最笨的实现（纯 JS 倒排索引、规则化裁决、无 embe
 
 0. **`metrics` 修复 + 只读查询方法**（v0.1.3 补丁，**前置**）：metrics 按 scope 分文件（现 `metrics/<date>.json` 多分库同日互相覆盖，趋势图会缺数据）；新增 `service.events()` / `service.exportRecords()`。见 [`08-web-ui.md`](08-web-ui.md) §6。
 1. **只读 Web UI（记忆观察台）** —— 用户 2026-11-02 提出，v0.2 核心交付：三页分别回答「今天变了什么」「这些记忆是什么关系」「库在变健康还是变脏」。零依赖零构建、只读、只绑回环。规格见 [`08-web-ui.md`](08-web-ui.md)，线框图见 [`ui-mockup.html`](ui-mockup.html)。
-2. **`sqlite-index.js`**：FTS5 + WAL，5k 条以上检索延迟收益明显；同时验证 IndexPort 是否真的可换。
-3. **curate 裁决 prompt + Agent 调用器**：把「导出批次 → Agent 判断 → 回写」跑成一条命令（`memo curate auto`）；Web UI 的「待裁决」区就是它的观察面。
+2. **`sqlite-index.js`**：FTS5 + WAL，5k 条以上检索延迟收益明显；同时验证 IndexPort 是否真的可换。——**已完成（v0.2.1-A，见 [`09-sqlite-index.md`](09-sqlite-index.md)）**：`config/policy.json` 的 `index.backend=memory|sqlite` 切换，回滚 = 改回 `memory` 一条配置。
+3. **curate 裁决 prompt + Agent 调用器**：把「导出批次 → Agent 判断 → 回写」跑成一条命令（`memo curate auto`）；Web UI 的「待裁决」区就是它的观察面。——**已完成（v0.2.1-B，见 [`10-curate-auto.md`](10-curate-auto.md)）**：落地为 `memo curate prompt`（生成任务包）→ Agent 回填 `decisions` → `memo curate apply --file` → `memo curate status` 三步；单命令 `auto`（含自动 LLM 裁决）仍留给 `JudgePort`。
 4. **夜间整合的收口**：`memo nightly`（launchd/cron），含配额淘汰与 brief 重建，输出 metrics。
 5. **投毒防线**：记忆正文里夹带的指令永不进入 brief，且写入时打 `suspicious` 标签（v0.1 仅做 brief 渲染时转义 + 不执行）。
 6. **hybrid 检索**：仅当 `stale_hit_rate` 或召回失败率有实测痛点时才做。
+
+> **扩展点验证结论（v0.2.1 实测）**：IndexPort 真的只在一处注入就能换后端——`src/api/service.js` 只改了
+> import（`versions/v0.1/src/api/service.js:10`）+ 一行 `createIndex({...})` 调用
+> （`versions/v0.1/src/api/service.js:53`），无任何 `if (impl === 'sqlite')` 分支散落；
+> 两种后端同一批查询结果对齐见 `docs/09` 与 `tests/unit/sqlite-index.test.js`。
 
 > 为什么 Web UI 排第一：不是因为"好看"，而是**没有观察面时卫生指标只是数字**——`dup_ratio` 涨了却看不出是哪几条在重复。它把 v0.1 已有的数据（events / metrics / dedupeScan）变成可诊断的界面；其它候选的收益判断都依赖它。
 
