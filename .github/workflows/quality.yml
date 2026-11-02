@@ -29,7 +29,7 @@ jobs:
         run: node tools/quality-check.mjs --json | tee quality-report.json
       - name: 归档质量报告
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: quality-report
           path: quality-report.json
