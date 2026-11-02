@@ -14,7 +14,7 @@
 ├── queue/curate-<batchId>.json
 ├── brief/<scope>.md        # 派生：确定性渲染
 ├── index/manifest.json     # 派生的派生（可选，v0.1 不落盘，仅占位）
-└── .lock                   # 跨进程写锁
+└── .lock/                  # 跨进程写锁（目录，mkdir 即排他创建）
 ```
 
 `scope` 形如 `repo:<项目名>` / `dir:work-yeager`（`MEMO_SCOPE` 环境变量可强制覆盖），用于隔离不同项目，禁止单库混用。
@@ -109,6 +109,11 @@ export class JsonlStore {
 ```js
 export async function withLock(memoHome, fn, { staleMs = 30000, timeoutMs = 15000 })
 ```
+
+锁的真实形态是**目录** `<memoHome>/.lock`（`mkdir` 的 `EEXIST` 就是原子排他，没有「先检查后创建」窗口；
+`staleMs` 按目录 mtime 判陈旧，`timeoutMs` 超时抛 `E_LOCK_TIMEOUT`，`finally` 删目录）。
+不用「文件 + `wx` 标志」的原因是 CodeQL `js/insecure-temporary-file` 会把「临时目录里可预测文件名 + 排他创建」
+判成符号链接攻击面——虽然这里路径由调用方 `memoHome` 决定，但换成目录既消除告警也更简洁（锁只需要唯一性 + 持有时间）。
 
 ### `src/index/inverted-index.js`（实现 IndexPort）
 ```js

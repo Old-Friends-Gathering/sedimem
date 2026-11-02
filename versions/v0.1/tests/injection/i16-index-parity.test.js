@@ -5,7 +5,7 @@
 //   G3 index.backend=sqlite 时 $MEMO_HOME/index/<scopeKey>.sqlite 真实存在且检索走 SQLite。
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { existsSync, rmSync, readFileSync } from 'node:fs';
+import { existsSync, rmSync } from 'node:fs';
 import { mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';

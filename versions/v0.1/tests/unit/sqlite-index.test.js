@@ -81,7 +81,6 @@ describe('index/sqlite-index', () => {
 
     const many = Array.from({ length: 25 }, (_, i) => rec(`deploy item number ${i}`));
     idx.build(many);
-    const unbounded = idx.search('deploy', { limit: undefined });
     // 审核 S1：默认 limit 必须与 InvertedIndex 一致（10），否则同一端口两种默认行为
     assert.equal(idx.search('deploy').length, 10, '默认 limit=10');
     assert.equal(idx.search('deploy', { limit: 25 }).length, 25, '显式 limit 生效');

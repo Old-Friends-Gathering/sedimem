@@ -29,6 +29,11 @@ function makeBatchId(nowIso) {
   return `batch-${stamp}-${randomBytes(4).toString('hex')}`;
 }
 
+/** Markdown 表格单元格转义：反斜杠必须先转，否则 `\|` 会被当成「已转义的竖线」 */
+function mdCell(value) {
+  return `${value ?? ''}`.replace(/\\/g, '\\\\').replace(/\|/g, '\\|');
+}
+
 function labelOf(item) {
   const text = String(item?.text ?? '');
   return text.length > 60 ? `${text.slice(0, 60)}…` : text;
@@ -99,8 +104,9 @@ function renderMarkdown(pkg) {
   lines.push('| # | ids | strength | containment | dice | 建议 | A | B |');
   lines.push('|---|-----|----------|-------------|------|------|---|---|');
   for (const p of pkg.pairs) {
-    const a = `${p.a.label}`.replace(/\|/g, '\\|');
-    const b = `${p.b.label}`.replace(/\|/g, '\\|');
+    // Markdown 表格单元格：先转义反斜杠再转义竖线（只转义 | 会让 `\\|` 之类的输入破坏表格）
+    const a = mdCell(p.a.label);
+    const b = mdCell(p.b.label);
     lines.push(
       `| ${p.pairIndex} | ${p.ids[0]} <-> ${p.ids[1]} | ${p.strength} | ${p.containment} | ${p.dice} | ${p.suggestion} | ${a} | ${b} |`,
     );

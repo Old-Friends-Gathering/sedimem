@@ -11,7 +11,6 @@ import { join } from 'node:path';
 
 import { createMemoryService } from '../../src/api/service.js';
 import { curatePrompt, curateApplyFile } from '../../src/cli/curate.js';
-import { scopeKeyOf } from '../../src/config/paths.js';
 
 // 3 组中文同义改写（每组 2 条；组间主题互不重叠，沿用 I12 已验证可聚类的语料）
 const GROUPS = [
@@ -50,7 +49,8 @@ test('I17 curate 闭环：prompt → 填 decisions → apply → 收敛 + 幂等
       `任务包应至少含 ${GROUPS.length} 对，实际 ${prompt.pairs.length}`);
 
     // 3. 读包 → 为每对填 merge → 写回 → curateApplyFile
-    const pkg = JSON.parse(readFileSync(pkgPath, 'utf8'));
+    const pkgText = readFileSync(pkgPath, 'utf8'); // 单次读快照，后面只基于它写回
+    const pkg = JSON.parse(pkgText);
     pkg.decisions = pkg.pairs.map((p) => ({
       ids: p.ids,
       decision: 'merge',
