@@ -3,7 +3,6 @@
 // 用法：node eval/run.js [--json] [--suite all|injection|metrics|bench]
 import { spawn } from 'node:child_process';
 import { readFileSync, writeFileSync, mkdirSync, mkdtempSync, rmSync } from 'node:fs';
-import { tmpdir } from 'node:os';
 import { join, dirname, relative } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 

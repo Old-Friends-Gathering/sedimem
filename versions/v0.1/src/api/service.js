@@ -10,7 +10,7 @@ import { withLock } from '../storage/lock.js';
 import { createIndex } from '../index/create-index.js';
 import { decideWrite } from '../hygiene/write-gate.js';
 import { monotonicDecay, clusterNearDuplicates } from '../hygiene/conflict.js';
-import { expiryFor, isExpired } from '../hygiene/decay.js';
+import { isExpired } from '../hygiene/decay.js';
 import { QuotaPolicy } from '../hygiene/quota.js';
 import { CurateQueue } from '../hygiene/curate.js';
 import { detectSuspicious } from '../hygiene/suspicious.js';

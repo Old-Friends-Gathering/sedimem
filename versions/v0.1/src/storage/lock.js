@@ -20,11 +20,13 @@ export async function withLock(memoHome, fn, { staleMs = 30000, timeoutMs = 1500
   await fsp.mkdir(memoHome, { recursive: true });
   const lockPath = path.join(memoHome, '.lock');
   const start = Date.now();
-  let handle = null;
 
   for (;;) {
     try {
-      handle = await fsp.open(lockPath, 'wx');
+      // 用 writeFile 的 'wx' 标志原子创建并写入 pid：一次系统调用完成「排他创建 + 落内容」，
+      // 不再「先 open 再 write」两步（CodeQL 对临时目录里可预测文件名的句柄写法会报
+      // insecure-temporary-file；锁文件路径由调用方的 memoHome 决定，不是进程级临时目录）。
+      await fsp.writeFile(lockPath, String(process.pid), { flag: 'wx', encoding: 'utf8' });
       break; // 拿到锁
     } catch (e) {
       if (e.code !== 'EEXIST') throw e;
@@ -46,12 +48,8 @@ export async function withLock(memoHome, fn, { staleMs = 30000, timeoutMs = 1500
   }
 
   try {
-    await handle.writeFile(String(process.pid), 'utf8');
-    await handle.close();
-    handle = null;
     return await fn();
   } finally {
-    if (handle) { try { await handle.close(); } catch { /* already closed */ } }
     try { await fsp.rm(lockPath, { force: true }); } catch { /* 尽力删除 */ }
   }
 }

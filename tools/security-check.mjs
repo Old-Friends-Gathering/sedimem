@@ -127,11 +127,11 @@ async function s7LargeOrBinary() {
   const allowedBinary = /\.(png|jpe?g|gif|svg|ico|pdf|webp)$/i;
   const problems = [];
   for (const f of files) {
-    const st = await fsp.stat(f).catch(() => null);
-    if (!st) continue;
-    if (st.size > 1024 * 1024) problems.push(`${rel(f)}: ${(st.size / 1048576).toFixed(2)} MB > 1 MB（大文件走 release/LFS）`);
+    // 只读一次再从 buffer 判断大小/二进制：先 stat 再 read 会构成 TOCTOU（CodeQL js/file-system-race）
+    const buf = await fsp.readFile(f).catch(() => null);
+    if (!buf) continue;
+    if (buf.length > 1024 * 1024) problems.push(`${rel(f)}: ${(buf.length / 1048576).toFixed(2)} MB > 1 MB（大文件走 release/LFS）`);
     if (!allowedBinary.test(f) && !TEXT_EXT.test(f)) {
-      const buf = await fsp.readFile(f).catch(() => Buffer.alloc(0));
       if (buf.subarray(0, 8000).includes(0x00)) problems.push(`${rel(f)}: 疑似二进制文件入库（未在白名单）`);
     }
   }
