@@ -1,0 +1,53 @@
+# 03 · 可演化性与版本管理
+
+## 1. 为什么 v0.1 必须「笨」
+
+v0.1 刻意用最笨的实现（纯 JS 倒排索引、规则化裁决、无 embedding），换取三件事：**可测、可换、可重建**。任何让这三件事变差的优化都不进 v0.1。
+
+## 2. 六个扩展点（新增能力只加适配器，不改 core）
+
+| Port | v0.1 实现 | 未来可能实现 | 切换方式 |
+|---|---|---|---|
+| `StoragePort` | `storage/jsonl-store.js` | sqlite、S3、git+merge | `MEMO_STORAGE=` 或注入 |
+| `IndexPort` | `index/inverted-index.js` | `sqlite-index.js`（FTS5）、`hybrid-index.js`（BM25+dense，RRF k=60） | `MEMO_INDEX=` |
+| `JudgePort` | `hygiene/conflict.js` 规则 | `judge-llm.js`（读 curate 批次，调本地/远端模型） | `MEMO_JUDGE=` |
+| `RendererPort` | `render/brief.js` | 预算自适应渲染（FlexA-Mem 式：时间线+细节） | `MEMO_RENDER=` |
+| `ClockPort` | `core/clock.js` | 测试假时钟、可回放时钟 | 依赖注入 |
+| `PolicyPort` | `hygiene/quota.js` + `decay.js` | 按 kind 的 TTL、成本配额（token 预算） | 注入 |
+
+**判定标准**：如果某个改动需要在 `api/service.js` 或 `hygiene/` 里写 `if (impl === 'sqlite')`，那它设计错了——应该是适配器 + 注入。
+
+## 3. 版本策略
+
+- 目录：`versions/vX.Y/`，**每个版本自包含**（自己的 src/tests/eval/CHANGELOG/ACCEPTANCE）。跨版本只共享 `docs/`、`eval/cases/` 的**思想**，不共享代码路径。
+- 兼容：`MEMO_HOME` 布局与 `MemoryRecord.version` 是**跨版本承诺**。schema 变更必须：新字段可缺省 + 写在 `docs/adr-*.md` + 提供 `memo migrate` 路径。
+- 真相层永不迁移破坏性：新版本必须能读旧版 `items/*.jsonl`（只加字段，不改语义）。
+- `eval/results/` 每次跑留下 `vX.Y-<时间戳>.json`，版本间对比写进 `versions/vX.Y/docs/COMPARE.md`。
+
+## 4. 迭代一个版本的标准流程
+
+```
+1. 写 ADR（docs/adr-NNN-*.md）：问题 / 备选 / 决定 / 代价 / 回滚
+2. 改契约文档（docs/02-...），如果涉及接口
+3. 写失败测试（tests/），red
+4. 实现，green
+5. 跑 eval，与上一版对比（必须给出数字，不接受「感觉更好」）
+6. 多 agent 审核（架构 / 对抗），把结论写进 reviews/
+7. 打 tag，更新 README 版本索引与 CHANGELOG
+```
+
+## 5. v0.1 → v0.2 的候选路线（按价值排序）
+
+1. **`sqlite-index.js`**：FTS5 + WAL，5k 条以上检索延迟收益明显；同时验证 IndexPort 是否真的可换。
+2. **curate 裁决 prompt + Agent 调用器**：把「导出批次 → Agent 判断 → 回写」跑成一条命令（`memo curate auto`）。
+3. **夜间整合的收口**：`memo nightly`（launchd/cron），含配额淘汰与 brief 重建，输出 metrics。
+4. **投毒防线**：记忆正文里夹带的指令永不进入 brief，且写入时打 `suspicious` 标签（v0.1 仅做 brief 渲染时转义 + 不执行）。
+5. **hybrid 检索**：仅当 `stale_hit_rate` 或召回失败率有实测痛点时才做。
+
+## 6. 「记忆库本身也要能优化」
+
+这是与「代码可优化」不同的第二件事：
+
+- 记忆库的健康度用**指标**驱动（`dup_ratio` / `conflict_rate` / `stale_hit_rate` / `unit_cost`），每次整合写一份快照到 `metrics/<date>.json`，形成时间序列。优化决策看趋势，不看单点。
+- 库的**结构**也可演化：`kind` 取值、`HALF_LIFE_MS`、`kindWeight`、批大小、配额都是数据（配置），不是代码常量。v0.1 用 `versions/v0.1/config/policy.json` 承载，允许 A/B。
+- 任何自动整合都必须**可回放**：`events.jsonl` 记录每个决定，`memo replay --since` 能重建当时的视图，用于回答「为什么这条被忘了」。

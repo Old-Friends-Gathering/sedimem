@@ -1,0 +1,14 @@
+{
+  "name": "memo",
+  "version": "0.1.1",
+  "private": true,
+  "type": "module",
+  "description": "本地跨会话自我迭代记忆系统 v0.1（零运行时依赖）",
+  "bin": { "memo": "./src/cli/memo.js", "memo-mcp": "./src/mcp/server.js" },
+  "engines": { "node": ">=22" },
+  "scripts": {
+    "test": "node --test tests/",
+    "eval": "node eval/run.js",
+    "doctor": "node src/cli/memo.js doctor"
+  }
+}

@@ -1,0 +1,35 @@
+# 调研资料（本记忆系统的证据基础）
+
+这里放的是 **v0.1 设计与裁决所依据的原始调研**，不是设计文档本身。设计结论在上级目录
+[`00`](../00-principles-and-requirements.md)–[`06`](../06-usage.md)，实现契约在 [`02`](../02-data-model-and-contract.md)。
+**读的顺序**：想先看结论 → `memory-system-report-and-plan.md`；想验收「这个结论有没有证据」→ 下面三份原始调研。
+
+## 文件
+
+| 文件 | 回答什么问题 | 体量 | 产出方式 |
+|---|---|---|---|
+| [`memory-system-report-and-plan.md`](memory-system-report-and-plan.md) | **报告 + 落地计划**：8 个开源系统 + 3 端原生记忆机制的横向打分、C1–C6 硬需求、为什么最后是"自建薄治理层"、P0–P4 计划 | 353 行 | 我（Lead）依据下面三份原始调研合成 |
+| [`agent-memory-projects-survey-2026-11.md`](agent-memory-projects-survey-2026-11.md) | **开源项目实测**：mem0/OpenMemory、Letta、Zep+Graphiti、cognee、MemOS、memU、Supermemory、Memobase 的 star/license/存储/检索/MCP 暴露/自我维护能力/成本 | 402 行 | 子代理 A，GitHub REST API + 源码核验，2026-11-02 |
+| [`memory-ecosystem-2026.md`](memory-ecosystem-2026.md) | **编码 Agent 侧生态**：claude-mem、basic-memory、mcp-memory-service、Cline Memory Bank，以及 Claude Code / Codex CLI / DSH 各自的原生记忆机制与可插拔接缝 | 345 行 | 子代理 B，官方文档当天抓取 + 仓库 Issue 证据 |
+| [`ai-memory-hygiene-survey.md`](ai-memory-hygiene-survey.md) | **治理机制综述**：冗余/重复/冲突/过时四类熵增的治理路径、阈值纪律、bi-temporal 失效语义、成本模型、评测方法、真实反模式 | 519 行 | 子代理 C，论文（arXiv 全部核验）+ 公开实现 |
+| [`readmes/`](readmes/) | 上述 8 个项目 README 的**当日快照**（防止上游改动后结论无法复核） | 8 份 | 子代理 A 抓取 |
+
+## 这些调研直接决定了哪些设计
+
+不带证据的设计容易被"看起来合理"骗过去，所以每条重要决定都能追回原始数据：
+
+| 设计决定 | 依据（本目录） |
+|---|---|
+| **不选现成系统，自建薄治理层** | `memory-system-report-and-plan.md` 打分表：没有一个同时满足 C1–C6；mem0 v3 改 ADD-only 后**主动放弃**过期/覆盖语义（`agent-memory-projects-survey-2026-11.md`）；mcp-memory-service 治理最强但 Issue #530 显示 hooks 静默失败会 218+ session 零记忆 |
+| **在线词法只做「零误杀」保守去重，语义交 Agent** | `ai-memory-hygiene-survey.md` 阈值纪律 + 我在真实库上的实测（5 句真人改写词法只到 0.43–0.5） |
+| **过时 = 失效而非删除（bi-temporal + 墓碑）** | 同上：Graphiti 自报 knowledge-update −3.36%，读路径必须显式过滤失效 |
+| **不引入 embedding（v0.1）** | `agent-memory-projects-survey-2026-11.md`：cognee 的 GLiNER 是 demo 级精度；Supermemory 内置 bge-base 可离线但引入 300MB+ 依赖，与 C6「轻」冲突 → 留成 v0.2 的 `EmbedderPort` |
+| **MCP 作为三端唯一缝，AGENTS.md 作为指令桥** | `memory-ecosystem-2026.md`：三端都支持 MCP 且工具名规则一致；AGENTS.md 由 Linux Foundation 托管、只解决指令可移植 |
+| **中文改写要单独开一路汉字二元组度量** | 我基于 `ai-memory-hygiene-survey.md` 的度量框架，在中文语料上重测（英文结论不可直接搬） |
+
+## 口径与已知限制
+
+- **star / license / 最后 push 均为 2026-11-02 当日 GitHub REST API 实测**，之后会上漂移；引用时请带日期。
+- 调研中途触发过 GitHub API 60 次/小时限额，因此除 mem0 外，各项目「issue 主题级统计」不完整（文中已逐处标注「未查到」）。
+- 论文编号均核验过 arXiv abs 页；少数数字来自二手分析，文中用 ⚠️ 标注，**引用前请先核原文**。
+- `memory-ecosystem-2026.md` 与 `agent-memory-projects-survey-2026-11.md` 覆盖范围不同：前者是**编码 Agent 侧**（Claude/Codex/DSH 生态），后者是**通用开源记忆系统**，两份都要看才算覆盖完整。

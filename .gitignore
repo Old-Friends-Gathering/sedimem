@@ -1,0 +1,16 @@
+# 运行时数据（记忆本体不在仓库里）
+.memo/
+*.log
+
+# 依赖与构建产物
+node_modules/
+dist/
+
+# 编辑器 / 操作系统
+.DS_Store
+.idea/
+.vscode/
+*.swp
+
+# 评测临时输出（LATEST 保留，历史快照按需提交）
+versions/*/eval/results/tmp-*
