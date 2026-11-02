@@ -368,3 +368,51 @@ Claude Code / Codex 每次会话按**项目 cwd** 解析。结果：同一项目
 **规则**：对外 API（`createMemoryService` 及其方法、Ports、CLI 子命令、MCP 工具）必须写在
 §3 / §3.1–§3.7 正文里；只登记在本节的，改动不需要 ADR，但不得新增未登记的导出
 （`tools/contract-exempt.json` 是兜底豁免清单，必须逐条写理由）。
+
+## 3.9 第七轮裁决（2026-11-02，v0.2 Web UI 冻结契约）
+
+设计侧规格见 [`08-web-ui.md`](08-web-ui.md)，施工分解见 [`plans/v0.2-web-ui-plan.md`](plans/v0.2-web-ui-plan.md)。
+本节只冻结**实现层必须一致的语义**，四路并行开发只认这里与 `08` §6。
+
+**裁决 30（两个只读查询方法）**
+
+```js
+await svc.events({ since, until, ops, limit = 200 })
+  // → { events: [{ts,op,scope,id,detail}], scanned, truncated }
+await svc.exportRecords({ since, until, status = 'active', kind, limit = 2000 })
+  // → { records: [record], total, limited }
+```
+
+- 两者**只读**：读事件不得写 `events.jsonl`（否则 `hit` 自我放大）。
+- 时间窗一律 `[since, until)` 半开区间，按 `ts` 字符串比较（`ts` 为 UTC ISO8601，字典序 == 时间序）。
+- `truncated`/`limited` 为 true 表示「命中数超过上限被截断」，调用方必须提示用户，**禁止静默截断**。
+- `exportRecords` 默认 `status='active'`，`status:'all'` 表示不过滤；suspicious 记录默认遮蔽为 `[suspicious withheld]`（沿用裁决 16），需原文时显式 `includeSuspicious:true`。
+
+**裁决 31（metrics 按 scope 分文件）**
+
+- 写入：`metrics/<date>.<scopeKey>.json`，其中 `scopeKey = scope.replace(/[^a-z0-9._-]+/gi,'-')`。
+- 读取：先找新名，找不到再回退旧的 `metrics/<date>.json`（兼容 v0.1.0–0.1.2 的历史文件）。
+- 理由：`<date>.json` 在多分库同日运行时互相覆盖，属静默数据丢失。
+
+**裁决 32（按自然日切片由调用方给时区）**
+
+- `/api/today?date=YYYY-MM-DD&tzOffset=480`、`/api/timeline?days=30&tzOffset=480`：`tzOffset` 为**分钟、东为正**，缺省 0（UTC）。
+- 服务端换算：`from = Date.parse(date + 'T00:00:00Z') - tzOffset*60000`，`to = from + 86400000`，再按 `[from, to)` 过滤。
+- 服务端**不猜**服务进程时区（常驻进程时区不可靠，见裁决 28 的同类理由）。
+
+**裁决 33（图谱由服务端派生，UI 不做关系推断）**
+
+- 节点集合：`status ∈ {active, superseded}` 的记录，上限 `limit`（默认 300），排序按 `createdAt` 降序 + `hits` 降序取前 N；返回 `sampled: {shown, total}`。
+- 边四类（`type` 唯一取值）：
+  - `same-entity`：同一 `subject` 且该组记录数 ≥2，两两连边，`weight = 1`；
+  - `supersedes`：记录 `supersedes` 字段指向的旧 id → 新 id 有向边，`weight = 1`；
+  - `duplicate-of`：来自 `dedupeScan` 的 `pairs[]`，`weight = pairs[].score`；
+  - `disputed-with`：`status='disputed'` 的记录与其同 slot 的 `status='active'` 记录之间，`weight = 1`。
+- 节点 `label` 由服务端生成：有结构时 `subject/predicate`，否则 `text` 前 60 字（+ `…`）。**UI 不得自行拼接 label**。
+- `degree` 为节点在返回边集中的度（无向计一次、有向计出度+入度）。
+
+**裁决 34（Web 层不得越权）**
+
+- `src/web/*` 只允许 `import` `src/api/service.js`、`src/core/*`、`src/config/*`；**禁止** import `src/hygiene/*`、`src/storage/*`、`src/index/*`（关系与判定都在 service 内完成，Web 只做投影）。
+- 静态资源只从 `versions/v0.1/ui/` 读取；路径穿越（`..`、绝对路径、软链接）一律 404。
+- 服务只绑 `127.0.0.1`；无鉴权（用户决策 D1），因此**不得**提供任何写操作端点。
