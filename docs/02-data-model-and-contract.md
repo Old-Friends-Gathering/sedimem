@@ -554,3 +554,4 @@ await svc.exportRecords({ since, until, status = 'active', kind, limit = 2000 })
 | `src/cli/curate.js` | `readBatchPkg(memoHome, batchId)` | 读机读任务包；缺失/损坏返回 `null`（不抛） |
 | `src/core/record.js` | `AGENT_PATTERN` | 裁决 47 的唯一身份正则 |
 | `src/core/record.js` | `RESERVED_AGENTS` | 裁决 47 的保留名集合 |
+| `src/web/scopes.js` | `listScopes(memoHome, currentScope)` | 分库发现：读 `items/*.jsonl`，只承认过 `SCOPE_PATTERN` 的名字（docs/08 §13） |

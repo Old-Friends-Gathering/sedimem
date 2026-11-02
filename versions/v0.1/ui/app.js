@@ -13,10 +13,19 @@ const TZ_OFFSET = -new Date().getTimezoneOffset();
 /* ---------------- 小工具 ---------------- */
 
 /** 取接口数据；ok:false 或网络错误统一抛 Error(code+message)。 */
+/** 当前观察的分库（?scope=repo:xxx）；空串表示用服务端启动时解析出的那个。 */
+function currentScope() {
+  const m = /(?:^|[?&])scope=([^&]+)/.exec(location.hash.split('?')[1] ?? '');
+  return m ? decodeURIComponent(m[1]) : '';
+}
+
 async function api(path) {
+  const sc = currentScope();
+  const sep = path.includes('?') ? '&' : '?';
+  const withScope = sc ? `${API + path}${sep}scope=${encodeURIComponent(sc)}` : API + path;
   let res;
   try {
-    res = await fetch(API + path);
+    res = await fetch(withScope);
   } catch {
     throw new Error('E_FETCH_FAILED: 无法连接本地服务，请确认 memo serve 正在运行。');
   }
@@ -104,7 +113,7 @@ async function loadSummary() {
   };
   try {
     const s = await api('/summary');
-    set('chip-scope', `scope ${s.scope ?? '…'}`);
+    // 顶栏分库下拉由 loadScopes() 渲染（这里不再传字符串，否则会把下拉降级成静态 chip）
     set('chip-version', String(s.version ?? 'v?'));
   } catch (err) {
     set('chip-version', '服务不可用');
@@ -413,15 +422,58 @@ async function render() {
 window.addEventListener('hashchange', () => {
   const route = currentRoute();
   if (route !== 'graph') destroyGraph();
+  loadScopes(); // 分库可能被切换：刷新下拉的选中项与计数
   render();
 });
 for (const r of ROUTES) {
   document.getElementById(`tab-${r}`).addEventListener('click', () => { location.hash = `#/${r}`; });
 }
 
+/* ---------------- 分库切换 ---------------- */
+
+/** 拉分库列表并渲染顶栏下拉；切换后把 scope 写进 hash 并发起重渲染。 */
+async function loadScopes() {
+  let data;
+  try {
+    data = await api('/scopes');
+  } catch {
+    return; // 列表拿不到不影响主流程（下拉保持默认）
+  }
+  renderScopePicker(data.scopes);
+}
+
+function renderScopePicker(scopes) {
+  const box = document.getElementById('scope-pick');
+  if (!box) return;
+  const list = Array.isArray(scopes) ? scopes : [];
+  const active = currentScope() || (list.find((s) => s.current)?.scope ?? list[0]?.scope ?? '');
+  box.textContent = '';
+  const label = el('span', 'scope-label', '分库');
+  box.append(label);
+  if (list.length === 0) {
+    box.append(el('span', 'chip', active || '…'));
+    return;
+  }
+  const sel = el('select');
+  sel.className = 'scope-select';
+  sel.setAttribute('aria-label', '切换分库');
+  for (const s of list) {
+    const opt = el('option', null, `${s.scope}（${s.records}）`);
+    opt.value = s.scope;
+    if (s.scope === active) opt.selected = true;
+    sel.append(opt);
+  }
+  sel.addEventListener('change', () => {
+    const route = currentRoute();
+    location.hash = `#/${route}?scope=${encodeURIComponent(sel.value)}`;
+  });
+  box.append(sel);
+}
+
 /* ---------------- 启动 ---------------- */
 
 bindTodayControls();
+loadScopes();
 loadSummary();
 if (!location.hash) location.hash = '#/today';
 render();

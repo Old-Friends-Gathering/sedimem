@@ -4,7 +4,10 @@
 import http from 'node:http';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import fsp from 'node:fs/promises';
 import { createMemoryService } from '../api/service.js';
+import { SCOPE_PATTERN } from '../mcp/scope-state.js';
+import { listScopes } from './scopes.js';
 import { handleApi } from './handlers.js';
 import { createStaticHandler } from './static.js';
 
@@ -41,6 +44,27 @@ export async function createWebServer({
   }
   const svc = service ?? await createMemoryService({ memoHome, scope });
   const serveStatic = includeUi ? createStaticHandler(UI_DIR) : null;
+  // 多分库浏览（docs/08 §13）：?scope= 指定其它分库时按需懒建服务并缓存。
+  // scope 会直接进文件路径（items/<scope>.jsonl），所以必须过 SCOPE_PATTERN —— 否则就是 path traversal。
+  const extra = new Map();
+  const services = [];
+  async function serviceFor(requested) {
+    if (requested === undefined || requested === null || requested === '') return svc;
+    const wanted = String(requested);
+    if (!SCOPE_PATTERN.test(wanted)) {
+      const err = new Error(`scope 不合法（需形如 repo:name / dir:name）: ${JSON.stringify(wanted)}`);
+      err.code = 'E_INVALID_ARG';
+      throw err;
+    }
+    if (wanted === svc.scope) return svc;
+    if (!extra.has(wanted)) {
+      const created = await createMemoryService({ memoHome, scope: wanted });
+      await created._init();
+      extra.set(wanted, created);
+      services.push(created);
+    }
+    return extra.get(wanted);
+  }
 
   const server = http.createServer((req, res) => {
     void handle(req, res).catch((err) => {
@@ -72,9 +96,27 @@ export async function createWebServer({
         res.end(JSON.stringify({ ok: false, code: 'E_METHOD', message: `${req.method} not allowed (read-only GET API)` }));
         return;
       }
+      if (pathname === '/api/scopes') {
+        const payload = await listScopes(memoHome, svc.scope);
+        res.writeHead(200, { 'content-type': 'application/json; charset=utf-8' });
+        res.end(JSON.stringify({ ok: true, ...payload }));
+        return;
+      }
+      // 多分库：?scope= 覆盖启动分库；未指定则用启动时那个。
+      // 非法 scope 在 serviceFor 里抛 E_INVALID_ARG —— 必须在 API 层映射成 400（否则会被外层兜成 500，
+      // 客户端就分不清「你的参数错了」和「服务坏了」）。
+      let active;
+      try {
+        active = await serviceFor(url.searchParams.get('scope'));
+      } catch (e) {
+        const code = e?.code ?? 'E_INTERNAL';
+        res.writeHead(code === 'E_INVALID_ARG' ? 400 : 500, { 'content-type': 'application/json; charset=utf-8' });
+        res.end(JSON.stringify({ ok: false, code, message: e?.message ?? String(e) }));
+        return;
+      }
       // 裁决 39：常驻服务不写库，读前先按文件水位增量刷新，否则浏览器看到的截面会自相矛盾
-      await svc.refreshView();
-      const { status, body } = await handleApi(svc, url);
+      await active.refreshView();
+      const { status, body } = await handleApi(active, url);
       res.writeHead(status, { 'content-type': 'application/json; charset=utf-8' });
       res.end(JSON.stringify(body));
       return;
@@ -111,7 +153,9 @@ export async function createWebServer({
       // 先掐掉空闲 keep-alive 连接，否则 close 会等它们自然超时（浏览器标签页常驻时尤其明显）
       if (typeof server.closeIdleConnections === 'function') server.closeIdleConnections();
       await new Promise((resolve) => server.close(resolve));
-      await svc.close();
+      for (const s of [svc, ...services]) {
+        try { await s.close(); } catch { /* 单个分库 close 失败不阻塞整体关闭 */ }
+      }
     },
   };
 }
