@@ -94,3 +94,4 @@ cd versions/v0.1 && node eval/run.js   # 行为（I1–I12）
 | 覆盖率 | lines 92.1% / branches 77.7% / functions 92.3% |
 | 质量 | 8/8 |
 | 安全 | 8/8（S3/S1 对调研快照做了显式豁免，理由写在脚本注释里） |
+| 平台侧 | secret scanning ✅ / push protection ✅ / dependabot security updates ✅（validity checks 与 non-provider patterns 需要 GHAS，公开仓本组织不可用） |
