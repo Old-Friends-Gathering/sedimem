@@ -6,6 +6,9 @@ name: issue-link
 #   1. PR 正文含 closing 关键字 + issue 号：Closes/Fixes/Resolves #123（大小写不敏感）
 #   2. 或正文含 `Refs #123` / `Part of #123`（同一 issue 拆多个 MR 时用）
 #   3. 或 PR 带 `no-issue` 标签（仅限 docs/CI/依赖升级这类不改变行为的改动，且必须在 PR 里说明理由）
+#   4. 或 PR 由 dependabot[bot] 发起（依赖升级无法引用人工 issue；dependabot 已配置只跟 github-actions，
+#      且 dependabot PR 仍需过 ci/quality/security 三道门禁，风险可接受。这条豁免写死在 workflow 里，
+#      不通过标签，避免有人给自己打 no-issue 蒙混。）
 # 并且：被引用的 issue 必须存在且处于 open 状态（防止挂到已关闭的旧 issue 上蒙过门禁）。
 
 on:
@@ -36,6 +39,11 @@ jobs:
             const fail = (msg) => {
               core.setFailed(msg);
             };
+
+            if (context.actor === 'dependabot[bot]' || pr.user?.login === 'dependabot[bot]') {
+              core.info('dependabot PR：跳过 issue 关联校验（依赖升级无法引用人工 issue，仍需过其余三道门禁）。');
+              return;
+            }
 
             if (labels.includes('no-issue')) {
               core.info('PR 带 no-issue 标签：跳过 issue 关联校验（PR 正文须说明为什么不需要 issue）。');

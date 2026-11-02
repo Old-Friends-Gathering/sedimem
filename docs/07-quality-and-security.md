@@ -54,7 +54,7 @@ cd versions/v0.1 && node eval/run.js   # 行为（I1–I12）
 |---|---|---|---|
 | S1 | 个人绝对路径 | 全仓无 `/Users/<name>`、`/home/<name>`、`C:\Users\<name>`（`docs/research/readmes/` 快照豁免） | 公开仓库不泄露本机用户名/目录结构 |
 | S2 | 凭据/私钥 | 无 `ghp_`/`github_pat_`/`gho_`/`sk-`/`AKIA`/`xox?-`/`BEGIN PRIVATE KEY` | |
-| S3 | 内部资产 | 无 `*.addx.live`、内网 IP 段（`10.`/`192.168.`/`172.16-31.`） | |
+| S3 | 内部资产 | 无公司内部域名后缀、无内网 IP 段（RFC1918 三段） | 公开仓库不泄露组织内部主机名与网段；规则模式见 `tools/security-check.mjs` S3 |
 | S4 | 配置模板可移植 | `versions/**` 内不得残留真实 home 路径 | 三端配置必须换机可用 |
 | S5 | `.gitignore` | 必须覆盖 `.memo/`、`node_modules/`、`.DS_Store`、`*.log`、`.env` | 记忆正文永不入库 |
 | S6 | 许可证与元数据 | `LICENSE` 为 MIT 且版权行正确；`package.json` 有 `license` 与 `repository.url` | 可追溯性 |
