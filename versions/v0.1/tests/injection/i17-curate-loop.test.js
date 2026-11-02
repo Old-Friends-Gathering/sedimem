@@ -49,18 +49,22 @@ test('I17 curate 闭环：prompt → 填 decisions → apply → 收敛 + 幂等
       `任务包应至少含 ${GROUPS.length} 对，实际 ${prompt.pairs.length}`);
 
     // 3. 读包 → 为每对填 merge → 写回 → curateApplyFile
-    const pkgText = readFileSync(pkgPath, 'utf8'); // 单次读快照，后面只基于它写回
-    const pkg = JSON.parse(pkgText);
-    pkg.decisions = pkg.pairs.map((p) => ({
-      ids: p.ids,
-      decision: 'merge',
-      note: 'I17: same fact (semantic near-duplicate)',
-    }));
-    writeFileSync(pkgPath, `${JSON.stringify(pkg, null, 2)}\n`, 'utf8');
+    const pkg = JSON.parse(readFileSync(pkgPath, 'utf8'));
+    // 裁决结果写到**独立文件**，不回写任务包本身：读后写同一路径会构成 TOCTOU（CodeQL js/file-system-race），
+    // 而 apply 只需要 {batchId, decisions[]}，独立文件在语义上也更清楚（任务包是输入，裁决是产出）。
+    const decisionsPath = join(memoHome, 'curate', 'i17-decisions.json');
+    writeFileSync(decisionsPath, `${JSON.stringify({
+      batchId: pkg.batchId,
+      decisions: pkg.pairs.map((p) => ({
+        ids: p.ids,
+        decision: 'merge',
+        note: 'I17: same fact (semantic near-duplicate)',
+      })),
+    }, null, 2)}\n`, 'utf8');
 
-    const applied = await curateApplyFile(svc, pkgPath);
+    const applied = await curateApplyFile(svc, decisionsPath);
     assert.ok(applied.applied > 0, `applied 必须 > 0，实际 ${JSON.stringify(applied)}`);
-    assert.equal(applied.applied, pkg.decisions.length, '每对 merge 都应落盘');
+    assert.equal(applied.applied, pkg.pairs.length, '每对 merge 都应落盘');
 
     // 4. active 收敛（≤3）且真相层原行全留（行数 ≥ 6）
     const stats = await svc.stats();
@@ -72,7 +76,7 @@ test('I17 curate 闭环：prompt → 填 decisions → apply → 收敛 + 幂等
     assert.ok(lines >= 6, `真相层行数应 ≥6（原 6 行全留），实际 ${lines}`);
 
     // 5. 幂等：同一文件再 apply → applied=0 且 skipped>0
-    const replay = await curateApplyFile(svc, pkgPath);
+    const replay = await curateApplyFile(svc, decisionsPath);
     assert.equal(replay.applied, 0, `重放必须 applied=0，实际 ${JSON.stringify(replay)}`);
     assert.ok(replay.skipped > 0, `重放必须 skipped>0，实际 ${JSON.stringify(replay)}`);
     assert.equal((await svc.stats()).active, stats.active, '重放不得改变 active 数');
