@@ -13,13 +13,14 @@ Issue（feature/bug/chore 模板）
 分支：<type>/<issue号>-<短描述>      例：feat/42-scope-isolation
    ↓  必须：先写失败测试（TDD），再实现
 MR：正文写 `Closes #42`
-   ↓  GitHub Actions 四道 workflow 全绿 + CODEOWNERS 评审
+   ↓  GitHub Actions 四道 workflow 全绿（管理员同样受限）
 main（受保护分支，禁止直推 / 禁止 force push）
 ```
 
 - **没有 issue 的 MR 会被 `issue-link` 门禁拦下**（docs/CI/依赖升级这类不改变行为的改动可加 `no-issue` 标签，但必须在正文写理由）。
 - 一个 issue 拆多个 MR：正文用 `Refs #42`，最后一个 MR 用 `Closes #42` 收口。
-- 分支保护：`main` 只接受 PR，且必须通过 `test (22)`、`test (24)`、`eval (I1–I12)`、`quality`、`security`、`issue-link` 六项检查。
+- 分支保护：`main` 只接受 PR，且必须通过 `test (22)`、`test (24)`、`eval (I1–I12)`、`quality`、`security`、`codeql`、`issue-link` 七项检查；
+  `enforce_admins=true`——**维护者自己也不能直推**（实测 `git push origin main` 返回 `GH006 ... 7 of 7 required status checks are expected`）。
 
 ## 二、提交前必跑（本地，与 CI 同源）
 
