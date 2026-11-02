@@ -13,6 +13,27 @@ DSH / Codex CLI / Claude Code 三端共用一份本地记忆。重点不是"检�
 
 ---
 
+## 看一眼（只读观察台）
+
+`memo serve` 起一个只绑 `127.0.0.1` 的只读页面，三页各有分工：
+
+**今日变化** —— 这一天库里发生了什么（新增 / 被取代 / 删除 / 合并），每条带服务端生成的 label 和「为什么」。
+
+![今日变化](docs/shots/today.png)
+
+**记忆图谱** —— 节点是记录，边是同实体时间链 / 版本链 / 近重复候选 / 冲突。默认只画前两类，可手动全开；节点可拖、可缩放，点一下看详情。
+
+![记忆图谱](docs/shots/graph.png)
+
+**卫生洞察** —— 待裁决的近重复候选（Agent 来裁决）、最近 30 天清理史、30 天冗余率/冲突率/配额占比趋势、`doctor` 体检。
+
+![卫生洞察](docs/shots/hygiene.png)
+
+```bash
+node versions/v0.1/src/cli/memo.js serve        # 打开 http://127.0.0.1:7788
+node versions/v0.1/src/cli/memo.js serve --help # 端口、分库、无 UI 模式
+```
+
 ## 为什么叫 strata
 
 记忆像地层（strata）一样**沉积**，而不是被反复改写覆盖：
