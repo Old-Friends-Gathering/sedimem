@@ -7,6 +7,7 @@
 import process from 'node:process';
 import path from 'node:path';
 import os from 'node:os';
+import { AGENT_PATTERN, RESERVED_AGENTS } from '../core/record.js';
 
 function resolveMemoHome() {
   return process.env.MEMO_HOME || path.join(os.homedir(), '.memo');
@@ -30,6 +31,7 @@ const USAGE = `memo —— 本地跨会话记忆系统 v0.1
   memo dedupe scan [--threshold 0.45] [--dice 0.15] [--limit 50] [--json]   # 只读：近重复候选簇（裁决 22/23/26）
   memo dedupe apply --file decisions.json                     # decisions.json: {batchId?, decisions:[{ids:[...]|pairIndex, decision, note}]}
   memo migrate dsh-memory [--db path]
+  memo serve [--port N] [--no-ui]                             # 只读 Web UI/API（默认 127.0.0.1:7788；--no-ui 只提供 API）
 
 环境:
   MEMO_HOME   记忆库根目录（默认 ~/.memo）
@@ -107,12 +109,13 @@ function printRecord(r) {
   );
 }
 
-const ALLOWED_AGENTS = new Set(['dsh', 'codex', 'claude', 'cli', 'test', 'unknown']);
-
+// 裁决 25：source.agent 是自由标签（不再枚举），校验规则与 core/record.js 保持同一份
 function parseAgent(opts, fallback = 'cli') {
   const agent = opts.agent === true || opts.agent === undefined ? fallback : String(opts.agent);
-  if (!ALLOWED_AGENTS.has(agent)) {
-    throw new UsageError(`--agent 必须是 dsh|codex|claude|cli|test|unknown，收到: ${agent}`);
+  if (!AGENT_PATTERN.test(agent) || RESERVED_AGENTS.has(agent)) {
+    throw new UsageError(
+      `--agent 必须匹配 ${AGENT_PATTERN}，且不能用保留名（${[...RESERVED_AGENTS].join('|')}），收到: ${agent}`,
+    );
   }
   return agent;
 }
@@ -462,6 +465,53 @@ async function cmdDoctor(asJson) {
   return result.ok ? 0 : 1; // 有 error → 退出码 1
 }
 
+/** memo serve：只读 Web 服务（W3）。SIGINT/SIGTERM 优雅关闭 exit 0；EADDRINUSE 清晰报错 exit 1。 */
+async function cmdServe(opts) {
+  const port = parseNumber(opts, 'port') ?? 7788;
+  const { createWebServer } = await import('../web/server.js');
+  let web;
+  try {
+    web = await createWebServer({
+      memoHome: resolveMemoHome(),
+      port,
+      host: '127.0.0.1',
+      includeUi: !opts['no-ui'],
+    });
+  } catch (err) {
+    if (err && (err.code === 'EADDRINUSE' || /EADDRINUSE/.test(String(err.message)))) {
+      process.stderr.write(`端口 ${port} 已被占用（EADDRINUSE）。请用 --port 换一个端口，例如：memo serve --port ${port + 1}\n`);
+      process.exit(1);
+    }
+    throw err;
+  }
+  process.stdout.write(`memo serve 已启动: ${web.url}\n`);
+  try {
+    const res = await fetch(new URL('api/summary', web.url));
+    const j = await res.json();
+    process.stdout.write(`scope: ${j.scope}\nmemoHome: ${j.memoHome}\n`);
+  } catch {
+    process.stdout.write('\n');
+  }
+  let closing = false;
+  const shutdown = async () => {
+    if (closing) return;
+    closing = true;
+    // 裁决 21：close/flushHits 的错误不得被吞——失败时打错误并以非零码退出，
+    // 否则「hits 没落盘」会被伪装成正常关闭（审核 S1）
+    try {
+      await web.close();
+      process.exit(process.exitCode ?? 0);
+    } catch (err) {
+      process.stderr.write(`memo serve 关闭失败: [${err?.code ?? 'E_INTERNAL'}] ${err?.message ?? err}\n`);
+      process.exit(1);
+    }
+  };
+  process.on('SIGINT', () => void shutdown());
+  process.on('SIGTERM', () => void shutdown());
+  await new Promise(() => {}); // 常驻直到收到信号
+  return 0;
+}
+
 async function main() {
   const argv = process.argv.slice(2);
   if (argv.length === 0 || argv[0] === '--help' || argv[0] === '-h' || argv[0] === 'help') {
@@ -513,6 +563,8 @@ async function main() {
       }
       await runMigrate(positional.slice(1), opts);
       return 0;
+    case 'serve':
+      return await cmdServe(opts);
     default:
       throw new UsageError(`未知命令: ${command}\n${USAGE}`);
   }

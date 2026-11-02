@@ -35,7 +35,7 @@ cd versions/v0.1 && node eval/run.js   # 行为（I1–I12）
 
 阈值贴着基线设置，意味着**新增未覆盖代码会直接卡住**——这是故意的：先写测试再实现（TDD）。
 
-## 三、质量门禁（quality-check.mjs，8 项）
+## 三、质量门禁（quality-check.mjs，9 项）
 
 | ID | 检查 | 判定 | 为什么这条值得占一个门禁 |
 |---|---|---|---|
@@ -47,8 +47,9 @@ cd versions/v0.1 && node eval/run.js   # 行为（I1–I12）
 | Q6 | 文档链接 | 站内相对链接目标必须存在（不含 `docs/research/readmes/` 快照） | 文档先行项目最怕文档腐烂成死链 |
 | Q7 | 版本自包含 | `versions/<v>/` 必须有 `src/tests/eval/config/docs/DELTA.md/CHANGELOG.md/package.json`；`package.json.version` 必须等于 `CHANGELOG` 最新段 | 版本隔离是本项目的迭代纪律，靠人工守不住 |
 | Q8 | 编码卫生 | 无 CRLF；文件末尾有换行 | 纯机械项，零争议，成本近乎为零 |
+| Q9 | Web UI 层边界 | `ui/**` 与 `src/web/**` 不得 import `../hygiene/`、`../storage/`、`../index/`；`ui/**` 无 `http(s)://` 外链、无 `innerHTML/outerHTML/insertAdjacentHTML` 拼数据、无 `eval(`/`new Function(`（行级白名单 `// q9-allow: <理由>`，无理由即失败）；**零构建**（`ui/` 内无 `package.json`/锁文件/`node_modules`/`dist`/`build`）；**单文件 ≤600 行、`ui/` 总量 ≤2500 行**；HTML 的 `<script src>`/`<link href>` 只允许相对路径；`src/web/static.js` 存在且只服务 ui 目录 | Web 层是只读投影（docs/08 契约），越界 import 或 HTML 拼接会破坏"读不到、改不了、注入不进"三条安全底线 |
 
-## 四、安全门禁（security-check.mjs，8 项）
+## 四、安全门禁（security-check.mjs，9 项）
 
 | ID | 检查 | 判定 | 说明 |
 |---|---|---|---|
@@ -60,6 +61,7 @@ cd versions/v0.1 && node eval/run.js   # 行为（I1–I12）
 | S6 | 许可证与元数据 | `LICENSE` 为 MIT 且版权行正确；`package.json` 有 `license` 与 `repository.url` | 可追溯性 |
 | S7 | 大文件/二进制 | 单文件 ≤ 1MB；非图片白名单内不得有 NUL 字节 | 防误提交数据库/日志/产物 |
 | S8 | 历史面轻扫 | git 历史当前可达提交中无凭据形态 | 完整历史扫描交给 GitHub 原生 secret scanning + CodeQL |
+| S9 | 部署面安全 | `src/web/server.js` 默认 `host = '127.0.0.1'`（出现 `0.0.0.0`/`::` 即 fail；另有**运行时**回环断言，传非回环地址直接 `E_INVALID_ARG`）；`src/web/**` 无写调用（`service.write/forget/supersede/curateApply`、`appendEvent`）；`ui/**` 只 fetch `/api` 相对路径；`.gitignore` 含 `.memo/` 与 `node_modules/` | Web 服务默认只绑定回环、只读不写，误改一行就可能把记忆库暴露到局域网或引入写端点 |
 
 **另外两层**（CI 里跑，不在本地脚本）：
 - **CodeQL**（`security-and-quality`）：静态分析，发现注入/原型污染/不安全正则等。
@@ -84,16 +86,16 @@ cd versions/v0.1 && node eval/run.js   # 行为（I1–I12）
   指标发生漂移就更新本文件（指标漂移本身就是信号，不要静默改阈值让数字好看）。
 - **禁止**：删除检查项、加 `// q-check-ignore` 式逃逸、把失败改成 warning 了事。
 
-## 七、当前基线（2026-11-02，v0.1.2）
+## 七、当前基线（2026-11-02，v0.1.3）
 
 | 门禁 | 结果 |
 |---|---|
-| 单元 + 注入式 | 117 tests / 117 pass（Node 24.21.0） |
-| 评测 | I1–I12 全 PASS；`dupRatio=0`、`conflictRate=0`、`nearDupBlocked=19`、`dedupeClusters=1`、`agentMerged=5` |
-| 性能 | n5000：write p95 5.0ms / search p95 2.6ms |
-| 覆盖率 | lines 92.1% / branches 77.7% / functions 92.3% |
-| 质量 | 8/8 |
-| 安全 | 8/8（S3/S1 对调研快照做了显式豁免，理由写在脚本注释里） |
+| 单元 + 注入式 | 156 tests / 156 pass（Node 24.21.0） |
+| 评测 | I1–I15 全 PASS；`dupRatio=0`、`conflictRate=0`、`nearDupBlocked=19`、`dedupeClusters=1`、`agentMerged=5` |
+| 性能 | n5000：write p95 5.7ms / search p95 2.8ms |
+| 覆盖率 | lines 89.7% / branches 78.4% / functions 90.4%（`ui/**` 排除，理由见 Q9：浏览器渲染/交互由 I13–I15 承担） |
+| 质量 | 9/9（新增 Q9 Web UI 层边界） |
+| 安全 | 9/9（新增 S9 部署面安全；S3/S1 对调研快照做了显式豁免，理由写在脚本注释里） |
 | 平台侧 | secret scanning ✅ / push protection ✅ / dependabot security updates ✅（validity checks 与 non-provider patterns 需要 GHAS，公开仓本组织不可用） |
 
 ## 八、线上状态与验收证据（2026-11-02 实测）

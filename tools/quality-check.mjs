@@ -259,8 +259,131 @@ async function q8Encoding() {
   record('Q8', `编码卫生（${files.length} 文件无 CRLF、末尾有换行）`, problems.length === 0, problems.slice(0, 10));
 }
 
+// ── Q9 Web UI 层边界 ──────────────────────────────────────────────
+// 裁决来源：docs/08-web-ui.md（只读 Web 层契约）。ui/ 与 src/web/ 只能读，
+// 不得触碰 hygiene/storage/index 内部模块；ui/ 不得外链、不得 innerHTML 拼数据、不得 eval。
+// 行级白名单：行内出现 `// q9-allow` 注释即跳过该行（须在 PR 里说明理由）。
+
+/** 去掉块注释（保持行结构，便于报行号） */
+function stripBlockComments(text) {
+  return text.replace(/\/\*[\s\S]*?\*\//g, (s) => s.replace(/[^\n]/g, ' '));
+}
+
+/** 取一行的"代码部分"：截掉 // 行注释（仅当 token 出现在 // 之后才算注释里） */
+function codePartOfLine(line) {
+  const i = line.indexOf('//');
+  return i === -1 ? line : line.slice(0, i);
+}
+
+async function versionDirs() {
+  const base = path.join(ROOT, 'versions');
+  return (await fsp.readdir(base, { withFileTypes: true }))
+    .filter((d) => d.isDirectory()).map((d) => path.join(base, d.name));
+}
+
+async function q9WebUiBoundary() {
+  const problems = [];
+  const versions = await versionDirs();
+  let uiFiles = 0;
+  for (const v of versions) {
+    const uiDir = path.join(v, 'ui');
+    const webDir = path.join(v, 'src', 'web');
+    // 1) ui/ 与 src/web/ 不得 import ../hygiene/、../storage/、../index/
+    const boundaryFiles = [
+      ...await walk(uiDir, (p) => /\.(js|mjs|html)$/.test(p)),
+      ...await walk(webDir, (p) => /\.(js|mjs)$/.test(p)),
+    ];
+    for (const f of boundaryFiles) {
+      const text = await fsp.readFile(f, 'utf8');
+      for (const m of text.matchAll(/['"](\.\.\/(?:hygiene|storage|index)\/[^'"]*)['"]/g)) {
+        const line = text.slice(0, m.index).split('\n').length;
+        problems.push(`${rel(f)}:${line} → import "${m[1]}"（Web 层禁止触碰 hygiene/storage/index）`);
+      }
+    }
+    // ui/ 专属规则
+    const uiSrcs = await walk(uiDir, (p) => /\.(js|mjs|html|css)$/.test(p));
+    uiFiles += uiSrcs.length;
+    for (const f of uiSrcs) {
+      const raw = await fsp.readFile(f, 'utf8');
+      const text = stripBlockComments(raw);
+      const lines = text.split('\n');
+      for (let i = 0; i < lines.length; i++) {
+        const ln = i + 1;
+        const rawLine = raw.split('\n')[i] ?? '';
+        if (rawLine.includes('q9-allow')) {
+          // 审核 B6：白名单必须带理由（`// q9-allow: <理由>`），否则等于无条件豁免
+          const m = /q9-allow\s*:\s*(\S.{2,})/.exec(rawLine);
+          if (!m) problems.push(`${rel(f)}:${ln} → q9-allow 缺少理由（写成 // q9-allow: 为什么这一行必须例外）`);
+          continue;
+        }
+        const code = codePartOfLine(lines[i]);
+        // 2) 不得出现 http:// 或 https:// 外链（注释/纯文本同样拦截，故用原始行）
+        for (const m of rawLine.matchAll(/https?:\/\//g)) {
+          problems.push(`${rel(f)}:${ln} → 外链 "${m[0]}"（ui/ 禁止外链，确需请加 // q9-allow 并说明）`);
+        }
+        // 3) 不得用 innerHTML/outerHTML/insertAdjacentHTML
+        for (const m of code.matchAll(/(?:innerHTML|outerHTML|insertAdjacentHTML)/g)) {
+          problems.push(`${rel(f)}:${ln} → 使用 "${m[0]}"（数据必须走 textContent/DOM API）`);
+        }
+        // 4) 不得 eval( / new Function(
+        for (const m of code.matchAll(/eval\(|new Function\(/g)) {
+          problems.push(`${rel(f)}:${ln} → 使用 "${m[0].slice(0, -1)}("（ui/ 禁止动态代码执行）`);
+        }
+      }
+    }
+    // 5) 零构建 + 规模阈值（docs/08 §8 声明的 Q9 语义，之前只写在文档里没实现）：
+    //    单文件 ≤ 600 行、ui/ 总量 ≤ 2500 行、无 package.json/node_modules/构建产物
+    const UI_MAX_FILE_LINES = 600;
+    const UI_MAX_TOTAL_LINES = 2500;
+    let uiTotalLines = 0;
+    for (const f of uiSrcs) {
+      const n = (await fsp.readFile(f, 'utf8')).split('\n').length;
+      uiTotalLines += n;
+      if (n > UI_MAX_FILE_LINES) {
+        problems.push(`${rel(f)}: ${n} 行 > ${UI_MAX_FILE_LINES}（Q9 单文件上限，拆模块而不是放宽阈值）`);
+      }
+    }
+    if (uiTotalLines > UI_MAX_TOTAL_LINES) {
+      problems.push(`${rel(uiDir)}: ui/ 共 ${uiTotalLines} 行 > ${UI_MAX_TOTAL_LINES}（Q9 总量上限）`);
+    }
+    for (const banned of ['package.json', 'package-lock.json', 'pnpm-lock.yaml', 'yarn.lock',
+      'node_modules', 'dist', 'build', '.vite', '.cache']) {
+      const hit = await fsp.stat(path.join(uiDir, banned)).catch(() => null);
+      if (hit) problems.push(`${rel(path.join(uiDir, banned))}: ui/ 必须零构建（不允许 ${banned}）`);
+    }
+    // HTML 的 <script src> / <link href> 只允许相对路径（不许 / 开头或协议相对）
+    for (const f of uiSrcs.filter((p) => p.endsWith('.html'))) {
+      const text = await fsp.readFile(f, 'utf8');
+      for (const m of text.matchAll(/<(?:script|link)\b[^>]*?(?:src|href)\s*=\s*"([^"]*)"/g)) {
+        const ref = m[1];
+        if (/^(?:[a-z]+:|\/\/|\/)/i.test(ref)) {
+          const line = text.slice(0, m.index).split('\n').length;
+          problems.push(`${rel(f)}:${line} → 资源 "${ref}" 不是相对路径（ui/ 只能引用自身）`);
+        }
+      }
+    }
+
+    // 6) 静态资源白名单：src/web/static.js 必须存在且只服务 ui 目录（存在性 + 关键字）
+    const staticPath = path.join(webDir, 'static.js');
+    // 直接读，不做 stat→read 两步（避免 TOCTOU 告警；ENOENT 即视为缺失）
+    let staticText = null;
+    try {
+      staticText = await fsp.readFile(staticPath, 'utf8');
+    } catch (e) {
+      if (e.code !== 'ENOENT') throw e;
+    }
+    if (staticText === null) {
+      problems.push(`${rel(v)}: 缺少 src/web/static.js（静态资源必须经白名单 handler 服务）`);
+    } else if (!/createStaticHandler/.test(staticText) || !/uiDir/.test(staticText) || !/path\.resolve/.test(staticText)) {
+      problems.push(`${rel(staticPath)}: 未识别"只服务 ui 目录"的解析逻辑（需 createStaticHandler + uiDir + path.resolve）`);
+    }
+  }
+  record('Q9', `Web UI 层边界（ui ${uiFiles} 文件：无越界 import/外链/innerHTML/eval，零构建 + 单文件≤600 行 + 总量≤2500 行，static 白名单）`,
+    problems.length === 0, problems.slice(0, 12));
+}
+
 const CHECKS = [q1ZeroDependencies, q2SourceSize, q3TestInventory, q4EvalAlignment,
-  q5ContractCoverage, q6DocLinks, q7VersionIntegrity, q8Encoding];
+  q5ContractCoverage, q6DocLinks, q7VersionIntegrity, q8Encoding, q9WebUiBoundary];
 
 for (const check of CHECKS) {
   try {

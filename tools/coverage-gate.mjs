@@ -5,6 +5,8 @@
 // 直接 grep 容易在列宽/版本变化时假通过。这里显式解析 `all files | l | b | f` 行并做区间校验。
 //
 // 用法：node tools/coverage-gate.mjs [--min-lines 85] [--min-branches 70] [--min-functions 90]
+// 统计范围：versions/v0.1 的 src/ 与 tools/ 被导入的代码；ui/**（浏览器代码）显式排除，
+// 其回归由 I13/I14 注入用例承担（见 docs/07 第三节）。
 
 import { execFile } from 'node:child_process';
 import path from 'node:path';
@@ -26,7 +28,11 @@ const nodeCmd = process.execPath;
 let stdout;
 try {
   ({ stdout } = await execFileAsync(nodeCmd,
-    ['--test', '--experimental-test-coverage', 'tests/**/*.test.js'],
+    // ui/** 是浏览器代码（canvas/DOM/localStorage），node 侧无法有意义地覆盖：
+    // 它的回归靠 I13（静态资源与只读边界）与 I14（截面一致性）注入用例，
+    // 所以覆盖率统计显式排除 ui/**，避免用「浏览器代码覆盖率」污染后端阈值。
+    ['--test', '--experimental-test-coverage', '--test-coverage-exclude=ui/**',
+      '--test-coverage-exclude=**/ui/**', 'tests/**/*.test.js'],
     { cwd: VERSION_DIR, maxBuffer: 32 * 1024 * 1024 }));
 } catch (e) {
   console.error('覆盖率采集失败（测试本身未全绿？）：');

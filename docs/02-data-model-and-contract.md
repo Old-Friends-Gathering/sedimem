@@ -368,3 +368,140 @@ Claude Code / Codex 每次会话按**项目 cwd** 解析。结果：同一项目
 **规则**：对外 API（`createMemoryService` 及其方法、Ports、CLI 子命令、MCP 工具）必须写在
 §3 / §3.1–§3.7 正文里；只登记在本节的，改动不需要 ADR，但不得新增未登记的导出
 （`tools/contract-exempt.json` 是兜底豁免清单，必须逐条写理由）。
+
+## 3.9 第七轮裁决（2026-11-02，v0.2 Web UI 冻结契约）
+
+设计侧规格见 [`08-web-ui.md`](08-web-ui.md)，施工分解见 [`plans/v0.2-web-ui-plan.md`](plans/v0.2-web-ui-plan.md)。
+本节只冻结**实现层必须一致的语义**，四路并行开发只认这里与 `08` §6。
+
+**裁决 30（两个只读查询方法）**
+
+```js
+await svc.events({ since, until, ops, limit = 200 })
+  // → { events: [{ts,op,scope,id,detail}], scanned, truncated }
+await svc.exportRecords({ since, until, status = 'active', kind, limit = 2000 })
+  // → { records: [record], total, limited }
+```
+
+- 两者**只读**：读事件不得写 `events.jsonl`（否则 `hit` 自我放大）。
+- 时间窗一律 `[since, until)` 半开区间，按 `ts` 字符串比较（`ts` 为 UTC ISO8601，字典序 == 时间序）。
+- `truncated`/`limited` 为 true 表示「命中数超过上限被截断」，调用方必须提示用户，**禁止静默截断**。
+- `exportRecords` 默认 `status='active'`，`status:'all'` 表示不过滤；suspicious 记录默认遮蔽为 `[suspicious withheld]`（沿用裁决 16），需原文时显式 `includeSuspicious:true`。
+
+**裁决 31（metrics 按 scope 分文件）**
+
+- 写入：`metrics/<date>.<scopeKey>.json`，其中 `scopeKey = scope.replace(/[^a-z0-9._-]+/gi,'-')`。
+- 读取：先找新名，找不到再回退旧的 `metrics/<date>.json`（兼容 v0.1.0–0.1.2 的历史文件）。
+- 理由：`<date>.json` 在多分库同日运行时互相覆盖，属静默数据丢失。
+
+**裁决 32（按自然日切片由调用方给时区）**
+
+- `/api/today?date=YYYY-MM-DD&tzOffset=480`、`/api/timeline?days=30&tzOffset=480`：`tzOffset` 为**分钟、东为正**，缺省 0（UTC）。
+- 服务端换算：`from = Date.parse(date + 'T00:00:00Z') - tzOffset*60000`，`to = from + 86400000`，再按 `[from, to)` 过滤。
+- 服务端**不猜**服务进程时区（常驻进程时区不可靠，见裁决 28 的同类理由）。
+
+**裁决 33（图谱由服务端派生，UI 不做关系推断）**
+
+- 节点集合：`status ∈ {active, superseded}` 的记录，上限 `limit`（默认 300），排序按 `createdAt` 降序 + `hits` 降序取前 N；返回 `sampled: {shown, total}`。
+- 边四类（`type` 唯一取值）：
+  - `same-entity`：同一 `subject` 且该组记录数 ≥2，两两连边，`weight = 1`；
+  - `supersedes`：记录 `supersedes` 字段指向的旧 id → 新 id 有向边，`weight = 1`；
+  - `duplicate-of`：来自 `dedupeScan` 的 `pairs[]`，`weight = pairs[].score`；
+  - `disputed-with`：`status='disputed'` 的记录与其同 slot 的 `status='active'` 记录之间，`weight = 1`。
+- 节点 `label` 由服务端生成：有结构时 `subject/predicate`，否则 `text` 前 60 字（+ `…`）。**UI 不得自行拼接 label**。
+- `degree` 为节点在返回边集中的度（无向计一次、有向计出度+入度）。
+
+**裁决 34（Web 层不得越权）**
+
+- `src/web/*` 只允许 `import` `src/api/service.js`、`src/core/*`、`src/config/*`；**禁止** import `src/hygiene/*`、`src/storage/*`、`src/index/*`（关系与判定都在 service 内完成，Web 只做投影）。
+- 静态资源只从 `versions/v0.1/ui/` 读取；路径穿越（`..`、绝对路径、软链接）一律 404。
+- 服务只绑 `127.0.0.1`；无鉴权（用户决策 D1），因此**不得**提供任何写操作端点。
+
+## 3.10 第八轮裁决（2026-11-02，v0.1.3 Web 只读层实现期冻结）
+
+实现期发现的四个语义问题，与 §3.9 裁决 30–34 叠加生效；冲突时以本节为准。
+
+**裁决 35（same-entity 边是时间链，不是全连）**
+
+- 同一 `subject` 组内不再两两连边，改为**按 `createdAt` 升序只连相邻两条**（链式）。
+- 理由：一个同 subject 17 节点的组全连产生 C(17,2)=136 条互相重叠的边，视觉上是毛球、信息量为零；链式边表达「同一实体的时间序列」，且边数 O(n)。
+- 取代 §3.9 裁决 33 中 `same-entity`「两两连边」的描述；`weight` 仍为 1，边方向为旧 → 新。
+
+**裁决 36（curate_apply 事件按裁决键聚合）**
+
+- 一次 `curate_apply` 在事件流里会写 **loser + winner 两条事件**；`/api/today`、`/api/timeline`、`/api/hygiene` 三处统计必须按**裁决键**聚合为一次动作，禁止按写盘条数计数。
+- 裁决键：`detail.batchId + '#' + detail.pairIndex`；无 batchId（ids 形状）时用 `detail.ids` 排序拼接。实现见 `src/web/handlers.js` 的 `curateKeyOf()`。
+
+**裁决 37（label 一律服务端生成，延续裁决 33）**
+
+- 图谱节点：短标签 `subject/predicate`（无结构时 `text` 前 60 字 + `…`）。
+- 今日时间线与清理史行：`subject/predicate：值前 40 字`（`makeLabel` 的长格式）。
+- UI 只绘制不拼语义；节点标签在画布重叠时允许跳过绘制（点节点看详情兜底），但这不改变「语义只产自服务端」的边界。
+
+**裁决 38（趋势序列暴露 activeRatio，坐标系统一为百分比）**
+
+- metrics 序列给 Web 层额外暴露 `activeRatio = active / maxActive`（相对配额占比，0–1；`maxActive` 缺失时按 5000 兜底，序列里带出实际使用的 `maxActive`）。
+- UI 趋势图三条线（activeRatio / dupRatio / conflictRate）一律以百分比绘制；**不得把 active 绝对条数与比率放进同一坐标系**（量纲不同，双轴混排会制造假相关性）。
+
+**Web 只读层冻结导出清单（补 §3.8 登记，Q5 契约覆盖用）**
+
+| 模块 | 导出 | 职责 |
+|---|---|---|
+| `src/web/server.js` | `createWebServer` | `node:http` 服务器，绑 `127.0.0.1`，SIGINT/SIGTERM 优雅关闭 |
+| `src/web/handlers.js` | `ENDPOINTS` | 端点路径白名单（7 个 `/api/*`） |
+| `src/web/handlers.js` | `handleApi` | `/api/*` 统一分发：参数校验（非法 400）、`ok:false` 错误形状、裁决键聚合 |
+| `src/web/handlers.js` | `makeLabel` | 裁决 33/37 的 label 生成（节点短标签 / 时间线长格式） |
+| `src/web/handlers.js` | `dayWindow` | 裁决 32 的自然日窗口换算（`[from,to)` 半开区间） |
+| `src/web/handlers.js` | `readMetrics` | 裁决 31 的新旧文件名兼容读取 + 裁决 38 的 `activeRatio` 派生 |
+| `src/web/static.js` | `createStaticHandler` | `ui/` 静态文件白名单服务；目录缺失降级 404；路径穿越一律 404 |
+
+### 3.11 第九轮裁决 39–44（v0.2 双审核整改：常驻进程一致性 / 遮蔽 / 回环 / 拆分 / 导出顺序）
+
+> 来源：`versions/v0.1/reviews/arch-v0.2.md`（5 严重）与 `reviews/adversarial-v0.2.md`（4 严重）。
+> 两路结论均为「阻断项 no」，但以下五条属于「结构上会腐化」的问题，本版一次修掉并冻结语义。
+
+**裁决 39（常驻只读进程必须显式刷新视图）**
+
+- `MemoryService.refreshView()` 是读路径的刷新入口：按真相层文件大小水位增量重读，文件未变只做一次 `stat`；文件变短退化为全量 `_reload`；同实例并发调用共享同一在途 Promise（`_refreshPromise`），重复消费的快照按 `validTo/status/contentHash/hits` 全等跳过。
+- `src/web/server.js` 必须在**每个 `/api/*` 请求**处理前 `await svc.refreshView()`。理由：Web 进程永不写库，`_records` 会冻结在启动时刻，导致「今日 +1 条、图谱/记录数不变」的自相矛盾截面。
+- 任何新的常驻读端（未来的 TUI、导出守护进程）同样必须遵守本裁决；违反它的症状是「截面撕裂」，不是崩溃，因此必须有集成测试兜底（I14 跨进程用例）。
+
+**裁决 40（图谱节点集含 disputed，否则冲突边是死条款）**
+
+- 节点准入 `status ∈ {active, superseded, disputed}`；disputed 节点按 `docs/08-web-ui.md §5.2` 用红色描边呈现。
+- 理由：`disputed-with` 边的 `from` 端恒为 disputed 记录；若节点集不含 disputed，该边永远悬空被 UI 丢弃，等于「契约里有一条永远画不出来的边」。
+- 节点采样上限与排序不变（`createdAt` 降序 → `hits` 降序 → `id`）。
+
+**裁决 41（回环绑定与超时是结构保证，不是门禁纪律）**
+
+- `createWebServer({host})` 运行时校验：`localhost`、`::1`、`127.0.0.0/8` 之外一律抛 `E_INVALID_ARG`。`0.0.0.0` 与空串视为非法。
+- `server.headersTimeout=10000`、`requestTimeout=15000`、`keepAliveTimeout=5000`；`close()` 先 `closeIdleConnections()` 再 `server.close()`。
+- 理由：门禁 S9 只能检查源码里的默认值，挡不住调用方传参；本地只读服务不该被一条半截连接的 socket 拖住关闭。
+
+**裁决 42（suspicious 遮蔽覆盖全部正文字段）**
+
+- 遮蔽字段：`text`、`value`、`subject`、`predicate`、`source.quote`，统一占位 `[suspicious withheld]`；`source.agent` 保留（它是身份，不是正文）。
+- 单一实现：`src/api/mask.js` 的 `maskSuspiciousRecord(r, includeSuspicious)`；`MemoryService._maskSuspicious` 与 `read-only.js` 的导出投影都必须调它，禁止各写一份。
+- 理由：只遮 `text/value` 时，把 payload 挪进 `subject` 或 `source.quote` 就能原样出网（审核实测 `/api/records` 返回 `SECRET-SUBJECT-POISON`）。
+
+**裁决 43（质量门禁 Q9 的阈值有实现，且 UI 模块按行数上限拆分）**
+
+- `docs/08-web-ui.md §8` 声明的 Q9 语义已在 `tools/quality-check.mjs` 落地：`ui/` 零构建（无 `package.json`/锁文件/`node_modules`/`dist`/`build`）＋**单文件 ≤600 行**＋**`ui/` 总量 ≤2500 行**＋HTML 资源引用只允许相对路径。
+- 因此 `ui/graph.js` 拆为 `ui/layout.js`（纯布局与视觉常量，被 node 单测直接覆盖）与 `ui/graph.js`（渲染与交互）。今后超线请拆模块，不要放宽阈值。
+
+**裁决 44（导出顺序稳定，禁止在随机子集里过滤）**
+
+- `queryExportRecords` 在截断**之前**按 `createdAt` 升序、同刻 `id` 升序排序；`total` 仍是过滤后总数，`limited` 表示是否被 `limit` 截断。
+- 理由：`_records` 是 `Map` 插入序；不排序时 `/api/records?q=…` 的 `q` 过滤发生在 `limit` 截断之后，记录数超过 `limit` 时搜索结果既不可复现也不完整（审核 A3/B8）。
+
+**第九轮新增导出（补 §3.8 登记，Q5 契约覆盖用）**
+
+| 模块 | 导出 | 职责 |
+|---|---|---|
+| `src/config/paths.js` | `scopeKeyOf(scope)` | scope → 文件名安全片段（裁决 39 的命名单一来源；`repo:strata` → `repo-strata`） |
+| `src/config/paths.js` | `metricsFileName(date, scope)` | metrics 快照文件名 `<date>.<scopeKey>.json`（写侧唯一入口） |
+| `src/config/paths.js` | `legacyMetricsFileName(date)` | 旧命名 `<date>.json`，仅供读侧兼容回退 |
+| `src/api/mask.js` | `maskSuspiciousRecord(r, includeSuspicious)` | 裁决 42 的遮蔽单一实现 |
+| `src/api/read-only.js` | `queryEvents(service, args)` | 裁决 30 的事件只读查询（`Nightly`/Web 共用） |
+| `src/api/read-only.js` | `queryExportRecords(service, args)` | 裁决 30 的记录导出（含遮蔽与 `limited` 语义） |
+| `src/api/service.js` | `refreshView()` | 裁决 39 的读路径刷新（方法，非模块级 export） |

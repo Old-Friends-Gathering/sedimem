@@ -38,7 +38,9 @@ MCP 工具名仍是 `memory_*`、`serverName` 仍是 `memo`（改这些要同步
 | 记忆里被塞进指令型内容，悄悄影响后续会话 | 写入打标 + 读路径默认遮蔽（`[suspicious withheld]`）+ brief 逐行复检；10 种投毒变体实测 0 泄露 |
 | 换个客户端就"失忆" | MCP 是唯一缝：DSH / Codex / Claude 同读写一份真相层；`memory_scope` 解决常驻进程 cwd 固定导致的分库错位 |
 
-**刻意不做**：embedding 语义检索（v0.2 的 `EmbedderPort` 再说）、多机同步、加密存储、多用户隔离（scope 是分类不是权限）、Web UI。
+**刻意不做**：embedding 语义检索（v0.2 的 `EmbedderPort` 再说）、多机同步、加密存储、多用户隔离（scope 是分类不是权限）。
+
+**v0.2 在做**：只读 Web UI「记忆观察台」——今日变化 / 记忆图谱 / 卫生洞察（设计见 [`docs/08`](docs/08-web-ui.md)，施工图见 [`docs/plans`](docs/plans/README.md)）。
 
 ## 文档（先读这个）
 
@@ -49,7 +51,9 @@ MCP 工具名仍是 `memory_*`、`serverName` 仍是 `memo`（改这些要同步
 - [`docs/04-eval-plan.md`](docs/04-eval-plan.md) — L1 单元 / L2 注入式 I1–I12 / L3 指标快照
 - [`docs/05-process.md`](docs/05-process.md) — 角色与写权限、TDD 形状、issue→MR 强制流程
 - **[`docs/07-quality-and-security.md`](docs/07-quality-and-security.md)** — 门禁指标与阈值（本仓库怎么保证不腐化）
-- [`docs/06-usage.md`](docs/06-usage.md) — 三端落位、日常工具、维护例行、排障
+- [`docs/06-usage.md`](docs/06-usage.md) — 三端落位、日常工具、维护例行、排障、Web UI 怎么看（§7）
+- [`docs/08-web-ui.md`](docs/08-web-ui.md) — v0.2 只读 Web UI 设计契约（三页规格、接口表、门禁增项、§12 实现偏差）
+- [`docs/plans/`](docs/plans/README.md) — 实施计划（任务分解、并行写盘范围、验收与回滚）
 - [`docs/research/`](docs/research/README.md) — 调研证据（8 个开源系统横向对比、记忆卫生机制、为什么自建）
 
 ## 快速开始
@@ -120,7 +124,8 @@ strata/
 | 版本 | 主题 | 状态 |
 |---|---|---|
 | v0.1.1 | 确定性卫生 + Agent 裁决回路 + 中文改写双路召回 + 运行期分库 | ✅ 通过验收 |
-| v0.1.2 | 门禁体系（四道 workflow）、issue→MR 强制流程、并发漏读根治 | 当前 |
+| v0.1.2 | 门禁体系（四道 workflow）、issue→MR 强制流程、并发漏读根治 | ✅ 通过验收 |
+| v0.1.3 | 只读 Web UI「记忆观察台」（`memo serve`：今日变化 / 记忆图谱 / 卫生洞察） | 当前 |
 | v0.2（规划） | JudgePort 注入点、kind 注册表数据化、compact/物理清理、EmbeddingIndex、service 拆分 | 未开始 |
 
 ## 许可

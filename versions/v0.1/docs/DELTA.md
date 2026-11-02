@@ -57,3 +57,14 @@ P0 可用闭环 + **确定性**卫生 + **Agent 当裁判的去重闭环**。目
 3. `kind`/`status` 注册表数据化（新增 kind 只改 policy）。
 4. `memo compact`：墓碑与历史版本压缩（必须保号、必须可回放）。
 5. 错误码归一（`E_MEMO_HOME_UNWRITABLE`）+ metrics 时间序列与趋势告警（`conflict_rate` 连续上升 → 提示整理）。
+
+## 0.1.3 增量（2026-11-02）：只读 Web UI「记忆观察台」
+
+在 0.1.2 之上补「人看的窗口」：`memo serve` 起只读服务（仅 127.0.0.1），三页静态 UI（今日变化 / 记忆图谱 / 卫生洞察），零构建零依赖零外链。
+
+- **数据面**：`service.events()` / `service.exportRecords()` 两个只读方法（裁决 30）；metrics 快照按 scope 分文件、兼容读旧名（裁决 31，修复多分库同日互相覆盖）。
+- **服务面**：7 个 `/api/*` 只读端点（裁决 32 时区由调用方给、裁决 36 裁决键聚合、裁决 38 activeRatio 百分比趋势）。
+- **图谱**：力导向动态图，same-entity 边为 createdAt 时间链（裁决 35），label 服务端生成（裁决 37），边开关存 localStorage。
+- **规模**：单测从 117 → 146（+29）；I1–I12 评测与 bench 快照不变（n5000 write p95 5.72ms / search p95 2.83ms，`eval/results/LATEST.json`）。
+- **边界不变**：不做导出、不做写操作、不做远程访问；写入入口仍只有 CLI 与 MCP。
+- 语义裁决与实现偏差详见 `docs/02` §3.10 与 `docs/08` §12。

@@ -71,14 +71,14 @@ async exportRecords({ since, until, status = 'active', kind, limit = 2000 } = {}
 |---|---|---|---|
 | `/api/summary` | – | `{ scope, memoHome, version, policy: { maxActive, nearDupThreshold, scanThreshold, scanDiceThreshold }, stats }` | 顶栏与全局状态 |
 | `/api/brief` | `lines=80` | `{ text, generatedAt }` | 「现在注入给 Agent 的是什么」 |
-| `/api/today` | `date=YYYY-MM-DD`（缺省=今天） | `{ date, counts: {created,superseded,forgotten,merged,hit}, timeline: [{ts, op, id, label, action, reason}] }` | 今日页主表 |
+| `/api/today` | `date=YYYY-MM-DD`（缺省=今天）、`tzOffset=480`（分钟，默认 0=UTC） | `{ date, counts: {created,superseded,forgotten,merged,hit}, timeline: [{ts, op, id, label, action, reason}] }` | 今日页主表 |
 | `/api/records` | `status, kind, since, limit, q` | `{ records, total, limited }` | 图谱节点、详情面板 |
 | `/api/graph` | `limit=300, days=90` | `{ nodes: [{ id, label, kind, status, subject, createdAt, hits, degree }], edges: [{ from, to, type, weight }], sampled: { shown, total } }` | 图谱页 |
 | `/api/hygiene` | – | `{ candidates: [cluster], merged: [{ ts, loserId, winnerId }], superseded: [...], suspicious: { count }, series: [{ date, dupRatio, conflictRate, active, total }], doctor: {...} }` | 卫生页 |
-| `/api/timeline` | `days=30` | `{ series: [{ date, active, total, created, superseded, merged, dupRatio, conflictRate }] }` | 趋势折线 |
+| `/api/timeline` | `days=30`、`tzOffset=480` | `{ series: [{ date, active, total, created, superseded, merged, dupRatio, conflictRate }] }` | 趋势折线 |
 
 约定：
-- 所有时间字段一律 **UTC ISO8601 字符串**（UI 负责转本地时区显示）。
+- 所有时间字段一律 **UTC ISO8601 字符串**；「哪一天」由 `tzOffset`（分钟，东为正）换算成 `[from, to)` UTC 时刻后再过滤，服务端不猜时区（用户决策：按自然日）。
 - 所有响应带 `{ "ok": true, ... }`；错误统一 `{ ok: false, code, message }` + 4xx/5xx（`E_INVALID_ARG` → 400，`E_CORRUPT_JSONL` → 500 且带 `file/line`）。
 - `label` 的生成规则在服务端（`subject/predicate` 优先，unstructured 用 `text` 前 60 字），**UI 不拼接语义**，避免两端规则漂移。
 
@@ -104,12 +104,14 @@ async exportRecords({ since, until, status = 'active', kind, limit = 2000 } = {}
 
 ### 5.2 图谱（`#/graph`）
 
-1. **画布**：canvas 绘制的力导向图（手写 ~120 行：斥力 + 弹簧 + 向心 + 阻尼，60fps 上限，`requestAnimationFrame` 逐帧 tick）。
-2. **节点**：颜色 = `kind`（fact/pref/decision/gotcha/state 五色）；形状/描边 = 状态（active 实心、superseded 半透明加斜线、disputed 红描边、tombstone 灰色小点且默认隐藏）；半径 = `sqrt(hits)+3`（被回忆过的更大）。
-3. **交互**：拖拽节点、滚轮缩放、点击节点 → 右侧详情面板（全文、slot、时间、版本链上下游、来源 agent）；点击边 → 显示 `type/weight/strength`。
-4. **过滤器**（顶部）：scope（只读当前）、kind 多选、状态多选、时间窗（7/30/90/全部）、文本框即时过滤 label。
-5. **采样**：节点上限 300。超出时按「最近创建优先 + hits 降序」采样，并在画布右上角常驻提示 `已采样 300 / 1 284 条，缩小时间窗可看全`。**绝不静默截断**。
-6. **性能**：1000 节点以内 tick 预算 16ms；超过上限只降不采样之外的额外处理（不做 LOD、不做 WebGL）。
+**必须是活的**（用户 2026-11-02 明确要求"动态"），不是静态布局图：
+
+1. **实时力导向**：`requestAnimationFrame` 每帧跑一次模拟（斥力 O(n²) 但 n≤300 可接受；弹簧 + 向心 + 阻尼 0.85），`alpha` 衰减到 0.005 停止；拖拽节点时该节点固定（`fx/fy`），松手后重新加入模拟。
+2. **交互**：拖拽节点 / 滚轮缩放（0.4×–2.5×）/ 拖拽空白平移 / 点击节点开右侧详情（该节点的全文、slot、版本链上下游、来源 agent、命中次数）/ 双击节点锁定或释放。
+3. **边默认只开两类**（用户 2026-11-02 决策）：默认 `same-entity` + `supersedes`；工具栏有「全开」开关，一次点亮 `duplicate-of` + `disputed-with`（也可单独勾）。开关状态存 `localStorage`（只存偏好，不存正文）。
+4. **节点**：颜色 = `kind`（五色）；外观 = 状态（active 实心、superseded 半透明 + 斜线、tombstoned 灰点且默认隐藏、disputed 红描边）；半径 = `sqrt(hits)+3`。
+5. **采样**：节点上限 300，按「最近创建优先 + hits 降序」采样，画布右上角常驻 `已采样 300 / 1 284 条`。**绝不静默截断**。
+6. **性能预算**：300 节点 60fps；超过 300 不降级渲染（采样已经封顶）。
 
 ### 5.3 卫生（`#/hygiene`）
 
@@ -128,7 +130,8 @@ async exportRecords({ since, until, status = 'active', kind, limit = 2000 } = {}
 
 ## 7. 安全设计
 
-- **绑定**：`server.listen(port, '127.0.0.1')`，并用单测断言 `server.address().address === '127.0.0.1'`。
+- **绑定**：`server.listen(port, '127.0.0.1')`，并用单测断言 `server.address().address === '127.0.0.1'`；`createWebServer({host})` 另有**运行时回环断言**（非 `127.0.0.0/8`、`::1`、`localhost` 一律 `E_INVALID_ARG`），门禁 S9 只能挡源码默认值，挡不住调用方传参（裁决 41）。
+- **超时**：`headersTimeout=10s`、`requestTimeout=15s`、`keepAliveTimeout=5s`；`close()` 先 `closeIdleConnections()` 再 `server.close()`，避免浏览器常驻标签页把关闭拖住（裁决 41）。
 - **CSP**：静态页 `<meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data:; style-src 'self' 'unsafe-inline'; script-src 'self'">`，禁一切外链。
 - **输出转义**：所有记录正文经 `textContent` 写入，禁止 `innerHTML` 拼接用户数据（XSS 面即投毒面）。
 - **遮蔽**：`suspicious` 内容由服务端替换为 `[suspicious withheld]`，UI 无开关（想看得用 CLI `--include-suspicious`）。
@@ -139,12 +142,15 @@ async exportRecords({ since, until, status = 'active', kind, limit = 2000 } = {}
 
 | 编号 | 门禁 | 检查内容 | 阈值 |
 |---|---|---|---|
-| **Q9** | 质量 | UI 零构建：`ui/` 下无 `package.json`/`node_modules`/构建产物；单文件 ≤ 600 行；`ui/` 总量 ≤ 2500 行；HTML 内 `<script src>`/`<link href>` 只允许相对路径 | 全绿 |
+| **Q9** | 质量 | UI 零构建：`ui/` 下无 `package.json`/锁文件/`node_modules`/`dist`/`build`；单文件 ≤ 600 行；`ui/` 总量 ≤ 2500 行；HTML 内 `<script src>`/`<link href>` 只允许相对路径；`// q9-allow` 必须带理由 | 全绿 |
 | **S9** | 安全 | UI 无外链：`ui/**` 与 `docs/ui-mockup.html` 不含 `http(s)://` 资源引用（注释里也不许） | 0 命中 |
-| **I13** | 行为 | API 契约：起 server 于临时端口 → 断言 7 个端点形状、`ok:false` 错误形状、suspicious 遮蔽、非法参数 400 | 7/7 |
-| **I14** | 行为 | 时间过滤：造 3 天事件 → `/api/today?date=...` 与 `/api/timeline?days=3` 计数与日期正确（含时区边界） | 全对 |
+| **I13** | 行为 | 静态面安全：起 server 于临时端口 → `/` 与 `/app.js` 200 + Content-Type、5 条穿越路径（含裸 `../`、编码、绝对路径）404、`/ui/` 与目录 404、非 GET → 405、未知 `/api` → 404、无 CORS 头、绑定地址为 `127.0.0.1` | 全绿 |
+| **I14** | 行为 | 截面一致性：同一时间窗内 `exportRecords` / `events` / `/api/graph` / `/api/today` 自洽；suspicious 遮蔽；`created` 事件可回查；图谱节点数 ≤ limit；same-entity 边 ≤ n−1 | 全对 |
+| **I15** | 行为 | 常驻可见性：`memo serve` 启动后由**另一个进程**（真实 CLI）写入 → 下一次 `/api/summary`、`/api/records`、`/api/graph` 立即可见，且时间线 label 不退化为操作名 | 全绿 |
 
 ## 9. 分阶段交付
+
+> 施工级任务分解（谁改哪些文件、并行范围、风险与回滚）见 [`plans/v0.2-web-ui-plan.md`](plans/v0.2-web-ui-plan.md)。
 
 ### v0.1.3（补丁，先修数据面；1 天内）
 
@@ -163,7 +169,7 @@ async exportRecords({ since, until, status = 'active', kind, limit = 2000 } = {}
 ### v0.2.1（可选，写操作）
 
 - 「合并/保留两条」按钮 → 调 `curateApply`，**二次确认对话框显示将失效哪些 id**，成功后写一条 `curate_apply` 事件。
-- 这是唯一允许 UI 产生写的地方，需单独 ADR + 审计测试（I15）。
+- 这是唯一允许 UI 产生写的地方，需单独 ADR + 审计测试（届时新增 I16，I15 已被常驻可见性占用）。
 
 ### v0.2.2+（原路线）
 
@@ -179,9 +185,36 @@ async exportRecords({ since, until, status = 'active', kind, limit = 2000 } = {}
 6. 不引入图表库/图算法库（手写 200 行内解决）。
 7. 不做暗色/亮色主题切换（跟系统 `prefers-color-scheme` 即可）。
 
-## 11. 未决问题（需用户拍板）
+## 11. 决策记录（用户 2026-11-02 拍板）
 
-1. **访问范围**：只本机 `127.0.0.1:7788` 够吗？还是想在手机/平板上看（需要局域网绑定 + 简单 token）？
-2. **图谱边的优先级**：默认同时画「同实体 + 版本链 + 重复候选 + 冲突」四类，会不会太密？建议默认只开前两类，重复候选单独开关。
-3. **「每天记了什么」的粒度**：按自然日够吗？还是想要「按会话」（需要给事件加 session id，属数据层变更）。
-4. **是否需要日报导出**：把「今日」页导出成 Markdown 追加进 `brief/` 或发到某处（会引入外部依赖，默认不做）。
+| # | 问题 | 决策 | 对设计的影响 |
+|---|---|---|---|
+| D1 | 访问范围 | **仅本机** `127.0.0.1`，不做 token、不做局域网 | 无鉴权层；绑定地址写进单测 |
+| D2 | 图谱边 | **两者都要**：默认只开「同实体 + 版本链」，提供「全开」开关点亮「重复候选 + 冲突」 | §5.2 第 3 条；开关持久化到 localStorage |
+| D3 | 图谱形态 | **必须动态**：实时模拟 + 拖拽 + 点击看详情 | §5.2 第 1–2 条（否决静态布局 / 一次性动画） |
+| D4 | 粒度 | **自然日** | `/api/today`、`/api/timeline` 增 `tzOffset` 参数 |
+| D5 | 日报导出 | **不做** | §10 第 5 条维持 |
+
+四个问题全部关闭，不再留"待定项"。
+
+---
+
+## 12. 实现说明与偏差（2026-11-02，v0.1.3 落地记录）
+
+> **第九轮：双审核整改（arch 5 严重 + adversarial 4 严重，均无阻断）**
+>
+> 1. **常驻进程截面撕裂**（A1）：`MemoryService.refreshView()` + 每个 `/api/*` 请求前刷新；新增 I15 跨进程回归用例（真实 CLI 子进程写入 → 下一次请求可见）。
+> 2. **suspicious 遮蔽漏洞**（A2）：`subject`/`predicate`/`source.quote` 一并遮蔽，单一实现下沉到 `src/api/mask.js`（裁决 42）。
+> 3. **图谱缺 disputed 节点**（S2）：节点准入加 `disputed`，冲突红边才画得出来（裁决 40）。
+> 4. **serve 关闭吞错**（S1）：`close()` 失败改为 stderr + exit 1（裁决 21）。
+> 5. **metrics 命名单一来源**（S5）：`src/config/paths.js` 的 `scopeKeyOf` / `metricsFileName` / `legacyMetricsFileName`，夜间任务与 Web 读侧共用（裁决 39）。
+> 6. **回环绑定与超时**（B4/B5）：运行时断言 + 显式超时 + `closeIdleConnections()`（裁决 41）。
+> 7. **导出顺序稳定**（A3/B8）：`exportRecords` 按 `createdAt`+`id` 排序后再截断，`q` 过滤不再在随机子集里搜（裁决 44）。
+> 8. **Q9 阈值落地**（S3）：零构建 + 单文件 ≤600 + 总量 ≤2500 真正实现；为此把 `ui/graph.js` 拆成 `ui/layout.js`（纯布局）+ `ui/graph.js`（渲染交互）（裁决 43）；`// q9-allow` 必须带理由（B6）。
+> 9. **契约登记**（S4）：`read-only.js` / `paths.js` / `mask.js` 的导出与私有耦合写入 `docs/02 §3.11`，Q5 覆盖率 98.3%。
+
+三页与 7 个端点按 §4–§7 实现（`versions/v0.1/src/web/{server,handlers,static}.js` + `versions/v0.1/ui/`，CLI 子命令 `memo serve`）。以下三处与本文设计不一致，均已冻结为 `docs/02` §3.10 裁决 35–38，冲突时以 02 为准：
+
+1. **图谱 same-entity 边改为时间链（裁决 35）**：§5.2 原描述「同一 subject 两两连边」在全连时是 O(n²) 且视觉上不可读（17 节点 136 条重叠边）。实现改为按 `createdAt` 升序只连相邻两条，表达同一实体的时间序列。
+2. **图谱节点标签做了防重叠跳过**：标签绘制前做包围盒碰撞检测，重叠时只画部分标签（缩放到 `scale ≥ 0.45` 且不重叠才画）。语义仍全部由服务端 label 承载（裁决 37），被跳过的标签点节点看详情兜底——这是绘制层的取舍，不是数据缺失。
+3. **布局加了「同步热身 80 帧 + 自适应缩放」**：`rAF` 在后台标签页会被浏览器节流，若纯靠异步动画收敛，首帧往往是一小团。实现改为先同步跑 80 帧模拟再自适应缩放到画布，保证打开即是一个铺满视口的稳定布局；之后的拖拽/缩放仍走实时模拟。
