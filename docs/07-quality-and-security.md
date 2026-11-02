@@ -72,7 +72,7 @@ cd versions/v0.1 && node eval/run.js   # 行为（I1–I12）
 | MR 必须关联 issue | 正文含 `Closes|Fixes|Resolves #N`，或 `Refs|Part of #N` |
 | 被引用的 issue 必须存在且 open | 调 GitHub API 校验；挂到已关闭 issue 上直接失败 |
 | 豁免 | 仅 `no-issue` 标签，且正文必须写豁免理由（便于事后审计） |
-| 分支保护 | `main` 禁止直推/force push，必须过 CI 且 CODEOWNERS 评审 |
+| 分支保护 | `main` 禁止直推/force push；必须过全部 required checks（含 `issue-link`）；**管理员也受约束**（`enforce_admins=true`） |
 
 ## 六、指标复盘与阈值变更
 
@@ -95,3 +95,40 @@ cd versions/v0.1 && node eval/run.js   # 行为（I1–I12）
 | 质量 | 8/8 |
 | 安全 | 8/8（S3/S1 对调研快照做了显式豁免，理由写在脚本注释里） |
 | 平台侧 | secret scanning ✅ / push protection ✅ / dependabot security updates ✅（validity checks 与 non-provider patterns 需要 GHAS，公开仓本组织不可用） |
+
+## 八、线上状态与验收证据（2026-11-02 实测）
+
+仓库设置（`gh api .../branches/main/protection`）：
+
+```json
+{
+  "required_status_checks": {"strict": true,
+    "contexts": ["test (22)", "test (24)", "eval (I1–I12)", "quality", "security", "codeql", "issue-link"]},
+  "enforce_admins": true,
+  "required_pull_request_reviews": null,
+  "required_linear_history": true,
+  "allow_force_pushes": false,
+  "allow_deletions": false,
+  "required_conversation_resolution": true
+}
+```
+
+平台侧：secret scanning ✅ / push protection ✅ / dependabot security updates ✅；
+CodeQL 走 workflow 的 `security-and-quality` 查询集（另有 GitHub 默认 CodeQL 状态检查）。
+
+**三条实测证据**：
+
+1. **不关联 issue 会被拦**：PR #7 首次提交正文无 issue 引用 →
+   `issue-link` 失败并打印「本 MR 没有关联 issue」；补 `Refs #1` 后转绿（run 41406160471）。
+2. **全量 checks 通过后合并**：PR #7 九项检查全绿后 squash 合并（`2b4dc16`）。
+3. **直推 main 被拒**（保护对管理员同样生效）：
+
+```
+remote: error: GH006: Protected branch update failed for refs/heads/main.
+remote: - 7 of 7 required status checks are expected.
+! [remote rejected] main -> main (protected branch hook declined)
+```
+
+> 为什么把 review 要求设为 0：本仓当前只有一位维护者，自己给自己 review 是假动作。
+> 强约束放在**可机械检验**的部分（checks + issue 关联 + 线性历史 + 禁直推），
+> 人工评审通过 CODEOWNERS 指派与 PR 模板的「决策与取舍」段落留痕，等有第二位维护者时再开 review 要求。
