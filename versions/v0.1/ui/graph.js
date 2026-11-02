@@ -298,13 +298,23 @@ export async function initGraph({ canvas, detailEl, toolbarEl, apiBase = '/api' 
     }
   }
 
+  /** 按画布尺寸给布局参数：节点少时弹簧更长，图形自然铺开；大屏不缩在中间一小团 */
+  function layoutOpts(width, height) {
+    const base = Math.max(120, Math.min(320, Math.min(width, height) / 2.6));
+    return {
+      springLength: base,
+      repulsion: 4200 * (base / 120) ** 2,
+      centering: 0.012,
+    };
+  }
+
   /* ---------- 主循环 ---------- */
   function frame() {
     if (state.destroyed) return;
     if (state.running && state.alpha >= ALPHA_MIN && state.nodes.length > 0) {
       const width = canvas.getBoundingClientRect().width || 600;
       const height = canvas.getBoundingClientRect().height || 600;
-      const out = layoutTick(state.nodes, state.edges, { alpha: state.alpha, width, height });
+      const out = layoutTick(state.nodes, state.edges, { alpha: state.alpha, width, height, ...layoutOpts(width, height) });
       state.alpha = out.alpha;
     }
     render();
@@ -416,10 +426,10 @@ export async function initGraph({ canvas, detailEl, toolbarEl, apiBase = '/api' 
   if (state.nodes.length > 0) {
     const rect0 = canvas.getBoundingClientRect();
     for (let i = 0; i < 80; i++) {
+      const w0 = rect0.width || 600;
+      const h0 = rect0.height || 600;
       const out = layoutTick(state.nodes, state.edges, {
-        alpha: state.alpha,
-        width: rect0.width || 600,
-        height: rect0.height || 600,
+        alpha: state.alpha, width: w0, height: h0, ...layoutOpts(w0, h0),
       });
       state.alpha = out.alpha;
     }
