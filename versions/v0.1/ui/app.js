@@ -167,7 +167,7 @@ async function loadToday() {
     const td = el('td', '', r.label ?? r.id ?? '');
     if (r.reason) {
       const why = el('div', 'reason');
-      why.textContent = `${r.action ? r.action + ' · ' : ''}reason: ${r.reason}`;
+      why.textContent = humanReason(r.reason);
       td.append(why);
     }
     tr.append(td);

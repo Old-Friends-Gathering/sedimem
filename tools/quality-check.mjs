@@ -365,14 +365,17 @@ async function q9WebUiBoundary() {
 
     // 6) 静态资源白名单：src/web/static.js 必须存在且只服务 ui 目录（存在性 + 关键字）
     const staticPath = path.join(webDir, 'static.js');
-    const st = await fsp.stat(staticPath).catch(() => null);
-    if (!st) {
+    // 直接读，不做 stat→read 两步（避免 TOCTOU 告警；ENOENT 即视为缺失）
+    let staticText = null;
+    try {
+      staticText = await fsp.readFile(staticPath, 'utf8');
+    } catch (e) {
+      if (e.code !== 'ENOENT') throw e;
+    }
+    if (staticText === null) {
       problems.push(`${rel(v)}: 缺少 src/web/static.js（静态资源必须经白名单 handler 服务）`);
-    } else {
-      const text = await fsp.readFile(staticPath, 'utf8');
-      if (!/createStaticHandler/.test(text) || !/uiDir/.test(text) || !/path\.resolve/.test(text)) {
-        problems.push(`${rel(staticPath)}: 未识别"只服务 ui 目录"的解析逻辑（需 createStaticHandler + uiDir + path.resolve）`);
-      }
+    } else if (!/createStaticHandler/.test(staticText) || !/uiDir/.test(staticText) || !/path\.resolve/.test(staticText)) {
+      problems.push(`${rel(staticPath)}: 未识别"只服务 ui 目录"的解析逻辑（需 createStaticHandler + uiDir + path.resolve）`);
     }
   }
   record('Q9', `Web UI 层边界（ui ${uiFiles} 文件：无越界 import/外链/innerHTML/eval，零构建 + 单文件≤600 行 + 总量≤2500 行，static 白名单）`,

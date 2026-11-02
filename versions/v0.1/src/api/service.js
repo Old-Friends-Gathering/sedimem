@@ -1,8 +1,6 @@
 // api/service.js — MemoryService（唯一对外 API，契约：docs/02-data-model-and-contract.md §3）
 // 编排层：不含策略细节。策略来自 hygiene/* 与 config/policy.json。
 
-import path from 'node:path';
-import fsp from 'node:fs/promises';
 import { systemClock } from '../core/clock.js';
 import { queryEvents, queryExportRecords } from './read-only.js';
 import { createRecord, validateRecord, withPatch } from '../core/record.js';

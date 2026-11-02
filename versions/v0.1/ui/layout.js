@@ -35,17 +35,10 @@ export const OPTIONAL_EDGE_TYPES = ['duplicate-of', 'disputed-with'];
 /** localStorage 持久化键 */
 export const EDGE_PREF_KEY = 'strata.graph.edges';
 
-/** 画一条边各类型使用的样式 */
-const EDGE_STYLE = {
-  'same-entity': { color: 'rgba(148,163,184,0.5)', dash: [], width: 1 },
-  supersedes: { color: 'rgba(100,116,139,0.7)', dash: [6, 3], width: 1.25 },
-  'duplicate-of': { color: '#f97316', dash: [7, 5], width: 1 },
-  'disputed-with': { color: '#ef4444', dash: [2, 4], width: 1.25 },
-};
-
-const MIN_SCALE = 0.4;
-const MAX_SCALE = 2.5;
-const ALPHA_MIN = 0.005;
+/** 交互阈值（graph.js 的缩放与停帧判断共用，避免两处各写一份魔法数字） */
+export const MIN_SCALE = 0.4;
+export const MAX_SCALE = 2.5;
+export const ALPHA_MIN = 0.005;
 
 /**
  * 力导向布局的单帧推进（纯函数）。

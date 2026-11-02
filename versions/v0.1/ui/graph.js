@@ -16,6 +16,7 @@
 
 import {
   KIND_COLORS, DEFAULT_EDGE_TYPES, OPTIONAL_EDGE_TYPES, EDGE_PREF_KEY, layoutTick,
+  MIN_SCALE, MAX_SCALE, ALPHA_MIN,
 } from './layout.js';
 
 /** 画一条边各类型使用的样式 */
@@ -213,7 +214,6 @@ export async function initGraph({ canvas, detailEl, toolbarEl, apiBase = '/api' 
       return;
     }
     const types = activeEdgeTypes();
-    const labelBoxes = [];
     // 边
     for (const e of state.edges) {
       if (!types.has(e.type)) continue;
@@ -349,7 +349,6 @@ export async function initGraph({ canvas, detailEl, toolbarEl, apiBase = '/api' 
   };
   const onPointerUp = (ev) => {
     if (!drag) return;
-    const [sx, sy] = localPos(ev);
     if (drag.kind === 'node') {
       const nd = drag.node;
       const wasLocked = nd.__locked === true;

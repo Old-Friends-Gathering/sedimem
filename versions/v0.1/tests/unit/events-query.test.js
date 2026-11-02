@@ -109,7 +109,7 @@ describe('svc.exportRecords（裁决 30：只读记录导出）', () => {
   test('默认 status=active，superseded 记录被过滤；status=all 不过滤', async () => {
     const { svc, memoHome } = await fresh();
     try {
-      const a = await svc.write(W({ text: 'v1', value: '1' }));
+      await svc.write(W({ text: 'v1', value: '1' }));
       const b = await svc.write(W({ text: 'v2', value: '2' })); // 同 slot 异值 → supersede
       assert.equal(b.action, 'supersede');
       const activeOnly = await svc.exportRecords();
@@ -145,7 +145,8 @@ describe('svc.exportRecords（裁决 30：只读记录导出）', () => {
   test('suspicious 记录默认遮蔽 text/value；includeSuspicious:true 放行原文', async () => {
     const { svc, memoHome } = await fresh();
     try {
-      const w = await svc.write(W({ text: '密钥是 sk-1234567890abcdef1234567890abcdef', subject: 's.sus', tags: ['suspicious'] }));
+      // 打标是显式传 tags，正文不必含真实形态的凭据（避免仓库里出现形似密钥的字面量，S2 门禁）
+      const w = await svc.write(W({ text: '示例：密钥占位符（此处故意不含真实凭据字面量）', subject: 's.sus', tags: ['suspicious'] }));
       const masked = await svc.exportRecords();
       assert.equal(masked.total, 1);
       assert.equal(masked.records[0].text, '[suspicious withheld]');

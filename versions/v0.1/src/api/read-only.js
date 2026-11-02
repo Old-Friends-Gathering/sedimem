@@ -5,7 +5,7 @@
 import fsp from 'node:fs/promises';
 import path from 'node:path';
 
-import { SUSPICIOUS_MASK as MASK, maskSuspiciousRecord } from './mask.js';
+import { SUSPICIOUS_MASK as MASK } from './mask.js';
 
 /**
  * 只读事件查询。读 $MEMO_HOME/events.jsonl（每行 {ts,op,scope,id,detail}），

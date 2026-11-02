@@ -4,6 +4,7 @@
 
 import fsp from 'node:fs/promises';
 import path from 'node:path';
+import { constants as fsConstants } from 'node:fs';
 
 const CONTENT_TYPES = {
   '.html': 'text/html; charset=utf-8',
@@ -50,19 +51,19 @@ export function createStaticHandler(uiDir) {
     if (abs !== root && !abs.startsWith(root + path.sep)) {
       return { status: 404, body: 'not found' };
     }
-    let stat;
-    try {
-      stat = await fsp.lstat(abs);
-    } catch {
-      return { status: 404, body: 'not found' }; // 含 ui 目录缺失
-    }
-    if (stat.isSymbolicLink()) return { status: 404, body: 'not found' }; // 软链接一律拒绝
-    if (stat.isDirectory()) return { status: 404, body: 'not found' };   // 禁止目录列表
+    // 先用 O_NOFOLLOW 打开再 fstat：路径检查与读取是同一个句柄，
+    // 避免 lstat 之后文件被换成软链接（TOCTOU，CodeQL 会报 file system race condition）
+    let handle;
     let data;
     try {
-      data = await fsp.readFile(abs);
+      handle = await fsp.open(abs, fsConstants.O_RDONLY | fsConstants.O_NOFOLLOW);
+      const stat = await handle.stat();
+      if (!stat.isFile()) return { status: 404, body: 'not found' }; // 目录/设备一律不服务
+      data = await handle.readFile();
     } catch {
-      return { status: 404, body: 'not found' };
+      return { status: 404, body: 'not found' }; // 含 ui 目录缺失、软链接（ELOOP）
+    } finally {
+      if (handle) await handle.close().catch(() => {});
     }
     const type = CONTENT_TYPES[path.extname(abs).toLowerCase()] ?? 'application/octet-stream';
     return { status: 200, body: data, headers: { 'content-type': type } };

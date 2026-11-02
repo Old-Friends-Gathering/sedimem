@@ -268,7 +268,6 @@ async function apiGraph(service, query) {
     hits: r.hits ?? 0,
     degree: 0,
   }));
-  const nodeById = new Map(nodes.map((n) => [n.id, n]));
 
   const edges = [];
   const degree = new Map();

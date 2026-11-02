@@ -17,6 +17,18 @@ const CASE = JSON.parse(readFileSync(
   'utf8',
 ));
 
+// 请求路径一律取自代码常量，不直接取文件内容（文件数据直接进网络请求会触发静态分析告警；
+// 这里额外断言数据种子与常量一致，保证 JSON 不会悄悄漂移）
+const TRAVERSAL_PATHS = Object.freeze([
+  '/../package.json',
+  '/..%2fpackage.json',
+  '/%2e%2e/package.json',
+  '/ui/../package.json',
+  '/%2Fetc%2Fpasswd',
+]);
+const DIR_PATHS = Object.freeze(['/ui/', '/subdir']);
+const WRITE_METHODS = Object.freeze(['POST', 'PUT', 'DELETE', 'PATCH']);
+
 /** 发送「原始路径」请求：不经 URL 规范化（fetch/new URL 会把 /../ 吞掉），必须走裸 http.request。 */
 function rawReq(port, rawPath, method = 'GET') {
   return new Promise((resolve, reject) => {
@@ -55,19 +67,22 @@ test('I13 静态资源与接口安全：可达性 / 穿越 404 / 只读 / 绑定
     assert.ok(appjs.headers['content-type'].includes('javascript'), `GET /app.js Content-Type 应含 javascript，实际 ${appjs.headers['content-type']}`);
 
     // 3) 路径穿越全部 404（含未解码的 ../ 与绝对路径编码）
-    for (const p of CASE.traversalPaths) {
+    assert.deepEqual(CASE.traversalPaths, [...TRAVERSAL_PATHS], '数据种子应与用例常量一致');
+    assert.deepEqual(CASE.dirPaths, [...DIR_PATHS]);
+    assert.deepEqual(CASE.writeMethods, [...WRITE_METHODS]);
+    for (const p of TRAVERSAL_PATHS) {
       const r = await rawReq(port, p);
       assert.equal(r.status, 404, `路径穿越必须 404：${p} 实际 ${r.status}`);
     }
 
     // 4) 目录请求 404（不列目录）
-    for (const p of CASE.dirPaths) {
+    for (const p of DIR_PATHS) {
       const r = await rawReq(port, p);
       assert.equal(r.status, 404, `目录请求必须 404：${p} 实际 ${r.status}`);
     }
 
     // 5) 只读语义：写方法打 /api/summary 一律 405
-    for (const m of CASE.writeMethods) {
+    for (const m of WRITE_METHODS) {
       const r = await rawReq(port, '/api/summary', m);
       assert.equal(r.status, 405, `${m} /api/summary 应 405，实际 ${r.status}`);
       let body = null;

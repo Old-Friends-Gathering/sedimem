@@ -11,6 +11,7 @@ import path from 'node:path';
 import { createMemoryService } from '../../src/api/service.js';
 import { createWebServer } from '../../src/web/server.js';
 import { makeLabel, readMetrics } from '../../src/web/handlers.js';
+import { scopeKeyOf } from '../../src/config/paths.js';
 
 const SCOPE = 'dir:test-web-handlers';
 
@@ -180,7 +181,8 @@ test('api/hygiene：series 含 activeRatio ≈ active/maxActive；新命名 metr
   const metricsDir = path.join(memoHome, 'metrics');
   fs.mkdirSync(metricsDir, { recursive: true });
   const date = new Date().toISOString().slice(0, 10);
-  const scopeKey = SCOPE.replace(/[^a-z0-9._-]+/gi, '-');
+  // scopeKey 由共享模块给出（裁决 39：命名单一来源，用例不再自己写正则）
+  const scopeKey = scopeKeyOf(SCOPE);
   fs.writeFileSync(path.join(metricsDir, `${date}.json`), JSON.stringify({
     date, active: 50, maxActive: 200, total: 60, dupRatio: 0.1, conflictRate: 0.05,
   }));
@@ -212,7 +214,6 @@ test('readMetrics：只有旧名时能读到；新旧都没有返回 null', asyn
   t.after(() => fs.rmSync(memoHome, { recursive: true, force: true }));
   const metricsDir = path.join(memoHome, 'metrics');
   fs.mkdirSync(metricsDir, { recursive: true });
-  const scopeKey = SCOPE.replace(/[^a-z0-9._-]+/gi, '-');
   const date = '2026-11-02';
 
   // 只写旧名 → 读到旧名内容
