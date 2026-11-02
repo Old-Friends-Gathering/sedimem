@@ -137,7 +137,7 @@
   <div class="wrap">
     <div class="canvas">
       <div class="note">已采样 14 / 14 条</div>
-      <svg id="sg" width="100%" height="520" viewBox="0 0 720 520" role="img" aria-label="记忆关系图">
+      <svg id="sg" viewBox="0 0 720 520" style="width:100%;height:auto;display:block" role="img" aria-label="记忆关系图">
         <!-- 边：同实体 -->
         <g stroke="#3a4150" stroke-width="1.2">
           <line x1="300" y1="250" x2="390" y2="330"></line>
@@ -157,7 +157,7 @@
         </g>
         <!-- 边：冲突 -->
         <g stroke="#ef4444" stroke-width="2" stroke-dasharray="3 4" fill="none">
-          <line x1="250" y1="340" x2="600" y2="440"></line>
+          <line x1="250" y1="340" x2="666" y2="452"></line>
         </g>
         <defs>
           <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto">
@@ -193,8 +193,8 @@
              <text x="196" y="462" fill="#cfd6e4">配额 5000</text></g>
           <g><circle cx="620" cy="196" r="10" fill="#c084fc"></circle>
              <text x="620" y="174" fill="#cfd6e4">偏好中文回答</text></g>
-          <g><circle cx="640" cy="446" r="10" fill="none" stroke="#ef4444" stroke-width="2"></circle>
-             <text x="640" y="470" fill="#cfd6e4">冲突候选（落败）</text></g>
+          <g><circle cx="666" cy="452" r="10" fill="none" stroke="#ef4444" stroke-width="2"></circle>
+             <text x="666" y="476" fill="#cfd6e4">冲突候选（落败）</text></g>
         </g>
       </svg>
       <div class="legend" style="padding:0 12px 12px">
@@ -263,18 +263,18 @@
   </table>
 
   <h2 style="font-size:13px;color:#9aa3b2;margin:18px 0 8px">趋势（30 天）</h2>
-  <svg width="100%" height="150" viewBox="0 0 640 150" role="img" aria-label="冗余率与冲突率趋势">
+  <svg viewBox="0 0 1200 150" style="width:100%;height:auto;display:block" role="img" aria-label="冗余率与冲突率趋势">
     <g stroke="#222836" stroke-width="1">
-      <line x1="40" y1="120" x2="620" y2="120"></line>
-      <line x1="40" y1="80" x2="620" y2="80"></line>
-      <line x1="40" y1="40" x2="620" y2="40"></line>
+      <line x1="60" y1="120" x2="1180" y2="120"></line>
+      <line x1="60" y1="80" x2="1180" y2="80"></line>
+      <line x1="60" y1="40" x2="1180" y2="40"></line>
     </g>
-    <g fill="#6b7484" font-size="10" font-family="-apple-system,sans-serif">
-      <text x="8" y="124">0%</text><text x="8" y="84">5%</text><text x="8" y="44">10%</text>
+    <g fill="#6b7484" font-size="11" font-family="-apple-system,sans-serif">
+      <text x="18" y="124">0%</text><text x="18" y="84">5%</text><text x="18" y="44">10%</text>
     </g>
-    <polyline fill="none" stroke="#f97316" stroke-width="2" points="40,112 137,108 234,96 331,102 428,72 525,66 620,58"></polyline>
-    <polyline fill="none" stroke="#ef4444" stroke-width="2" points="40,118 137,118 234,116 331,112 428,114 525,110 620,108"></polyline>
-    <polyline fill="none" stroke="#5b9cf5" stroke-width="1.5" stroke-dasharray="4 4" points="40,118 137,112 234,104 331,98 428,88 525,80 620,72"></polyline>
+    <polyline fill="none" stroke="#f97316" stroke-width="2" points="60,112 247,108 435,96 622,102 809,72 997,66 1180,58"></polyline>
+    <polyline fill="none" stroke="#ef4444" stroke-width="2" points="60,118 247,118 435,116 622,112 809,114 997,110 1180,108"></polyline>
+    <polyline fill="none" stroke="#5b9cf5" stroke-width="1.5" stroke-dasharray="4 4" points="60,118 247,112 435,104 622,98 809,88 997,80 1180,72"></polyline>
   </svg>
   <div class="legend">
     <span><span class="dash" style="border-color:#f97316"></span> dupRatio（冗余率）</span>
