@@ -218,3 +218,24 @@ async exportRecords({ since, until, status = 'active', kind, limit = 2000 } = {}
 1. **图谱 same-entity 边改为时间链（裁决 35）**：§5.2 原描述「同一 subject 两两连边」在全连时是 O(n²) 且视觉上不可读（17 节点 136 条重叠边）。实现改为按 `createdAt` 升序只连相邻两条，表达同一实体的时间序列。
 2. **图谱节点标签做了防重叠跳过**：标签绘制前做包围盒碰撞检测，重叠时只画部分标签（缩放到 `scale ≥ 0.45` 且不重叠才画）。语义仍全部由服务端 label 承载（裁决 37），被跳过的标签点节点看详情兜底——这是绘制层的取舍，不是数据缺失。
 3. **布局加了「同步热身 80 帧 + 自适应缩放」**：`rAF` 在后台标签页会被浏览器节流，若纯靠异步动画收敛，首帧往往是一小团。实现改为先同步跑 80 帧模拟再自适应缩放到画布，保证打开即是一个铺满视口的稳定布局；之后的拖拽/缩放仍走实时模拟。
+
+## 13. 多分库浏览（v0.1.5，issue #23）
+
+观察台最初只服务启动时解析出的**一个**分库，导致「Codex 在别的项目写了记忆，观察台看不见」。
+现在三处改动，都是只读的：
+
+| 端点 | 行为 |
+|---|---|
+| `GET /api/scopes` | 列 `$MEMO_HOME/items/*.jsonl` 里的全部分库：`{scope, records, bytes, mtime, current}`，按 mtime 降序；启动分库即使还没有文件也列出（空库下拉不消失） |
+| `GET /api/{summary,today,records,graph,hygiene}?scope=<scope>` | 按指定分库返回；未传则用启动分库 |
+| 顶栏 | 分库徽章变 `<select>`（带记录数）；切换写入 URL `#/today?scope=repo:x`，可刷新可分享 |
+
+**安全约束（这条最要紧）**：`scope` 直接进文件路径（`items/<scope>.jsonl`），所以 `?scope=` 必须过
+`SCOPE_PATTERN`（`^(repo|dir|user|global):[a-z0-9][a-z0-9._-]{0,63}$`）。非法值返回 **400 `E_INVALID_ARG`**，
+不触盘。单测覆盖 `../etc/passwd`、`../../etc/passwd`、`nope`、`repo:`、`repo:a/b` 五类拒绝。
+
+服务端按 scope 懒建 `MemoryService` 并缓存（`Map<scope, service>`），`close()` 时统一关闭；
+未列出的分库也可以直接用 `?scope=` 访问（只要名字合法），列表只是 UI 的便利。
+
+**为什么不做「跨分库聚合视图」**：分库的意义是隔离（不同项目的事实不该互相污染）；一个混在一起的
+"全部分库" 页面会立刻把 scope 隔离的价值抹掉。要看别的项目就切过去看。

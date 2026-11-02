@@ -1,5 +1,28 @@
 # CHANGELOG · v0.1
 
+## [0.1.5] - 2026-11-02（观察台多分库浏览）
+
+### Added
+
+- `src/web/scopes.js`（`listScopes`）：从 `$MEMO_HOME/items/*.jsonl` 发现分库，返回
+  `{scope, records, bytes, mtime, current}`；名字必须过 `SCOPE_PATTERN`，否则当成非分库文件忽略。
+- `GET /api/scopes`：分库列表（按 mtime 降序；启动分库无文件也列出）。
+- 所有 `/api/*` 支持 `?scope=<scope>` 覆盖启动分库：服务端按 scope 懒建 `MemoryService` 并缓存，
+  `close()` 统一关闭。**scope 直接进文件路径，因此必须过 `SCOPE_PATTERN`；非法值返回 400 `E_INVALID_ARG` 且不触盘。**
+- UI 顶栏分库徽章 → `<select>`（带记录数），切换写进 URL `#/today?scope=repo:x`，三页跟随。
+
+### Why
+
+用户开了 Codex 会话干活，观察台看不到任何记录——查下来 `~/.memo/items/` 只有一个分库
+`repo:strata`，说明 Codex 一条都没写；而观察台本来就只服务启动时那一个分库，
+即使别的项目写了另一分库也看不见。两个问题都修：观察台能切分库（本版），
+写入规则从「用户说记住才写」改成「有实质产出写 1–3 条」（`~/.codex/AGENTS.md`，本机配置非仓库内容）。
+
+### Tests
+
+- `tests/unit/web-scopes.test.js` 3 项：分库列表/条数/current 标记、空库仍列出、`?scope=` 覆盖 +
+  五类非法 scope（含 `../etc/passwd`）一律 400。
+
 ## [0.1.4] - 2026-11-02（SQLite FTS5 索引 + curate 裁决任务包）
 
 ### Added
