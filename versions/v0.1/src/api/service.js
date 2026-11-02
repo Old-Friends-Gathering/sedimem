@@ -83,7 +83,11 @@ export class MemoryService {
   }
 
   async _reload() {
-    // 先取 fileSize 再全量读：两步之间若他进程追加，只会被增量重读重复消费一次（fold 幂等，无害）
+    // 顺序不能反（I8 并发偶发红的根因）：先取 fileSize，再全量读。
+    // 若先读后取 size，两步之间他进程追加的行会「读时没看到 + readOffset 已越过」→ 永久漏读，
+    // 同一条事实随后被再判一次 created（active 出现 2 条）。反过来最多把已读过的行再增量读一次，
+    // 由 _refreshIncremental 的快照相等去重兜住。
+    const sizeBefore = await this.store.fileSize(this.scope);
     let records;
     try {
       records = await this.store.loadScope(this.scope);
@@ -106,7 +110,8 @@ export class MemoryService {
       this._versions.get(r.id).push(r);
     }
     this.index.build(records);
-    this._readOffset = records.length === 0 && this._loadError ? 0 : await this.store.fileSize(this.scope);
+    // 以「读之前」的 size 作为消费水位：宁可重复消费已读过的行，也不能跳过未读的行
+    this._readOffset = records.length === 0 && this._loadError ? 0 : sizeBefore;
     return records;
   }
 
@@ -124,6 +129,13 @@ export class MemoryService {
     const { records, nextOffset } = await this.store.loadScopeIncremental(this.scope, this._readOffset);
     this._readOffset = nextOffset;
     for (const r of records) {
+      const prev = this._records.get(r.id);
+      // 同一快照被重复消费（_reload 的水位回退、半行补齐等）：不能重复计入版本链/索引，
+      // 否则 hits、版本数与 dupRatio 类指标会被污染
+      if (prev && prev.validTo === r.validTo && prev.status === r.status
+          && prev.contentHash === r.contentHash && prev.hits === r.hits) {
+        continue;
+      }
       this._records.set(r.id, r);
       if (!this._versions.has(r.id)) this._versions.set(r.id, []);
       this._versions.get(r.id).push(r);
