@@ -1,9 +1,6 @@
 // probe 3: 服务级「读-判-写」竞态：两个进程并发对同一 slot 写不同值
 // storage/lock.js 只保护单次 append；service.write 的 decideWrite 读的是各自进程的内存快照。
 import { createMemoryService } from '../../src/api/service.js';
-import { mkdtempSync } from 'node:fs';
-import { tmpdir } from 'node:os';
-import { join } from 'node:path';
 
 const home = process.env.PROBE_HOME;
 const value = process.env.PROBE_VALUE;

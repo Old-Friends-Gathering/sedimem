@@ -68,7 +68,7 @@
 
 ## 4. 并发与一致性
 
-- 单行 JSONL 追加用 `O_APPEND` + 单次 `writeSync`（<64KB 原子）；跨进程用 `<memoHome>/.lock`（`fs.open(..., 'wx')` + 陈旧锁 30s 超时，复用 MCP 参考实现策略）。
+- 单行 JSONL 追加用 `O_APPEND` + 单次 `writeSync`（<64KB 原子）；跨进程用 `<memoHome>/.lock/` 目录锁（`mkdir` 原子排他 + 陈旧锁 30s 超时；见 docs/02 与 `src/storage/lock.js` 注释）。
 - 索引在进程内构建（启动时从真相层 fold），写路径通过事件队列增量更新；不做跨进程索引共享。
 - 所有时间是 ISO-8601 UTC（毫秒精度），避免时区漂移。
 

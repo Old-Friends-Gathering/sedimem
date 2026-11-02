@@ -74,6 +74,8 @@ MCP 工具名仍是 `memory_*`、`serverName` 仍是 `memo`（改这些要同步
 - **[`docs/07-quality-and-security.md`](docs/07-quality-and-security.md)** — 门禁指标与阈值（本仓库怎么保证不腐化）
 - [`docs/06-usage.md`](docs/06-usage.md) — 三端落位、日常工具、维护例行、排障、Web UI 怎么看（§7）
 - [`docs/08-web-ui.md`](docs/08-web-ui.md) — v0.2 只读 Web UI 设计契约（三页规格、接口表、门禁增项、§12 实现偏差）
+- [`docs/09-sqlite-index.md`](docs/09-sqlite-index.md) — SQLite FTS5 索引（IndexPort 第二实现、`index.backend` 切换、fail-loud 约定）
+- [`docs/10-curate-auto.md`](docs/10-curate-auto.md) — curate 裁决任务包（`memo curate prompt/apply --file/status`、校验 V1–V6、幂等）
 - [`docs/plans/`](docs/plans/README.md) — 实施计划（任务分解、并行写盘范围、验收与回滚）
 - [`docs/research/`](docs/research/README.md) — 调研证据（8 个开源系统横向对比、记忆卫生机制、为什么自建）
 
@@ -146,7 +148,8 @@ strata/
 |---|---|---|
 | v0.1.1 | 确定性卫生 + Agent 裁决回路 + 中文改写双路召回 + 运行期分库 | ✅ 通过验收 |
 | v0.1.2 | 门禁体系（四道 workflow）、issue→MR 强制流程、并发漏读根治 | ✅ 通过验收 |
-| v0.1.3 | 只读 Web UI「记忆观察台」（`memo serve`：今日变化 / 记忆图谱 / 卫生洞察） | 当前 |
+| v0.1.3 | 只读 Web UI「记忆观察台」（`memo serve`：今日变化 / 记忆图谱 / 卫生洞察） | ✅ 通过验收 |
+| v0.1.4 | SQLite FTS5 索引后端（`index.backend=sqlite`）+ curate 裁决任务包（`memo curate prompt/apply --file/status`） | 当前 |
 | v0.2（规划） | JudgePort 注入点、kind 注册表数据化、compact/物理清理、EmbeddingIndex、service 拆分 | 未开始 |
 
 ## 许可

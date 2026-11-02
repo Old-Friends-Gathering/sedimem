@@ -22,7 +22,9 @@ test('I15 常驻服务：外部进程写入后，下一次 API 请求立即可�
   const scope = 'repo:eval-i15';
   let web;
   try {
-    web = await createWebServer({ memoHome, scope, includeUi: false });
+    // port: 0 → 由内核选空闲端口。测试绝不能绑固定端口：本机常驻的 memo serve 会把它占掉，
+    // 造成「测试因为开着观察台而红」这种假失败（实测过一次）。
+    web = await createWebServer({ memoHome, scope, includeUi: false, port: 0 });
     const url = (suffix) => new URL(suffix, web.url).toString();
 
     // 1) 空库：0 条

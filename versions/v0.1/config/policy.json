@@ -41,5 +41,8 @@
     "nearDupThreshold": 0.85,
     "scanThreshold": 0.45,
     "scanDiceThreshold": 0.15
+  },
+  "index": {
+    "backend": "memory"
   }
 }

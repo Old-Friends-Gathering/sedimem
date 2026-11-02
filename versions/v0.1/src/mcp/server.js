@@ -8,15 +8,11 @@ import process from 'node:process';
 import path from 'node:path';
 import os from 'node:os';
 import readline from 'node:readline';
-import fs from 'node:fs';
 import { validateArgs } from './validate.js';
 import {
   clientKey,
-  SCOPE_PATTERN,
   initScopeState as initScopeStateFrom,
-  readScopeOverride,
   resolveUseTarget,
-  scopeFilePath,
   writeScopeOverride,
 } from './scope-state.js';
 
