@@ -2,7 +2,7 @@ name: ci
 
 # 门禁 1/3：行为正确性。任何 push 到 main 与任何 PR 都必须全绿。
 # - test:   单元 + 注入式回归（Node 22 / 24 双版本）
-# - eval:   I1–I12 注入式评测（行为契约，不看覆盖率）
+# - eval:   I1–I15 注入式评测（行为契约，不看覆盖率）
 # - coverage: 覆盖率下限（lines≥85 / branches≥70 / functions≥90，改阈值需 ADR）
 
 on:
@@ -39,7 +39,7 @@ jobs:
         run: node tools/coverage-gate.mjs
 
   eval:
-    name: eval (I1–I12)
+    name: eval (I1–I15)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
