@@ -27,8 +27,8 @@ jobs:
       matrix:
         node: ['22', '24']
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
         with:
           node-version: ${{ matrix.node }}
       - name: 单元测试 + 注入式回归
@@ -42,8 +42,8 @@ jobs:
     name: eval (I1–I15)
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
         with:
           node-version: '22'
       - name: 跑评测套件
@@ -51,7 +51,7 @@ jobs:
         run: node eval/run.js
       - name: 归档评测结果
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: eval-results
           path: versions/v0.1/eval/results/LATEST.json
