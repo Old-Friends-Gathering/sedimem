@@ -80,7 +80,12 @@ bash versions/v0.1/configs/verify-three-clients.sh   # dsh 写 → 另一进程 
 | [`security`](.github/workflows/security.yml) | 个人路径、凭据、内部域名/内网 IP、配置可移植、`.gitignore`、许可证、大文件、历史面 + CodeQL | 8/8 |
 | [`issue-link`](.github/workflows/issue-link.yml) | **MR 必须关联一条 open 的 issue** | 必须 |
 
-本地与 CI 跑同一份脚本：
+**`main` 是受保护分支，且对管理员同样生效**：直推与 force push 会被拒绝
+（`GH006 ... 7 of 7 required status checks are expected`），任何改动都必须走
+`issue → 分支 → PR → 七项检查全绿 → squash 合并`。实测证据见
+[`docs/07`](docs/07-quality-and-security.md#八线上状态与验收证据2026-11-02-实测)。
+
+本地与 CI 跑同一份脚本（提交前先自己跑一遍，省一轮 CI）：
 
 ```bash
 node tools/quality-check.mjs     # 8 项
