@@ -1,6 +1,6 @@
 {
   "name": "@old-friends-gathering/strata",
-  "version": "0.1.2",
+  "version": "0.1.3",
   "private": true,
   "type": "module",
   "description": "strata v0.1：本地跨会话、跨客户端（DSH/Codex/Claude）自我迭代记忆层（零运行时依赖）",

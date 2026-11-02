@@ -1,5 +1,61 @@
 # CHANGELOG · v0.1
 
+## [0.1.3] - 2026-11-02（只读 Web UI「记忆观察台」）
+
+### Added
+
+- **CLI 子命令 `memo serve [--port N] [--no-ui]`**：只读 Web 服务，只绑 `127.0.0.1`（默认 7788），
+  无鉴权（用户决策 D1，因此不提供任何写端点）；SIGINT/SIGTERM 优雅关闭，端口占用明确报错不静默换端口。
+- **两个只读查询 API（`MemoryService`）**：`events({since,until,ops,limit})` 与
+  `exportRecords({since,until,status,kind,limit})`；`[since,until)` 半开区间，`truncated`/`limited`
+  显式提示禁止静默截断，suspicious 默认遮蔽 `[suspicious withheld]`（裁决 30）。
+- **7 个只读 HTTP 端点**：`/api/summary` `/api/brief` `/api/today` `/api/records` `/api/graph`
+  `/api/hygiene` `/api/timeline`（`tzOffset` 由调用方给，服务端不猜时区，裁决 32）；
+  非法参数 400，错误统一 `{ok:false,code,message}`。
+- **三页静态 UI（`ui/`，零构建零依赖零外链）**：今日变化 / 记忆图谱（力导向，可拖可缩放，
+  边开关存 localStorage）/ 卫生洞察（待裁决候选 + 清理史 + 30 天百分比趋势）。
+- **metrics 序列暴露 `activeRatio = active/maxActive`**，UI 趋势三条线统一百分比坐标（裁决 38）。
+- 文档：`docs/02` §3.10（裁决 35–38 + web 层导出清单）、`docs/06` §7（Web UI 怎么看）、
+  `docs/08` §12（实现说明与偏差）、计划执行结果。
+- 测试：新增 30 个（`events-query` / `nightly-metrics` / `web-server` / `web-handlers` / `graph-layout` 单测
+  + 注入 `i13-static-security` / `i14-cross-section` / `i15-live-refresh`），共 **147 tests 全绿**；7 端点形状
+  与 tzOffset 边界断言在 `web-server.test.js`。
+- **双审核整改（arch 5 严重 + adversarial 4 严重，均无阻断）**：
+  - 常驻进程截面撕裂 → `MemoryService.refreshView()`（水位置刷新 + 在途去重），`/api/*` 每请求前刷新；
+    新增 **I15** 跨进程用例（真实 CLI 子进程写入 → 下一次请求可见，label 不退化）。
+  - suspicious 遮蔽只罩 text/value → `subject`/`predicate`/`source.quote` 一并遮蔽，实现下沉 `src/api/mask.js`（裁决 42）。
+  - `disputed-with` 边恒悬空 → 图谱节点准入加 `disputed`（裁决 40）。
+  - `memo serve` 关闭吞 `flushHits` 错误 → stderr + exit 1（裁决 21）。
+  - metrics 命名四处重复 → `src/config/paths.js`（`scopeKeyOf`/`metricsFileName`/`legacyMetricsFileName`，裁决 39）。
+  - 回环绑定与超时 → 运行时回环断言 + `headersTimeout/requestTimeout/keepAliveTimeout` + `closeIdleConnections()`（裁决 41）。
+  - 导出顺序不稳定使 `q` 过滤失真 → `exportRecords` 截断前按 `createdAt`+`id` 排序（裁决 44）。
+  - Q9 声明的阈值此前没实现 → 零构建 + 单文件 ≤600 行 + 总量 ≤2500 行落地；`ui/graph.js` 拆为
+    `ui/layout.js`（纯布局）+ `ui/graph.js`（渲染交互）；`// q9-allow` 必须带理由（裁决 43）。
+  - `read-only.js`/`paths.js`/`mask.js` 导出与私有耦合登记进 `docs/02 §3.11`，Q5 覆盖率 95.2%。
+
+### Changed
+
+- **metrics 快照按 scope 分文件**：写 `metrics/<date>.<scopeKey>.json`，读路径先新名后旧名
+  （裁决 31）——修复多分库同日互相覆盖的静默数据丢失。
+- **图谱 same-entity 边由「同 subject 全连」改为按 `createdAt` 升序的相邻时间链**（裁决 35：
+  17 节点全连 136 条重叠边不可读，链式 O(n) 表达实体时间序列）。
+- **事件流统计按裁决键聚合**：一次 `curate_apply` 的 loser+winner 两条事件在 today/timeline/hygiene
+  三处计为一次动作（裁决 36）。
+- **label 一律服务端生成**（裁决 33/37）：图谱节点 `subject/predicate`，时间线/清理史
+  `subject/predicate：值前 40 字`；UI 不拼接语义。
+
+### Fixed
+
+- 并发漏读（`_reload` 水位序）已在 **[0.1.2]** 修复，本版不重复；此处仅引用——Web 层只读路径因此可信。
+
+### Known limits
+
+- **不做导出**（PDF/分享链接）、**不做写操作**（页面无任何写按钮，写入入口仍只有 CLI 与 MCP）、
+  **不做远程访问**（仅 `127.0.0.1`，无鉴权故不监听局域网）。
+- 图谱节点采样上限默认 300（`limit` 1–1000），大库看到的是采样图（页眉显示 `shown/total`）。
+- `quality-check` Q2 待达标（`src/api/service.js` 949 行 > 900 上限）、Q7 待发布时 bump `package.json`
+  版本号；覆盖率门禁未达阈值（lines 80.20% < 85、functions 89.93% < 90、branches ✓），见计划「执行结果」遗留清单。
+
 ## [0.1.2] - 2026-11-02（质量/安全门禁 + 开源品牌）
 
 ### Fixed

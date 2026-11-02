@@ -18,6 +18,7 @@ import path from 'node:path';
 import os from 'node:os';
 import fs from 'node:fs';
 import fsp from 'node:fs/promises';
+import { metricsFileName } from '../config/paths.js';
 
 const USAGE = `nightly —— memo 确定性夜间整合
 
@@ -201,7 +202,9 @@ async function main() {
     if (!dryRun) {
       const metricsDir = path.join(memoHome, 'metrics');
       await fsp.mkdir(metricsDir, { recursive: true });
-      const file = path.join(metricsDir, `${plan.date}.json`);
+      // 裁决 31：metrics 按 scope 分文件，scopeKey 归一化非法字符；
+      // 同 scope 覆盖，不同 scope 隔离（旧 <date>.json 多分库同日互相覆盖属静默丢失）。
+      const file = path.join(metricsDir, metricsFileName(plan.date, scope));
       await fsp
         .writeFile(file, JSON.stringify(plan.metrics, null, 2) + '\n', { flag: 'wx' })
         .catch((err) => {
@@ -229,8 +232,8 @@ async function main() {
                 .join('')
             : `  去重候选: 未统计（MemoryService 尚未提供 dedupeScan）\n`) +
           (dryRun
-            ? `  （未写盘；brief 将写 ${plan.briefPath}，metrics 快照将写 ${path.join(memoHome, 'metrics', plan.date + '.json')}）\n`
-            : `  metrics 已写 ${path.join(memoHome, 'metrics', plan.date + '.json')}\n`)
+            ? `  （未写盘；brief 将写 ${plan.briefPath}，metrics 快照将写 ${path.join(memoHome, 'metrics', metricsFileName(plan.date, scope))}）\n`
+            : `  metrics 已写 ${path.join(memoHome, 'metrics', metricsFileName(plan.date, scope))}\n`)
       );
     }
     return 0;

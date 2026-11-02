@@ -130,7 +130,8 @@ async exportRecords({ since, until, status = 'active', kind, limit = 2000 } = {}
 
 ## 7. 安全设计
 
-- **绑定**：`server.listen(port, '127.0.0.1')`，并用单测断言 `server.address().address === '127.0.0.1'`。
+- **绑定**：`server.listen(port, '127.0.0.1')`，并用单测断言 `server.address().address === '127.0.0.1'`；`createWebServer({host})` 另有**运行时回环断言**（非 `127.0.0.0/8`、`::1`、`localhost` 一律 `E_INVALID_ARG`），门禁 S9 只能挡源码默认值，挡不住调用方传参（裁决 41）。
+- **超时**：`headersTimeout=10s`、`requestTimeout=15s`、`keepAliveTimeout=5s`；`close()` 先 `closeIdleConnections()` 再 `server.close()`，避免浏览器常驻标签页把关闭拖住（裁决 41）。
 - **CSP**：静态页 `<meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data:; style-src 'self' 'unsafe-inline'; script-src 'self'">`，禁一切外链。
 - **输出转义**：所有记录正文经 `textContent` 写入，禁止 `innerHTML` 拼接用户数据（XSS 面即投毒面）。
 - **遮蔽**：`suspicious` 内容由服务端替换为 `[suspicious withheld]`，UI 无开关（想看得用 CLI `--include-suspicious`）。
@@ -141,10 +142,11 @@ async exportRecords({ since, until, status = 'active', kind, limit = 2000 } = {}
 
 | 编号 | 门禁 | 检查内容 | 阈值 |
 |---|---|---|---|
-| **Q9** | 质量 | UI 零构建：`ui/` 下无 `package.json`/`node_modules`/构建产物；单文件 ≤ 600 行；`ui/` 总量 ≤ 2500 行；HTML 内 `<script src>`/`<link href>` 只允许相对路径 | 全绿 |
+| **Q9** | 质量 | UI 零构建：`ui/` 下无 `package.json`/锁文件/`node_modules`/`dist`/`build`；单文件 ≤ 600 行；`ui/` 总量 ≤ 2500 行；HTML 内 `<script src>`/`<link href>` 只允许相对路径；`// q9-allow` 必须带理由 | 全绿 |
 | **S9** | 安全 | UI 无外链：`ui/**` 与 `docs/ui-mockup.html` 不含 `http(s)://` 资源引用（注释里也不许） | 0 命中 |
-| **I13** | 行为 | API 契约：起 server 于临时端口 → 断言 7 个端点形状、`ok:false` 错误形状、suspicious 遮蔽、非法参数 400 | 7/7 |
-| **I14** | 行为 | 时间过滤：造 3 天事件 → `/api/today?date=...` 与 `/api/timeline?days=3` 计数与日期正确（含时区边界） | 全对 |
+| **I13** | 行为 | 静态面安全：起 server 于临时端口 → `/` 与 `/app.js` 200 + Content-Type、5 条穿越路径（含裸 `../`、编码、绝对路径）404、`/ui/` 与目录 404、非 GET → 405、未知 `/api` → 404、无 CORS 头、绑定地址为 `127.0.0.1` | 全绿 |
+| **I14** | 行为 | 截面一致性：同一时间窗内 `exportRecords` / `events` / `/api/graph` / `/api/today` 自洽；suspicious 遮蔽；`created` 事件可回查；图谱节点数 ≤ limit；same-entity 边 ≤ n−1 | 全对 |
+| **I15** | 行为 | 常驻可见性：`memo serve` 启动后由**另一个进程**（真实 CLI）写入 → 下一次 `/api/summary`、`/api/records`、`/api/graph` 立即可见，且时间线 label 不退化为操作名 | 全绿 |
 
 ## 9. 分阶段交付
 
@@ -167,7 +169,7 @@ async exportRecords({ since, until, status = 'active', kind, limit = 2000 } = {}
 ### v0.2.1（可选，写操作）
 
 - 「合并/保留两条」按钮 → 调 `curateApply`，**二次确认对话框显示将失效哪些 id**，成功后写一条 `curate_apply` 事件。
-- 这是唯一允许 UI 产生写的地方，需单独 ADR + 审计测试（I15）。
+- 这是唯一允许 UI 产生写的地方，需单独 ADR + 审计测试（届时新增 I16，I15 已被常驻可见性占用）。
 
 ### v0.2.2+（原路线）
 
@@ -194,3 +196,25 @@ async exportRecords({ since, until, status = 'active', kind, limit = 2000 } = {}
 | D5 | 日报导出 | **不做** | §10 第 5 条维持 |
 
 四个问题全部关闭，不再留"待定项"。
+
+---
+
+## 12. 实现说明与偏差（2026-11-02，v0.1.3 落地记录）
+
+> **第九轮：双审核整改（arch 5 严重 + adversarial 4 严重，均无阻断）**
+>
+> 1. **常驻进程截面撕裂**（A1）：`MemoryService.refreshView()` + 每个 `/api/*` 请求前刷新；新增 I15 跨进程回归用例（真实 CLI 子进程写入 → 下一次请求可见）。
+> 2. **suspicious 遮蔽漏洞**（A2）：`subject`/`predicate`/`source.quote` 一并遮蔽，单一实现下沉到 `src/api/mask.js`（裁决 42）。
+> 3. **图谱缺 disputed 节点**（S2）：节点准入加 `disputed`，冲突红边才画得出来（裁决 40）。
+> 4. **serve 关闭吞错**（S1）：`close()` 失败改为 stderr + exit 1（裁决 21）。
+> 5. **metrics 命名单一来源**（S5）：`src/config/paths.js` 的 `scopeKeyOf` / `metricsFileName` / `legacyMetricsFileName`，夜间任务与 Web 读侧共用（裁决 39）。
+> 6. **回环绑定与超时**（B4/B5）：运行时断言 + 显式超时 + `closeIdleConnections()`（裁决 41）。
+> 7. **导出顺序稳定**（A3/B8）：`exportRecords` 按 `createdAt`+`id` 排序后再截断，`q` 过滤不再在随机子集里搜（裁决 44）。
+> 8. **Q9 阈值落地**（S3）：零构建 + 单文件 ≤600 + 总量 ≤2500 真正实现；为此把 `ui/graph.js` 拆成 `ui/layout.js`（纯布局）+ `ui/graph.js`（渲染交互）（裁决 43）；`// q9-allow` 必须带理由（B6）。
+> 9. **契约登记**（S4）：`read-only.js` / `paths.js` / `mask.js` 的导出与私有耦合写入 `docs/02 §3.11`，Q5 覆盖率 98.3%。
+
+三页与 7 个端点按 §4–§7 实现（`versions/v0.1/src/web/{server,handlers,static}.js` + `versions/v0.1/ui/`，CLI 子命令 `memo serve`）。以下三处与本文设计不一致，均已冻结为 `docs/02` §3.10 裁决 35–38，冲突时以 02 为准：
+
+1. **图谱 same-entity 边改为时间链（裁决 35）**：§5.2 原描述「同一 subject 两两连边」在全连时是 O(n²) 且视觉上不可读（17 节点 136 条重叠边）。实现改为按 `createdAt` 升序只连相邻两条，表达同一实体的时间序列。
+2. **图谱节点标签做了防重叠跳过**：标签绘制前做包围盒碰撞检测，重叠时只画部分标签（缩放到 `scale ≥ 0.45` 且不重叠才画）。语义仍全部由服务端 label 承载（裁决 37），被跳过的标签点节点看详情兜底——这是绘制层的取舍，不是数据缺失。
+3. **布局加了「同步热身 80 帧 + 自适应缩放」**：`rAF` 在后台标签页会被浏览器节流，若纯靠异步动画收敛，首帧往往是一小团。实现改为先同步跑 80 帧模拟再自适应缩放到画布，保证打开即是一个铺满视口的稳定布局；之后的拖拽/缩放仍走实时模拟。

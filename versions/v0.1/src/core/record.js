@@ -7,10 +7,10 @@ import { systemClock } from './clock.js';
 const KINDS = new Set(['fact', 'pref', 'decision', 'gotcha', 'state']);
 const STATUSES = new Set(['active', 'superseded', 'disputed', 'tombstoned']);
 // 已知 agent 只是「带颜色的标签」，不是白名单（裁决 25：允许任意新客户端接入，避免写死）
-const KNOWN_AGENTS = new Set(['dsh', 'codex', 'claude', 'cli', 'test', 'unknown']);
+export const KNOWN_AGENTS = new Set(['dsh', 'codex', 'claude', 'cli', 'test', 'unknown']);
 // 保留名：冒充系统身份一律拒绝（对抗审核「伪造身份」用例必须继续通过）
-const RESERVED_AGENTS = new Set(['root', 'system', 'admin', 'sudo', 'superuser']);
-const AGENT_PATTERN = /^[a-z0-9][a-z0-9._-]{0,31}$/;
+export const RESERVED_AGENTS = new Set(['root', 'system', 'admin', 'sudo', 'superuser']);
+export const AGENT_PATTERN = /^[a-z0-9][a-z0-9._-]{0,31}$/;
 const MAX_TEXT = 4000;
 
 /**

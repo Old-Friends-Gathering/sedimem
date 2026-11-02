@@ -152,7 +152,92 @@ async function s8GitHistorySecrets() {
   record('S8', 'git 历史面扫描（当前提交）', hits.length === 0, hits.slice(0, 5));
 }
 
-const CHECKS = [scanPatterns, s5Gitignore, s6License, s7LargeOrBinary, s8GitHistorySecrets];
+// ── S9 部署面安全（Web 只读服务） ──────────────────────────────────
+// 裁决来源：docs/08-web-ui.md、docs/02 §3.9。Web 层必须：默认回环绑定、无写端点、
+// 前端只 fetch /api 相对路径、生成物不入库。
+async function s9DeploymentSurface() {
+  const problems = [];
+  const versionsDir = path.join(ROOT, 'versions');
+  const versions = (await fsp.readdir(versionsDir, { withFileTypes: true }))
+    .filter((d) => d.isDirectory()).map((d) => path.join(versionsDir, d.name));
+  for (const v of versions) {
+    // 1) server.js 默认 host 必须是 127.0.0.1
+    const serverPath = path.join(v, 'src', 'web', 'server.js');
+    const serverText = await fsp.readFile(serverPath, 'utf8').catch(() => null);
+    if (serverText === null) {
+      problems.push(`${rel(v)}: 缺少 src/web/server.js`);
+    } else {
+      const lines = serverText.split('\n');
+      let found = false;
+      lines.forEach((line, i) => {
+        const m = line.match(/host\s*=\s*['"]([^'"]+)['"]/);
+        if (!m) return;
+        found = true;
+        if (m[1] === '0.0.0.0' || m[1] === '::' || m[1] !== '127.0.0.1') {
+          problems.push(`${rel(serverPath)}:${i + 1} → 默认 host "${m[1]}"（必须是 127.0.0.1 回环绑定）`);
+        }
+      });
+      if (!found) problems.push(`${rel(serverPath)}: 未找到 host 默认值声明（需 host = '127.0.0.1'）`);
+    }
+    // 2) src/web/** 不得出现写端点调用
+    const webFiles = await (async () => {
+      const out = [];
+      async function w(dir) {
+        for (const ent of await fsp.readdir(dir, { withFileTypes: true }).catch(() => [])) {
+          const full = path.join(dir, ent.name);
+          if (ent.isDirectory()) await w(full);
+          else if (/\.js$/.test(ent.name)) out.push(full);
+        }
+      }
+      await w(path.join(v, 'src', 'web'));
+      return out;
+    })();
+    const WRITE_CALLS = ['service.write(', 'service.forget(', 'service.supersede(', 'service.curateApply(', 'appendEvent('];
+    for (const f of webFiles) {
+      const lines = (await fsp.readFile(f, 'utf8').catch(() => '')).split('\n');
+      lines.forEach((line, i) => {
+        for (const kw of WRITE_CALLS) {
+          if (line.includes(kw)) problems.push(`${rel(f)}:${i + 1} → 写调用 "${kw.slice(0, -1)}("（Web 层只读，契约见 docs/08）`);
+        }
+      });
+    }
+    // 3) ui/** 不得 fetch 到非 /api 相对路径（fetch("http… / fetch("//…）
+    const uiDir = path.join(v, 'ui');
+    const uiFiles = await (async () => {
+      const out = [];
+      async function w(dir) {
+        for (const ent of await fsp.readdir(dir, { withFileTypes: true }).catch(() => [])) {
+          const full = path.join(dir, ent.name);
+          if (ent.isDirectory()) await w(full);
+          else if (/\.js$/.test(ent.name)) out.push(full);
+        }
+      }
+      await w(uiDir);
+      return out;
+    })();
+    for (const f of uiFiles) {
+      const text = await fsp.readFile(f, 'utf8').catch(() => '');
+      const lines = text.split('\n');
+      lines.forEach((line, i) => {
+        for (const m of line.matchAll(/fetch\(\s*['"`]([^'"`]{0,80})/g)) {
+          const t = m[1];
+          if (/^https?:\/\//.test(t) || /^\/\//.test(t)) {
+            problems.push(`${rel(f)}:${i + 1} → fetch "${t}"（只允许 /api 相对路径）`);
+          }
+        }
+      });
+    }
+  }
+  // 4) .gitignore 含 .memo/ 与 node_modules/
+  const gi = await fsp.readFile(path.join(ROOT, '.gitignore'), 'utf8').catch(() => '');
+  for (const need of ['.memo/', 'node_modules/']) {
+    if (!gi.includes(need)) problems.push(`.gitignore 缺少：${need}`);
+  }
+  record('S9', '部署面安全（Web 默认回环、无写端点、ui 只 fetch /api、.memo/ 不入库）',
+    problems.length === 0, problems.slice(0, 12));
+}
+
+const CHECKS = [scanPatterns, s5Gitignore, s6License, s7LargeOrBinary, s8GitHistorySecrets, s9DeploymentSurface];
 for (const check of CHECKS) {
   try { await check(); } catch (e) {
     record(check.name.toUpperCase(), `检查自身异常：${e.message}`, false, []);
