@@ -1,14 +1,29 @@
 {
-  "name": "memo",
-  "version": "0.1.1",
+  "name": "@old-friends-gathering/strata",
+  "version": "0.1.2",
   "private": true,
   "type": "module",
-  "description": "本地跨会话自我迭代记忆系统 v0.1（零运行时依赖）",
-  "bin": { "memo": "./src/cli/memo.js", "memo-mcp": "./src/mcp/server.js" },
-  "engines": { "node": ">=22" },
+  "description": "strata v0.1：本地跨会话、跨客户端（DSH/Codex/Claude）自我迭代记忆层（零运行时依赖）",
+  "bin": {
+    "memo": "./src/cli/memo.js",
+    "memo-mcp": "./src/mcp/server.js"
+  },
+  "engines": {
+    "node": ">=22"
+  },
   "scripts": {
-    "test": "node --test tests/",
+    "test": "node --test 'tests/**/*.test.js'",
     "eval": "node eval/run.js",
     "doctor": "node src/cli/memo.js doctor"
+  },
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Old-Friends-Gathering/strata.git",
+    "directory": "versions/v0.1"
+  },
+  "homepage": "https://github.com/Old-Friends-Gathering/strata#readme",
+  "bugs": {
+    "url": "https://github.com/Old-Friends-Gathering/strata/issues"
   }
 }

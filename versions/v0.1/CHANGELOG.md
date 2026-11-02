@@ -1,5 +1,32 @@
 # CHANGELOG · v0.1
 
+## [0.1.2] - 2026-11-02（质量/安全门禁 + 开源品牌）
+
+### Fixed
+- **并发漏读（I8 偶发红的根因）**：`src/api/service.js` 的 `_reload()` 先 `loadScope()` 全量读、后取 `fileSize()`，
+  若他进程在这两步之间追加一行，该行"读时没看到 + 水位已越过"→ 永久漏读 → 同一事实被判两次 created。
+  改为**先取 `sizeBefore` 再读**，`_readOffset = sizeBefore`；`_refreshIncremental()` 对重复消费的快照做去重
+  （`validTo/status/contentHash/hits` 全等则跳过），避免版本链与索引被污染。新增 `tests/unit/reload-race.test.js`（2 用例）。
+  修后 117 tests 连跑 3 次全绿，I8 带覆盖率连跑 10 次全 PASS。
+
+### Added
+- **四道门禁**（本地与 CI 同源、零依赖）：`tools/quality-check.mjs`（8 项：零依赖/源码规模/测试清单/评测对齐/
+  契约覆盖/文档链接/版本自包含/编码卫生）、`tools/security-check.mjs`（8 项：个人路径/凭据/内部域名与内网 IP/
+  配置可移植/.gitignore/许可证/大文件/历史面）、`tools/coverage-gate.mjs`（lines ≥85 / branches ≥70 / functions ≥90）。
+- **四个 GitHub workflow**：`ci.yml`（Node 22/24 双跑 + I1–I12 评测 + 覆盖率）、`quality.yml`、`security.yml`
+  （secrets + CodeQL `security-and-quality`）、`issue-link.yml`（**MR 必须关联 open issue**，仅 `no-issue` 标签可豁免且需写理由）。
+- `.github/` 模板与治理：issue 模板（feature 强制可机械检验的验收标准/契约影响/安全影响）、PR 模板、
+  `CODEOWNERS`、`dependabot.yml`；`CONTRIBUTING.md`、`SECURITY.md`、`docs/07-quality-and-security.md`
+  （指标定义、阈值理由、谁能改阈值、当前基线）、`docs/05-process.md` §6 issue→MR 强制流程与 §7 角色→门禁映射。
+- `docs/02-data-model-and-contract.md` **§3.8 内部模块导出清单**（15 个内部导出登记，Q5 契约覆盖从 62% 提到 100%）。
+
+### Changed
+- 目录 `memory-system/` → **`strata/`**（产品名 strata；技术标识保持 `memo`/`MEMO_*`/`memory_*`/`serverName: memo`，
+  v0.2 再做带兼容期的重命名）。仓库 https://github.com/Old-Friends-Gathering/strata 。
+- `package.json`：name → `@old-friends-gathering/strata`，version → 0.1.2，`test` 脚本改 glob 形状
+  （`node --test tests/` 在 Node 24 会 MODULE_NOT_FOUND），补 `license`/`repository`/`homepage`/`bugs`。
+- `README.md` 重写为品牌页（为什么叫 strata、地层表、门禁表、迭代纪律）。
+
 ## [0.1.1] - 2026-11-02（三端接入后补强：中文去重）
 
 ### Added

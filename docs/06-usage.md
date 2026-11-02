@@ -63,7 +63,7 @@ memory_scope({action:'use', path:'/abs/path/to/project'})  # 切到项目分库�
 - **命令行等价物**（不想开 Agent 时）：
   ```bash
   NODE=${MEMO_NODE:-node}
-  cd memory-system/versions/v0.1
+  cd strata/versions/v0.1
   $NODE src/cli/memo.js brief
   $NODE src/cli/memo.js dedupe scan          # 可加 --threshold 0.45 --dice 0.15 --json
   $NODE src/cli/memo.js doctor
@@ -72,7 +72,7 @@ memory_scope({action:'use', path:'/abs/path/to/project'})  # 切到项目分库�
 
 ## 4. 换一台机器/新增客户端
 
-1. 把 `memory-system/` 整个目录拷过去（零依赖，只需 Node ≥22）。
+1. 把 `strata/` 整个目录拷过去（零依赖，只需 Node ≥22）。
 2. 按 `configs/` 三个模板改路径：
    - DSH：`configs/dsh-cordis.patch.yml`（合入 `~/.dsh/profiles/<name>/cordis.patch.yml`）
    - Codex：`configs/codex-config.toml`

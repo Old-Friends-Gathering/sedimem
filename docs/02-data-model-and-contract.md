@@ -349,3 +349,22 @@ Claude Code / Codex 每次会话按**项目 cwd** 解析。结果：同一项目
       （CLI 等价：`memo dedupe apply --file decisions.json`）。**不需要**先被 `dedupe_scan` 召回。
     - 已在真实库上跑通这条路径：两条记录由 Agent 判 `merge` → `active 3→2`、败者 `superseded`、真相层保留
       （3 条写入 + 1 条补丁 + 1 条裁决事件 = 5 行）。语义召回的根治留给 v0.2 的 `EmbedderPort`（已在 03 文档列为候选）。
+
+## 3.8 内部模块导出清单（受质量门禁约束）
+
+质量门禁 `Q5 契约覆盖` 要求 `src/` 的每个 `export` 都能在 `docs/`（不含 `docs/research/`）里被找到——
+目的是**新增对外能力必须同步改契约**。下面这些是内部工具函数/常量，不是对外 API，
+但仍在此登记，避免"导出即隐形契约"：
+
+| 导出 | 位置 | 作用（内部） |
+|---|---|---|
+| `migrateDshMemory` | `src/cli/migrate-dsh-memory.js` | 从 dsh-memory 的 SQLite 一次性迁移，CLI 子命令内部实现 |
+| `loadPolicy` / `defaultPolicy` | `src/config/policy.js` | 策略唯一加载点与冻结默认值；对外的"契约"是 `config/policy.json` 的键 |
+| `dedupeSlotKey` / `clusterNearDuplicates` | `src/hygiene/conflict.js` | `service.dedupeScan` 的候选簇实现；对外契约是 `dedupeScan` 的返回形状（裁决 22） |
+| `normalizeForMatch` / `detectSuspicious` / `isSuspicious` | `src/hygiene/suspicious.js` | 投毒检测；对外契约只有"读路径默认遮蔽"语义（裁决 16） |
+| `SCOPE_PATTERN` / `scopeFilePath` / `readScopeOverride` / `writeScopeOverride` / `initScopeState` / `resolveUseTarget` | `src/mcp/scope-state.js` | `memory_scope` 工具的纯函数实现；对外契约是工具语义（裁决 28） |
+| `validateArgs` | `src/mcp/validate.js` | MCP 参数严格校验；对外契约是"未知参数/缺必填即 isError 且不落库" |
+
+**规则**：对外 API（`createMemoryService` 及其方法、Ports、CLI 子命令、MCP 工具）必须写在
+§3 / §3.1–§3.7 正文里；只登记在本节的，改动不需要 ADR，但不得新增未登记的导出
+（`tools/contract-exempt.json` 是兜底豁免清单，必须逐条写理由）。
