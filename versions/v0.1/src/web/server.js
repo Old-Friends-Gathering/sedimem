@@ -4,7 +4,6 @@
 import http from 'node:http';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import fsp from 'node:fs/promises';
 import { createMemoryService } from '../api/service.js';
 import { SCOPE_PATTERN } from '../mcp/scope-state.js';
 import { listScopes } from './scopes.js';
@@ -109,9 +108,16 @@ export async function createWebServer({
       try {
         active = await serviceFor(url.searchParams.get('scope'));
       } catch (e) {
+        // 只回固定文案：错误对象可能带绝对路径/栈信息（js/stack-trace-exposure），本地服务也不该外泄
         const code = e?.code ?? 'E_INTERNAL';
         res.writeHead(code === 'E_INVALID_ARG' ? 400 : 500, { 'content-type': 'application/json; charset=utf-8' });
-        res.end(JSON.stringify({ ok: false, code, message: e?.message ?? String(e) }));
+        res.end(JSON.stringify({
+          ok: false,
+          code,
+          message: code === 'E_INVALID_ARG'
+            ? 'scope 不合法（需形如 repo:name / dir:name）'
+            : '切换分库失败',
+        }));
         return;
       }
       // 裁决 39：常驻服务不写库，读前先按文件水位增量刷新，否则浏览器看到的截面会自相矛盾
