@@ -54,6 +54,8 @@ jobs:
       - uses: github/codeql-action/init@v4
         with:
           languages: javascript-typescript
+          # 只扫当前版本：冻结快照 versions/v0.1 是归档，见 .github/codeql/codeql-config.yml
+          config-file: ./.github/codeql/codeql-config.yml
           queries: security-and-quality
       - uses: github/codeql-action/analyze@v4
         with:
