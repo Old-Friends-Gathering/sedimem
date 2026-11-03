@@ -67,10 +67,15 @@ export async function createWebServer({
 
   const server = http.createServer((req, res) => {
     void handle(req, res).catch((err) => {
+      // 错误对象可能带绝对路径/栈信息：只把**可枚举的错误码**给客户端，正文一律固定文案
+      // （js/stack-trace-exposure；本地服务也不该把内部路径递到浏览器里）。详情写 stderr 供排障。
+      process.stderr.write(`[memo-web] ${req.method} ${req.url} 失败: ${err?.stack ?? err}\n`);
       if (!res.headersSent) {
         res.writeHead(500, { 'content-type': 'application/json; charset=utf-8' });
         res.end(JSON.stringify({
-          ok: false, code: err?.code ?? 'E_INTERNAL', message: err?.message ?? String(err),
+          ok: false,
+          code: err?.code ?? 'E_INTERNAL',
+          message: '内部错误（详见服务端日志）',
         }));
       } else {
         res.destroy(err);
