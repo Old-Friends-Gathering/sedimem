@@ -1,9 +1,5 @@
-// storage/lock.js — 跨进程写锁（契约：mkdir('.lock') 原子排他创建，陈旧锁 staleMs=30000 强制接管，
-// 总等待超 timeoutMs=15000 抛 err.code='E_LOCK_TIMEOUT'，finally 必删锁目录）
-//
-// 为什么是目录而不是文件：`mkdir` 的 EEXIST 是内核级原子排他，没有「先检查后创建」窗口；
-// 而「在临时目录里以可预测文件名创建文件」会被 CodeQL 判为 insecure-temporary-file（符号链接攻击面）。
-// 锁只需要「唯一性 + 持有时间」，目录的 mtime 就够，不需要 pid 文件。
+// storage/lock.js — 跨进程写锁（契约：fs.open(path,'wx')，陈旧锁 staleMs=30000 强制接管，
+// 总等待超 timeoutMs=15000 抛 err.code='E_LOCK_TIMEOUT'，finally 必删锁文件）
 
 import path from 'node:path';
 import fsp from 'node:fs/promises';
@@ -24,10 +20,11 @@ export async function withLock(memoHome, fn, { staleMs = 30000, timeoutMs = 1500
   await fsp.mkdir(memoHome, { recursive: true });
   const lockPath = path.join(memoHome, '.lock');
   const start = Date.now();
+  let handle = null;
 
   for (;;) {
     try {
-      await fsp.mkdir(lockPath); // 原子排他：已存在则 EEXIST
+      handle = await fsp.open(lockPath, 'wx');
       break; // 拿到锁
     } catch (e) {
       if (e.code !== 'EEXIST') throw e;
@@ -35,8 +32,8 @@ export async function withLock(memoHome, fn, { staleMs = 30000, timeoutMs = 1500
       let st = null;
       try { st = await fsp.stat(lockPath); } catch { st = null; /* 刚被释放，重试 */ }
       if (st && Date.now() - st.mtimeMs > staleMs) {
-        // 陈旧锁：强制接管（先删目录再重新竞争，避免覆盖新持有者）
-        try { await fsp.rm(lockPath, { recursive: true, force: true }); } catch { /* 忽略，下一轮重试 */ }
+        // 陈旧锁：强制接管（先 unlink 再重新竞争，避免覆盖新持有者）
+        try { await fsp.rm(lockPath, { force: true }); } catch { /* 忽略，下一轮重试 */ }
         continue;
       }
       if (Date.now() - start > timeoutMs) {
@@ -49,8 +46,12 @@ export async function withLock(memoHome, fn, { staleMs = 30000, timeoutMs = 1500
   }
 
   try {
+    await handle.writeFile(String(process.pid), 'utf8');
+    await handle.close();
+    handle = null;
     return await fn();
   } finally {
-    try { await fsp.rm(lockPath, { recursive: true, force: true }); } catch { /* 尽力删除 */ }
+    if (handle) { try { await handle.close(); } catch { /* already closed */ } }
+    try { await fsp.rm(lockPath, { force: true }); } catch { /* 尽力删除 */ }
   }
 }

@@ -30,8 +30,8 @@ DSH / Codex CLI / Claude Code 三端共用一份本地记忆。重点不是"检�
 ![卫生洞察](docs/shots/hygiene.png)
 
 ```bash
-node versions/v0.1/src/cli/memo.js serve        # 打开 http://127.0.0.1:7788
-node versions/v0.1/src/cli/memo.js serve --help # 端口、分库、无 UI 模式
+node versions/v0.2/src/cli/memo.js serve        # 打开 http://127.0.0.1:7788
+node versions/v0.2/src/cli/memo.js serve --help # 端口、分库、无 UI 模式
 ```
 
 ## 为什么叫 strata
@@ -83,7 +83,7 @@ MCP 工具名仍是 `memory_*`、`serverName` 仍是 `memo`（改这些要同步
 
 ```bash
 NODE=${MEMO_NODE:-node}     # 任意 Node ≥ 22
-cd versions/v0.1
+cd versions/v0.2
 
 $NODE --test 'tests/**/*.test.js'   # 单元 + 注入式回归（117 用例）
 $NODE eval/run.js                   # I1–I12 评测，结果写 eval/results/
@@ -92,10 +92,10 @@ $NODE src/mcp/server.js             # MCP server（stdio）
 ```
 
 三端接入（DSH / Codex CLI / Claude Code）见 [`docs/06-usage.md`](docs/06-usage.md)，
-模板在 [`versions/v0.1/configs/`](versions/v0.1/configs/)；一键验证脚本：
+模板在 [`versions/v0.2/configs/`](versions/v0.2/configs/)；一键验证脚本：
 
 ```bash
-bash versions/v0.1/configs/verify-three-clients.sh   # dsh 写 → 另一进程 recall → 用召回值回答
+bash versions/v0.2/configs/verify-three-clients.sh   # dsh 写 → 另一进程 recall → 用召回值回答
 ```
 
 ## 门禁（每次 push / PR 自动跑）
@@ -138,7 +138,9 @@ strata/
 ├── tools/                   # 门禁脚本（quality / security / coverage，零依赖）
 ├── .github/                 # 四个 workflow + issue/PR 模板 + CODEOWNERS
 ├── versions/
-│   └── v0.1/                # 自包含版本：src/ tests/ eval/ configs/ docs/ CHANGELOG
+│   ├── CURRENT              # 当前版本指针（v0.2）——门禁与 CI 都读它
+│   ├── v0.1/                # 🔒 冻结（0.1.2 快照，见 FROZEN.md）
+│   └── v0.2/                # ✅ 当前开发线：src/ tests/ eval/ configs/ ui/ docs/ CHANGELOG
 └── README.md
 ```
 
@@ -146,11 +148,12 @@ strata/
 
 | 版本 | 主题 | 状态 |
 |---|---|---|
-| v0.1.1 | 确定性卫生 + Agent 裁决回路 + 中文改写双路召回 + 运行期分库 | ✅ 通过验收 |
-| v0.1.2 | 门禁体系（四道 workflow）、issue→MR 强制流程、并发漏读根治 | ✅ 通过验收 |
-| v0.1.3 | 只读 Web UI「记忆观察台」（`memo serve`：今日变化 / 记忆图谱 / 卫生洞察） | ✅ 通过验收 |
-| v0.1.4 | SQLite FTS5 索引后端（`index.backend=sqlite`）+ curate 裁决任务包（`memo curate prompt/apply --file/status`） | 当前 |
-| v0.2（规划） | JudgePort 注入点、kind 注册表数据化、compact/物理清理、EmbeddingIndex、service 拆分 | 未开始 |
+| v0.1.x（`versions/v0.1`） | 核心记忆层（append-only 真相层 + 派生索引 + brief）、四条卫生路径、MCP/CLI、注入式评测 I1–I12、门禁体系 | 🔒 冻结在 0.1.2 |
+| **v0.2.0**（`versions/v0.2`） | 只读 Web 观察台（今日/图谱/卫生）+ SQLite FTS5 后端 + curate 裁决任务包 + 多分库浏览 + 图谱跟随分库 | ✅ 当前 |
+| v0.2.x 候选 | JudgePort 注入点、kind 注册表数据化、compact/物理清理、EmbeddingIndex、service 拆分 | 未开始 |
+
+版本目录规则：**大版本换目录（v0.1 → v0.2），小版本在同一目录内递增（0.2.0 → 0.2.1）**；
+老目录冻结并保留 `FROZEN.md`。指针在 `versions/CURRENT`。
 
 ## 许可
 

@@ -157,9 +157,14 @@ async function s8GitHistorySecrets() {
 // 前端只 fetch /api 相对路径、生成物不入库。
 async function s9DeploymentSurface() {
   const problems = [];
+  // 只审当前版本（versions/CURRENT）：冻结版本没有 Web 层，不该被当前部署面规则倒逼改动
+  const current = await fsp.readFile(path.join(ROOT, 'versions', 'CURRENT'), 'utf8').catch(() => '');
+  const name = current.trim();
   const versionsDir = path.join(ROOT, 'versions');
-  const versions = (await fsp.readdir(versionsDir, { withFileTypes: true }))
-    .filter((d) => d.isDirectory()).map((d) => path.join(versionsDir, d.name));
+  const versions = name
+    ? [path.join(versionsDir, name)]
+    : (await fsp.readdir(versionsDir, { withFileTypes: true }))
+      .filter((d) => d.isDirectory()).map((d) => path.join(versionsDir, d.name));
   for (const v of versions) {
     // 1) server.js 默认 host 必须是 127.0.0.1
     const serverPath = path.join(v, 'src', 'web', 'server.js');

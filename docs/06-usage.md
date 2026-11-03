@@ -56,14 +56,14 @@ memory_scope({action:'use', path:'/abs/path/to/project'})  # 切到项目分库�
 - **每次会话结束前**（Agent 自觉）：`memory_dedupe_scan` → 逐簇判定 → `memory_curate(apply)`。不确定就 `keep_both` 并在 `note` 里写理由——系统宁可并存，也不静默删。
 - **每天一次**（cron，不占会话时间）：
   ```cron
-  0 3 * * * cd /abs/path/to/memo/versions/v0.1 && /abs/path/to/node src/cli/nightly.js >> ~/.memo/nightly.log 2>&1
+  0 3 * * * cd /abs/path/to/memo/versions/v0.2 && /abs/path/to/node src/cli/nightly.js >> ~/.memo/nightly.log 2>&1
   ```
   nightly 做：TTL 过期、配额淘汰（墓碑打 `quota` tag）、hits 落盘、brief 重建写 `~/.memo/brief/<scope>.md`、metrics 快照，并打印去重候选簇摘要（**只报告不自动裁决**）。
 - **每周一眼**：`memory_stats` 的 `dupRatio`/`conflictRate` 上升 → 说明有人在重复写或事实在漂移，去看 `brief` 与 `dedupe_scan`。
 - **命令行等价物**（不想开 Agent 时）：
   ```bash
   NODE=${MEMO_NODE:-node}
-  cd strata/versions/v0.1
+  cd strata/versions/v0.2
   $NODE src/cli/memo.js brief
   $NODE src/cli/memo.js dedupe scan          # 可加 --threshold 0.45 --dice 0.15 --json
   $NODE src/cli/memo.js doctor
@@ -99,14 +99,14 @@ memory_scope({action:'use', path:'/abs/path/to/project'})  # 切到项目分库�
 3. 版本隔离：新版本放 `versions/vX.Y/`，旧版本保留可回滚；跨版本文档在 `docs/`。
 4. 每次发布跑：`node --test 'tests/**/*.test.js'`（95 项）+ `node eval/run.js`（I1–I11）+ `bash configs/verify-three-clients.sh`，三项全绿才算完。
 
-## 7. Web UI 怎么看（v0.1.3 起，只读观察台）
+## 7. Web UI 怎么看（v0.2.0 起，只读观察台）
 
 浏览器里看「今天记了什么 / 记忆长什么样 / 库健不健康」的只读三页。**只读、只绑本机 `127.0.0.1`**，没有任何写按钮（裁决 34 / 用户决策 D1）。
 
 ### 7.1 启动
 
 ```bash
-cd strata/versions/v0.1
+cd strata/versions/v0.2
 node src/cli/memo.js serve --port 7788     # 默认 127.0.0.1:7788；--no-ui 只提供 API
 ```
 
@@ -133,16 +133,16 @@ node src/cli/memo.js serve --port 7788     # 默认 127.0.0.1:7788；--no-ui 只
 | 现象 | 原因 / 处理 |
 |---|---|
 | 端口占用报错 | 换 `--port`；`lsof -i :7788` 查占用者。服务不自动递增端口 |
-| 打开是 404 / 提示 ui 缺失 | `versions/v0.1/ui/` 目录不完整（拷贝/打包时漏了）；补齐目录后刷新；`--no-ui` 模式下本来就不出页面，只给 `/api/*` |
+| 打开是 404 / 提示 ui 缺失 | `versions/v0.2/ui/` 目录不完整（拷贝/打包时漏了）；补齐目录后刷新；`--no-ui` 模式下本来就不出页面，只给 `/api/*` |
 | 页面数字和预期对不上 | 先看页眉 scope：**页面显示的是 `memo serve` 启动进程按 cwd 解析出的那个分库**（与 CLI 同规则）。scope 不对就到目标项目目录重新 `serve`，或设 `MEMO_SCOPE` 后再启动 |
 | 图谱某些节点没标签 | 标签防重叠跳过（见 `docs/08` §12 偏差 b）；点节点看详情即可 |
 
-## 8. 换检索后端（v0.1.4 起：memory | sqlite）
+## 8. 换检索后端（v0.2.0 起：memory | sqlite）
 
 默认内存倒排索引（BM25，纯 JS）。数据量大时可以切到 SQLite FTS5 后端，行为语义不变（同一套
 IndexPort 契约：同一 `tokenize()` 切词、同一排序与过滤约定）。
 
-**切换**：改 `versions/v0.1/config/policy.json`：
+**切换**：改 `versions/v0.2/config/policy.json`：
 
 ```json
 { "index": { "backend": "sqlite" } }
@@ -167,7 +167,7 @@ IndexPort 契约：同一 `tokenize()` 切词、同一排序与过滤约定）�
 把「候选 → 裁决 → 落盘」固定成三步，Agent 不用手工拼 JSON：
 
 ```bash
-cd strata/versions/v0.1
+cd strata/versions/v0.2
 node src/cli/memo.js curate prompt            # 1. 生成裁决任务包
 #    → $MEMO_HOME/curate/<batchId>.md（人读：裁决表 + 全文对照）
 #    → 同名 .json（机读：Agent 只回填这个，避免从 Markdown 反解析）

@@ -61,6 +61,18 @@ async function walk(dir, filter, out = []) {
 }
 
 const rel = (p) => path.relative(ROOT, p);
+
+/** 当前版本目录名（由 versions/CURRENT 决定）。Q2/Q3/Q5/Q9 只审「当前版本」：
+ *  冻结版本（v0.1）保留是为了可查，不该被当前门禁倒逼改动。 */
+let CURRENT = '';
+const currentVersionDir = () => path.join(ROOT, 'versions', CURRENT);
+
+/** 当前开发版本目录名（读 versions/CURRENT）。门禁关心的「当前版本」由这一个文件决定，
+ *  这样大版本换目录（v0.1 → v0.2）不需要改门禁代码，也不会误把冻结版本当成目标。 */
+async function readCurrentVersion() {
+  const raw = await fsp.readFile(path.join(ROOT, 'versions', 'CURRENT'), 'utf8').catch(() => '');
+  return raw.trim();
+}
 const readLines = async (p) => (await fsp.readFile(p, 'utf8')).split('\n');
 
 // ── Q1 零运行时依赖 ────────────────────────────────────────────────
@@ -93,7 +105,7 @@ async function q1ZeroDependencies() {
 
 // ── Q2 源码规模 ───────────────────────────────────────────────────
 async function q2SourceSize() {
-  const srcs = await walk(ROOT, (p) => /\/src\/.*\.js$/.test(p) && !p.includes('node_modules'));
+  const srcs = await walk(currentVersionDir(), (p) => /\/src\/.*\.js$/.test(p));
   if (srcs.length === 0) return record('Q2', '源码规模（单文件/总量）', false, ['未找到 src/**/*.js']);
   const problems = [];
   let total = 0;
@@ -117,7 +129,7 @@ async function q2SourceSize() {
 
 // ── Q3 测试规模 ───────────────────────────────────────────────────
 async function q3TestInventory() {
-  const tests = await walk(ROOT, (p) => /\/tests\/.*\.test\.js$/.test(p));
+  const tests = await walk(currentVersionDir(), (p) => /\/tests\/.*\.test\.js$/.test(p));
   const injections = tests.filter((p) => p.includes('/injection/'));
   const units = tests.filter((p) => p.includes('/unit/'));
   const problems = [];
@@ -132,7 +144,9 @@ async function q3TestInventory() {
 // ── Q4 评测用例与实际测试文件对齐 ──────────────────────────────────
 async function q4EvalAlignment() {
   const problems = [];
-  const runner = (await walk(ROOT, (p) => /\/eval\/run\.js$/.test(p)))[0];
+  const current = await readCurrentVersion();
+  const runnerPath = path.join(ROOT, 'versions', current, 'eval', 'run.js');
+  const runner = (await fsp.stat(runnerPath).catch(() => null)) ? runnerPath : (await walk(ROOT, (p) => /\/eval\/run\.js$/.test(p)))[0];
   if (!runner) return record('Q4', '评测用例 ↔ 注入测试对齐', false, ['未找到 eval/run.js']);
   const runnerText = await fsp.readFile(runner, 'utf8');
   const declared = [...runnerText.matchAll(/\[['"]([^'"]+)['"],\s*['"]([^'"]+\.test\.js)['"]\]/g)]
@@ -175,7 +189,7 @@ async function q5ContractCoverage() {
   const exempt = await loadContractExempt();
   const contractFiles = await walk(path.join(ROOT, 'docs'), (p) => p.endsWith('.md') && !p.includes('/research/'));
   const contractText = (await Promise.all(contractFiles.map((f) => fsp.readFile(f, 'utf8')))).join('\n');
-  const srcs = await walk(ROOT, (p) => /\/src\/.*\.js$/.test(p) && !p.includes('node_modules'));
+  const srcs = await walk(currentVersionDir(), (p) => /\/src\/.*\.js$/.test(p));
   const missing = [];
   let exempted = 0;
   const seen = new Set();
@@ -227,7 +241,10 @@ async function q7VersionIntegrity() {
   const versionsDir = path.join(ROOT, 'versions');
   const versions = (await fsp.readdir(versionsDir, { withFileTypes: true }))
     .filter((d) => d.isDirectory()).map((d) => d.name);
+  const current = await readCurrentVersion();
   if (versions.length === 0) problems.push('versions/ 下没有任何版本目录');
+  if (!current) problems.push('versions/CURRENT 缺失或为空（必须写明当前开发版本，如 v0.2）');
+  else if (!versions.includes(current)) problems.push(`versions/CURRENT 指向不存在的目录：${current}`);
   for (const v of versions) {
     const base = path.join(versionsDir, v);
     for (const required of ['src', 'tests', 'eval', 'config', 'docs/DELTA.md', 'CHANGELOG.md', 'package.json']) {
@@ -244,7 +261,7 @@ async function q7VersionIntegrity() {
       problems.push(`${v}: package.json ${pkg.version} ≠ CHANGELOG 最新段 ${firstVersion}`);
     }
   }
-  record('Q7', `版本自包含 + 版本号一致（${versions.join(', ')}）`, problems.length === 0, problems);
+  record('Q7', `版本自包含 + 版本号一致（当前 ${current || '?'}；目录 ${versions.join(', ')}）`, problems.length === 0, problems);
 }
 
 // ── Q8 文件编码卫生 ───────────────────────────────────────────────
@@ -283,7 +300,7 @@ async function versionDirs() {
 
 async function q9WebUiBoundary() {
   const problems = [];
-  const versions = await versionDirs();
+  const versions = [currentVersionDir()];
   let uiFiles = 0;
   for (const v of versions) {
     const uiDir = path.join(v, 'ui');
@@ -381,6 +398,8 @@ async function q9WebUiBoundary() {
   record('Q9', `Web UI 层边界（ui ${uiFiles} 文件：无越界 import/外链/innerHTML/eval，零构建 + 单文件≤600 行 + 总量≤2500 行，static 白名单）`,
     problems.length === 0, problems.slice(0, 12));
 }
+
+CURRENT = await readCurrentVersion();
 
 const CHECKS = [q1ZeroDependencies, q2SourceSize, q3TestInventory, q4EvalAlignment,
   q5ContractCoverage, q6DocLinks, q7VersionIntegrity, q8Encoding, q9WebUiBoundary];
