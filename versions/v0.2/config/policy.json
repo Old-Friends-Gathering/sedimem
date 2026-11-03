@@ -1,0 +1,48 @@
+{
+  "version": "0.1.0",
+  "halfLifeMs": {
+    "pref": 15552000000,
+    "decision": 31536000000,
+    "fact": 7776000000,
+    "gotcha": 31536000000,
+    "state": 7200000
+  },
+  "kindWeight": {
+    "pref": 1.3,
+    "decision": 1.4,
+    "gotcha": 1.2,
+    "fact": 1.0,
+    "state": 0.6
+  },
+  "quota": {
+    "maxActive": 5000
+  },
+  "search": {
+    "limitDefault": 10,
+    "kindWeighted": true,
+    "recencyHalflifeMs": 7776000000
+  },
+  "curate": {
+    "batchLimit": 20,
+    "similarityThreshold": 0.85
+  },
+  "brief": {
+    "lines": 80,
+    "recentCount": 15
+  },
+  "suspiciousPatterns": [
+    "忽略之前",
+    "ignore previous",
+    "ignore all previous",
+    "system prompt",
+    "把 ~/.ssh"
+  ],
+  "dedupe": {
+    "nearDupThreshold": 0.85,
+    "scanThreshold": 0.45,
+    "scanDiceThreshold": 0.15
+  },
+  "index": {
+    "backend": "memory"
+  }
+}

@@ -1,5 +1,5 @@
 // web/static.js — ui/ 静态资源服务（契约：docs/02 §3.9 裁决 34、docs/08 §7）
-// 只从 versions/v0.1/ui/ 读取；路径穿越（..、绝对路径、软链接）一律 404；
+// 只从 versions/v0.2/ui/ 读取；路径穿越（..、绝对路径、软链接）一律 404；
 // 禁止目录列表；ui 目录缺失时降级为 404 而不是崩溃（C/D 路并行开发期兼容）。
 
 import fsp from 'node:fs/promises';

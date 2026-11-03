@@ -3,6 +3,7 @@
 // 用法：node eval/run.js [--json] [--suite all|injection|metrics|bench]
 import { spawn } from 'node:child_process';
 import { readFileSync, writeFileSync, mkdirSync, mkdtempSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
 import { join, dirname, relative } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 
@@ -74,11 +75,6 @@ const CASE_FILES = [
   ['I10', 'i10-suspicious-read.test.js'],
   ['I11', 'i11-agent-judge.test.js'],
   ['I12', 'i12-cjk-dedupe.test.js'],
-  ['I13', 'i13-static-security.test.js'],
-  ['I14', 'i14-cross-section.test.js'],
-  ['I15', 'i15-live-refresh.test.js'],
-  ['I16', 'i16-index-parity.test.js'],
-  ['I17', 'i17-curate-loop.test.js'],
 ];
 
 function runCase(id, file) {

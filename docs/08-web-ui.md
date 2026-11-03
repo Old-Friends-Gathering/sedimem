@@ -213,7 +213,7 @@ async exportRecords({ since, until, status = 'active', kind, limit = 2000 } = {}
 > 8. **Q9 阈值落地**（S3）：零构建 + 单文件 ≤600 + 总量 ≤2500 真正实现；为此把 `ui/graph.js` 拆成 `ui/layout.js`（纯布局）+ `ui/graph.js`（渲染交互）（裁决 43）；`// q9-allow` 必须带理由（B6）。
 > 9. **契约登记**（S4）：`read-only.js` / `paths.js` / `mask.js` 的导出与私有耦合写入 `docs/02 §3.11`，Q5 覆盖率 98.3%。
 
-三页与 7 个端点按 §4–§7 实现（`versions/v0.1/src/web/{server,handlers,static}.js` + `versions/v0.1/ui/`，CLI 子命令 `memo serve`）。以下三处与本文设计不一致，均已冻结为 `docs/02` §3.10 裁决 35–38，冲突时以 02 为准：
+三页与 7 个端点按 §4–§7 实现（`versions/v0.2/src/web/{server,handlers,static}.js` + `versions/v0.2/ui/`，CLI 子命令 `memo serve`）。以下三处与本文设计不一致，均已冻结为 `docs/02` §3.10 裁决 35–38，冲突时以 02 为准：
 
 1. **图谱 same-entity 边改为时间链（裁决 35）**：§5.2 原描述「同一 subject 两两连边」在全连时是 O(n²) 且视觉上不可读（17 节点 136 条重叠边）。实现改为按 `createdAt` 升序只连相邻两条，表达同一实体的时间序列。
 2. **图谱节点标签做了防重叠跳过**：标签绘制前做包围盒碰撞检测，重叠时只画部分标签（缩放到 `scale ≥ 0.45` 且不重叠才画）。语义仍全部由服务端 label 承载（裁决 37），被跳过的标签点节点看详情兜底——这是绘制层的取舍，不是数据缺失。
@@ -237,7 +237,7 @@ async exportRecords({ since, until, status = 'active', kind, limit = 2000 } = {}
 服务端按 scope 懒建 `MemoryService` 并缓存（`Map<scope, service>`），`close()` 时统一关闭；
 未列出的分库也可以直接用 `?scope=` 访问（只要名字合法），列表只是 UI 的便利。
 
-**图谱页也必须跟随（v0.1.6，issue #25）**：`initGraph({..., scope})` 会把 scope 拼进
+**图谱页也必须跟随（v0.2.0，issue #25）**：`initGraph({..., scope})` 会把 scope 拼进
 `/api/graph?limit=300&days=90&scope=...`；`#/graph?scope=x` 的路由解析只取 path 部分（否则
 `graph?scope=x` 不匹配 ROUTES 会回落成 today 页）；同一路由下分库变化时 `loadGraph()` 先
 `destroy()` 再重建，避免复用旧实例继续画老库。

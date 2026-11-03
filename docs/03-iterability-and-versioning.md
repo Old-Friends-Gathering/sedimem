@@ -20,6 +20,12 @@ v0.1 刻意用最笨的实现（纯 JS 倒排索引、规则化裁决、无 embe
 ## 3. 版本策略
 
 - 目录：`versions/vX.Y/`，**每个版本自包含**（自己的 src/tests/eval/CHANGELOG/ACCEPTANCE）。跨版本只共享 `docs/`、`eval/cases/` 的**思想**，不共享代码路径。
+- **升降级规则（硬约定）**：**大版本换目录，小版本在同一目录内递增**。即 `0.2.0 → 0.2.7` 全在 `versions/v0.2/`；
+  开 `v0.3` 才建 `versions/v0.3/`。老大版本目录**冻结**（只读 + `FROZEN.md`），不再接受改动、不再随 CI 跑。
+- `versions/CURRENT` 是唯一「当前版本」指针（内容形如 `v0.2`）。CI、门禁、文档里的路径都从它推出来，
+  禁止在脚本里硬编码版本目录名——否则下次换目录又要改一圈。
+- 门禁按版本收敛：Q2 源码规模 / Q3 测试清单 / Q5 契约覆盖 / Q9 Web 边界 / S9 部署面 **只审 CURRENT**；
+  Q1 零依赖、Q6 文档链接、Q8 编码卫生对全仓生效；Q7 额外校验 CURRENT 有效且每个版本目录自包含。
 - 兼容：`MEMO_HOME` 布局与 `MemoryRecord.version` 是**跨版本承诺**。schema 变更必须：新字段可缺省 + 写在 `docs/adr-*.md` + 提供 `memo migrate` 路径。
 - 真相层永不迁移破坏性：新版本必须能读旧版 `items/*.jsonl`（只加字段，不改语义）。
 - `eval/results/` 每次跑留下 `vX.Y-<时间戳>.json`，版本间对比写进 `versions/vX.Y/docs/COMPARE.md`。
@@ -38,7 +44,7 @@ v0.1 刻意用最笨的实现（纯 JS 倒排索引、规则化裁决、无 embe
 
 ## 5. v0.1 → v0.2 的候选路线（按价值排序）
 
-0. **`metrics` 修复 + 只读查询方法**（v0.1.3 补丁，**前置**）：metrics 按 scope 分文件（现 `metrics/<date>.json` 多分库同日互相覆盖，趋势图会缺数据）；新增 `service.events()` / `service.exportRecords()`。见 [`08-web-ui.md`](08-web-ui.md) §6。
+0. **`metrics` 修复 + 只读查询方法**（v0.2.0 已完成，**前置**）：metrics 按 scope 分文件（现 `metrics/<date>.json` 多分库同日互相覆盖，趋势图会缺数据）；新增 `service.events()` / `service.exportRecords()`。见 [`08-web-ui.md`](08-web-ui.md) §6。
 1. **只读 Web UI（记忆观察台）** —— 用户 2026-11-02 提出，v0.2 核心交付：三页分别回答「今天变了什么」「这些记忆是什么关系」「库在变健康还是变脏」。零依赖零构建、只读、只绑回环。规格见 [`08-web-ui.md`](08-web-ui.md)，线框图见 [`ui-mockup.html`](ui-mockup.html)。
 2. **`sqlite-index.js`**：FTS5 + WAL，5k 条以上检索延迟收益明显；同时验证 IndexPort 是否真的可换。——**已完成（v0.2.1-A，见 [`09-sqlite-index.md`](09-sqlite-index.md)）**：`config/policy.json` 的 `index.backend=memory|sqlite` 切换，回滚 = 改回 `memory` 一条配置。
 3. **curate 裁决 prompt + Agent 调用器**：把「导出批次 → Agent 判断 → 回写」跑成一条命令（`memo curate auto`）；Web UI 的「待裁决」区就是它的观察面。——**已完成（v0.2.1-B，见 [`10-curate-auto.md`](10-curate-auto.md)）**：落地为 `memo curate prompt`（生成任务包）→ Agent 回填 `decisions` → `memo curate apply --file` → `memo curate status` 三步；单命令 `auto`（含自动 LLM 裁决）仍留给 `JudgePort`。
@@ -47,8 +53,8 @@ v0.1 刻意用最笨的实现（纯 JS 倒排索引、规则化裁决、无 embe
 6. **hybrid 检索**：仅当 `stale_hit_rate` 或召回失败率有实测痛点时才做。
 
 > **扩展点验证结论（v0.2.1 实测）**：IndexPort 真的只在一处注入就能换后端——`src/api/service.js` 只改了
-> import（`versions/v0.1/src/api/service.js:10`）+ 一行 `createIndex({...})` 调用
-> （`versions/v0.1/src/api/service.js:53`），无任何 `if (impl === 'sqlite')` 分支散落；
+> import（`versions/v0.2/src/api/service.js:10`）+ 一行 `createIndex({...})` 调用
+> （`versions/v0.2/src/api/service.js:53`），无任何 `if (impl === 'sqlite')` 分支散落；
 > 两种后端同一批查询结果对齐见 `docs/09` 与 `tests/unit/sqlite-index.test.js`。
 
 > 为什么 Web UI 排第一：不是因为"好看"，而是**没有观察面时卫生指标只是数字**——`dup_ratio` 涨了却看不出是哪几条在重复。它把 v0.1 已有的数据（events / metrics / dedupeScan）变成可诊断的界面；其它候选的收益判断都依赖它。
@@ -58,5 +64,5 @@ v0.1 刻意用最笨的实现（纯 JS 倒排索引、规则化裁决、无 embe
 这是与「代码可优化」不同的第二件事：
 
 - 记忆库的健康度用**指标**驱动（`dup_ratio` / `conflict_rate` / `stale_hit_rate` / `unit_cost`），每次整合写一份快照到 `metrics/<date>.json`，形成时间序列。优化决策看趋势，不看单点。
-- 库的**结构**也可演化：`kind` 取值、`HALF_LIFE_MS`、`kindWeight`、批大小、配额都是数据（配置），不是代码常量。v0.1 用 `versions/v0.1/config/policy.json` 承载，允许 A/B。
+- 库的**结构**也可演化：`kind` 取值、`HALF_LIFE_MS`、`kindWeight`、批大小、配额都是数据（配置），不是代码常量。v0.1 用 `versions/v0.2/config/policy.json` 承载，允许 A/B。
 - 任何自动整合都必须**可回放**：`events.jsonl` 记录每个决定，`memo replay --since` 能重建当时的视图，用于回答「为什么这条被忘了」。

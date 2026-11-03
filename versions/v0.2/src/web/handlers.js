@@ -90,7 +90,7 @@ function parseDateArg(query, { required = false, fallback } = {}) {
   return raw;
 }
 
-/** 版本号：读 versions/v0.1/package.json 的 version（只读一次，缓存）。 */
+/** 版本号：读 versions/v0.2/package.json 的 version（只读一次，缓存）。 */
 let cachedVersion = null;
 function appVersion() {
   if (cachedVersion) return cachedVersion;

@@ -38,6 +38,7 @@ console.log('brief/ exists:', existsSync(join(home, 'brief')));
 console.log('index/ exists:', existsSync(join(home, 'index')));
 
 // 删除所有派生层：queue / metrics / events（保留 items）
+import { rmdirSync, unlinkSync } from 'node:fs';
 rmSync(join(home, 'queue'), { recursive: true, force: true });
 rmSync(join(home, 'metrics'), { recursive: true, force: true });
 rmSync(join(home, 'events.jsonl'), { force: true });

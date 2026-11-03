@@ -25,7 +25,7 @@ Closes #
 
 ## 验证证据
 
-- [ ] `node --test 'tests/**/*.test.js'`（在 `versions/v0.1/` 下）全绿：__ 个用例
+- [ ] `node --test 'tests/**/*.test.js'`（在 `versions/v0.2/` 下）全绿：__ 个用例
 - [ ] `node eval/run.js` I1–I12 全 PASS，关键指标：dupRatio=__ conflictRate=__
 - [ ] `node tools/quality-check.mjs` 8/8
 - [ ] `node tools/security-check.mjs` 8/8

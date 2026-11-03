@@ -2,21 +2,19 @@
 // 编排层：不含策略细节。策略来自 hygiene/* 与 config/policy.json。
 
 import { systemClock } from '../core/clock.js';
-import { queryEvents, queryExportRecords } from './read-only.js';
 import { createRecord, validateRecord, withPatch } from '../core/record.js';
 import { resolveScope } from '../core/scope.js';
 import { JsonlStore } from '../storage/jsonl-store.js';
 import { withLock } from '../storage/lock.js';
-import { createIndex } from '../index/create-index.js';
+import { InvertedIndex } from '../index/inverted-index.js';
 import { decideWrite } from '../hygiene/write-gate.js';
 import { monotonicDecay, clusterNearDuplicates } from '../hygiene/conflict.js';
-import { isExpired } from '../hygiene/decay.js';
+import { expiryFor, isExpired } from '../hygiene/decay.js';
 import { QuotaPolicy } from '../hygiene/quota.js';
 import { CurateQueue } from '../hygiene/curate.js';
 import { detectSuspicious } from '../hygiene/suspicious.js';
 import { renderBrief } from '../render/brief.js';
 import { defaultPolicy as POLICY } from '../config/policy.js';
-import { maskSuspiciousRecord } from './mask.js';
 
 function invalid(msg) {
   const err = new Error(msg);
@@ -44,13 +42,12 @@ export async function createMemoryService({
   store, index, quota,
 } = {}) {
   if (!memoHome) throw invalid('createMemoryService: memoHome is required');
-  const resolvedScope = scope ?? resolveScope({ cwd, env: process.env }).scope;
   const service = new MemoryService({
     memoHome,
-    scope: resolvedScope,
+    scope: scope ?? resolveScope({ cwd, env: process.env }).scope,
     clock,
     store: store ?? new JsonlStore({ memoHome }),
-    index: index ?? createIndex({ policy: POLICY, memoHome, scope: resolvedScope, clock }),
+    index: index ?? new InvertedIndex({ clock }),
     quota: quota ?? new QuotaPolicy({}),
   });
   await service._init();
@@ -122,25 +119,6 @@ export class MemoryService {
    * 增量重读真相层尾部并 fold 进内存索引/_records（裁决 13）。
    * 必须在 scope 锁临界区内调用（写路径由 write() 保证）。
    */
-  /**
-   * 读路径刷新（裁决 39）：常驻进程不写库，_records 会冻结；只读查询前调用，按水位增量重读。
-   * 并发调用共享同一在途刷新（_refreshPromise），避免重复消费同一批行。
-   * @returns {Promise<object[]>} 本次新增的记录快照
-   */
-  async refreshView() {
-    this._ensureOpen();
-    if (!this._refreshPromise) {
-      this._refreshPromise = (async () => {
-        try {
-          return await this._refreshIncremental();
-        } finally {
-          this._refreshPromise = null;
-        }
-      })();
-    }
-    return this._refreshPromise;
-  }
-
   async _refreshIncremental() {
     const size = await this.store.fileSize(this.scope);
     if (size < this._readOffset) {
@@ -409,9 +387,10 @@ export class MemoryService {
     };
   }
 
-  /** 裁决 16/42：遮蔽实现见 api/mask.js（四个正文字段一起遮，避免 payload 换字段绕过） */
+  /** 裁决 16：suspicious 记录默认不返回正文（text 替换占位），显式 include 才给原文 */
   _maskSuspicious(r, includeSuspicious) {
-    return maskSuspiciousRecord(r, includeSuspicious);
+    if (includeSuspicious || !(Array.isArray(r.tags) && r.tags.includes('suspicious'))) return r;
+    return { ...r, text: '[suspicious withheld]' };
   }
 
   _withExtraHits(r) {
@@ -873,16 +852,6 @@ export class MemoryService {
         })),
     }));
     return { clusters: top, totalClusters, scanned: records.length, threshold, diceThreshold, mode };
-  }
-
-  /** 裁决 30：只读事件查询（实现搬到 api/read-only.js，Q2 行数预算） */
-  async events(args = {}) {
-    return queryEvents(this, args);
-  }
-
-  /** 裁决 30：只读记录导出（实现搬到 api/read-only.js） */
-  async exportRecords(args = {}) {
-    return queryExportRecords(this, args);
   }
 
   /** 裁决 21：close 不吞错——flushHits 失败原样上抛（hits 增量已在 flushHits 内恢复） */

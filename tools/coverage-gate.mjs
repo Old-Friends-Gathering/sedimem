@@ -5,7 +5,7 @@
 // 直接 grep 容易在列宽/版本变化时假通过。这里显式解析 `all files | l | b | f` 行并做区间校验。
 //
 // 用法：node tools/coverage-gate.mjs [--min-lines 85] [--min-branches 70] [--min-functions 90]
-// 统计范围：versions/v0.1 的 src/ 与 tools/ 被导入的代码；ui/**（浏览器代码）显式排除，
+// 统计范围：versions/CURRENT 指向版本的 src/ 与 tools/ 被导入的代码；ui/**（浏览器代码）显式排除，
 // 其回归由 I13/I14 注入用例承担（见 docs/07 第三节）。
 
 import { execFile } from 'node:child_process';
