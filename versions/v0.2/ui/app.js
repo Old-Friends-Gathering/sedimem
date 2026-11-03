@@ -273,12 +273,16 @@ function renderCandidates(box, clusters) {
   }
   list.forEach((cl, i) => {
     const card = el('div', 'cluster');
-    const members = Array.isArray(cl.members) ? cl.members : [];
+    // dedupeScan 的簇用 items（契约 §3.3）；members 只是兼容旧形状。
+    // 标题条数优先用 size —— items 可能被服务端按 limit 裁过，count 会骗人。
+    const members = Array.isArray(cl.members) ? cl.members : (Array.isArray(cl.items) ? cl.items : []);
     const pairs = Array.isArray(cl.pairs) ? cl.pairs : [];
-    card.append(el('h4', '', `簇 #${i + 1} · ${members.length} 条`));
+    const total = Number.isFinite(Number(cl.size)) ? Number(cl.size) : members.length;
+    card.append(el('h4', '', `簇 #${i + 1} · ${total} 条`));
     if (cl.slot) card.append(el('div', 'm', `slot: ${cl.slot}`));
     for (const m of members) {
-      const label = typeof m === 'string' ? m : (m.label ?? m.id ?? '');
+      const raw = typeof m === 'string' ? m : (m.label ?? m.text ?? m.id ?? '');
+      const label = raw.length > 72 ? `${raw.slice(0, 72)}…` : raw;
       card.append(el('div', 'member', `· ${label}`));
     }
     for (const p of pairs) {

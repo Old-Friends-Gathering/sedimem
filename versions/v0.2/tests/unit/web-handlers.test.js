@@ -226,3 +226,25 @@ test('readMetrics：只有旧名时能读到；新旧都没有返回 null', asyn
   // 都没有 → null（换一个不存在的日期即可，目录里没有对应文件）
   assert.equal(await readMetrics(memoHome, SCOPE, '2026-01-01'), null);
 });
+
+test('hygiene 候选簇：payload 只有 items 时仍能给出条数与成员（issue #30）', async (t) => {
+  const memoHome = fs.mkdtempSync(path.join(os.tmpdir(), 'memo-wh-cand-'));
+  t.after(() => fs.rmSync(memoHome, { recursive: true, force: true }));
+  const service = await createMemoryService({ memoHome, scope: SCOPE });
+  t.after(() => service.close());
+
+  // 两条中文改写：containment 抓不到但汉字二元组能召回 → 必然成簇
+  await writeRec(service, { subject: 'text', predicate: 'text', text: '去重阈值只用来找候选，最终判决交给正在跑的 Agent' });
+  await writeRec(service, { subject: 'text', predicate: 'text', text: '去重的阈值只负责召回候选，不该由它做判决，判决交给 Agent' });
+
+  const web = await createWebServer({ memoHome, scope: SCOPE, port: 0, includeUi: false, service });
+  t.after(() => new Promise((resolve) => web.server.close(resolve)));
+
+  const r = await (await fetch(`${web.url}api/hygiene`)).json();
+  assert.equal(r.ok, true);
+  assert.ok(Array.isArray(r.candidates) && r.candidates.length >= 1, '应有候选簇');
+  const cl = r.candidates[0];
+  assert.ok(Array.isArray(cl.items) && cl.items.length === 2, '簇里应带 items（UI 渲染依赖它）');
+  assert.equal(cl.size, 2, 'size 必须等于簇内条数');
+  assert.ok(cl.items.every((it) => typeof it.text === 'string' && it.text.length > 0), 'items 应带 text 供 UI 显示');
+});
