@@ -146,9 +146,16 @@ async function q4EvalAlignment() {
   const problems = [];
   const current = await readCurrentVersion();
   const runnerPath = path.join(ROOT, 'versions', current, 'eval', 'run.js');
-  const runner = (await fsp.stat(runnerPath).catch(() => null)) ? runnerPath : (await walk(ROOT, (p) => /\/eval\/run\.js$/.test(p)))[0];
-  if (!runner) return record('Q4', '评测用例 ↔ 注入测试对齐', false, ['未找到 eval/run.js']);
-  const runnerText = await fsp.readFile(runner, 'utf8');
+  // 先读、失败再回退：避免「先 stat 再 read」的 TOCTOU（js/file-system-race）
+  let runner = runnerPath;
+  let runnerText;
+  try {
+    runnerText = await fsp.readFile(runnerPath, 'utf8');
+  } catch {
+    runner = (await walk(ROOT, (p) => /\/eval\/run\.js$/.test(p)))[0];
+    if (!runner) return record('Q4', '评测用例 ↔ 注入测试对齐', false, ['未找到 eval/run.js']);
+    runnerText = await fsp.readFile(runner, 'utf8');
+  }
   const declared = [...runnerText.matchAll(/\[['"]([^'"]+)['"],\s*['"]([^'"]+\.test\.js)['"]\]/g)]
     .map((m) => ({ id: m[1], file: m[2] }));
   if (declared.length === 0) problems.push('eval/run.js 的 CASE_FILES 解析为空（格式需为 [["I1","i1-*.test.js"], ...]）');
@@ -165,8 +172,8 @@ async function q4EvalAlignment() {
   const casesDir = path.join(path.dirname(runner), 'cases');
   const seedRefs = [...runnerText.matchAll(/join\(CASES_DIR,\s*['"]([^'"]+\.json)['"]\)/g)].map((m) => m[1]);
   for (const name of new Set(seedRefs)) {
-    const st = await fsp.stat(path.join(casesDir, name)).catch(() => null);
-    if (!st) problems.push(`eval/cases/${name} 被 run.js 引用但不存在`);
+    const exists = await fsp.readFile(path.join(casesDir, name), 'utf8').then(() => true, () => false);
+    if (!exists) problems.push(`eval/cases/${name} 被 run.js 引用但不存在`);
   }
   record('Q4', `评测用例对齐（${declared.length} 个 I 用例的注入测试 + ${new Set(seedRefs).size} 份数据种子）`,
     problems.length === 0, problems);
