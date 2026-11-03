@@ -376,6 +376,8 @@ function renderDoctor(box, doctor, suspicious) {
 
 let graphApi = null; // { destroy() }
 
+let graphScope;
+
 async function loadGraph() {
   const toolbar = document.getElementById('graph-toolbar');
   const canvas = document.getElementById('graph-canvas');
@@ -390,13 +392,18 @@ async function loadGraph() {
     detail.append(hint);
     return;
   }
-  if (graphApi) return; // 已初始化：canvas/toolbar/detail 由 graph.js 接管
-  graphApi = await mod.initGraph({ canvas, detailEl: detail, toolbarEl: toolbar, apiBase: API });
+  // 同一路由下换分库要重建实例：图谱数据是按 scope 拉的，复用旧实例会一直显示老库
+  const scope = currentScope();
+  if (graphApi && graphScope === scope) return; // 已初始化且分库未变：canvas/toolbar/detail 由 graph.js 接管
+  destroyGraph();
+  graphScope = scope;
+  graphApi = await mod.initGraph({ canvas, detailEl: detail, toolbarEl: toolbar, apiBase: API, scope });
 }
 
 function destroyGraph() {
   if (graphApi && typeof graphApi.destroy === 'function') graphApi.destroy();
   graphApi = null;
+  graphScope = undefined;
 }
 
 /* ---------------- 路由 ---------------- */
@@ -404,7 +411,8 @@ function destroyGraph() {
 const ROUTES = ['today', 'graph', 'hygiene'];
 
 function currentRoute() {
-  const h = location.hash.replace(/^#\/?/, '');
+  // 只取 path 部分：`#/graph?scope=repo:x` 的路由是 graph，不是 "graph?scope=repo:x"
+  const h = location.hash.replace(/^#\/?/, '').split('?')[0];
   return ROUTES.includes(h) ? h : 'today';
 }
 

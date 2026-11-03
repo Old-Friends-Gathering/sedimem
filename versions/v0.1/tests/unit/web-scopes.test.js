@@ -16,7 +16,8 @@ function seedScope(memoHome, scope, texts) {
   const dir = join(memoHome, 'items');
   mkdirSync(dir, { recursive: true });
   const lines = texts.map((text, i) => JSON.stringify({
-    id: `01M6${String(i).padStart(20, '0')}`,
+    // id 必须跨分库唯一，否则「两库节点不混」这条断言会被测试数据自己污染
+    id: `01M6${scope.replace(/[^a-z0-9]/gi, '').slice(0, 8).padEnd(8, '0').toUpperCase()}${String(i).padStart(12, '0')}`,
     kind: 'fact',
     text,
     status: 'active',
@@ -88,6 +89,30 @@ describe('web/server ?scope=', () => {
         assert.equal(res.status, 400, `${bad} 应被拒绝`);
         assert.equal(res.body.code, 'E_INVALID_ARG');
       }
+    } finally {
+      if (web) await web.close();
+      rmSync(home, { recursive: true, force: true });
+    }
+  });
+});
+
+describe('web/api 按 scope 取数（issue #25）', () => {
+  test('/api/graph?scope= 只返回该分库的节点', async () => {
+    const home = mkdtempSync(join(tmpdir(), 'memo-scope-graph-'));
+    seedScope(home, 'repo:ga', ['alpha one', 'alpha two']);
+    seedScope(home, 'repo:gb', ['beta one']);
+    let web;
+    try {
+      web = await createWebServer({ memoHome: home, scope: 'repo:ga', includeUi: false, port: 0 });
+      const get = async (suffix) => (await fetch(new URL(suffix, web.url))).json();
+
+      const a = await get('api/graph?scope=repo:ga');
+      const b = await get('api/graph?scope=repo:gb');
+      assert.equal(a.nodes.length, 2, 'ga 应有 2 个节点');
+      assert.equal(b.nodes.length, 1, 'gb 应有 1 个节点');
+      // 交叉验证：gb 的节点 id 不得出现在 ga 里
+      const aIds = new Set(a.nodes.map((n) => n.id));
+      assert.ok(b.nodes.every((n) => !aIds.has(n.id)), '两个分库的节点集不能混');
     } finally {
       if (web) await web.close();
       rmSync(home, { recursive: true, force: true });
