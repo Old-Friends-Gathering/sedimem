@@ -237,5 +237,10 @@ async exportRecords({ since, until, status = 'active', kind, limit = 2000 } = {}
 服务端按 scope 懒建 `MemoryService` 并缓存（`Map<scope, service>`），`close()` 时统一关闭；
 未列出的分库也可以直接用 `?scope=` 访问（只要名字合法），列表只是 UI 的便利。
 
+**图谱页也必须跟随（v0.1.6，issue #25）**：`initGraph({..., scope})` 会把 scope 拼进
+`/api/graph?limit=300&days=90&scope=...`；`#/graph?scope=x` 的路由解析只取 path 部分（否则
+`graph?scope=x` 不匹配 ROUTES 会回落成 today 页）；同一路由下分库变化时 `loadGraph()` 先
+`destroy()` 再重建，避免复用旧实例继续画老库。
+
 **为什么不做「跨分库聚合视图」**：分库的意义是隔离（不同项目的事实不该互相污染）；一个混在一起的
 "全部分库" 页面会立刻把 scope 隔离的价值抹掉。要看别的项目就切过去看。

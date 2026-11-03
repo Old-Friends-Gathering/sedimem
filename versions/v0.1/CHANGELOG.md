@@ -1,5 +1,22 @@
 # CHANGELOG · v0.1
 
+## [0.1.6] - 2026-11-03（图谱跟随分库）
+
+### Fixed
+
+- `ui/graph.js` 自己发 `/api/graph` 请求时**没带 scope** → 顶栏切了分库，图谱还是启动分库的图。
+  现在 `initGraph({..., scope})` 把 scope 拼进查询串。
+- `ui/app.js` 的 `currentRoute()` 用 `hash.replace(/^#\/?/, '')` 解析，`#/graph?scope=repo:x`
+  被解析成 `graph?scope=repo:x` → 不匹配 ROUTES → **回落成 today 页**。改为只取 path 部分。
+- `loadGraph()` 里 `if (graphApi) return`：同一路由下换分库直接复用旧实例。现在记住 `graphScope`，
+  scope 变了就 destroy → 重新 init。
+- 测试时区助手自己的 bug：`todayInTz()` 用「减偏移」，只在 UTC 16:00–24:00（CST 00:00–08:00）暴露
+  → 上午跑 CI 就会红。改成「加偏移」，并在注释里写清为什么。
+
+### Tests
+
+- `tests/unit/web-scopes.test.js` 增 1 项：`/api/graph?scope=` 只回该分库节点、两库节点集不混。
+
 ## [0.1.5] - 2026-11-02（观察台多分库浏览）
 
 ### Added

@@ -27,7 +27,7 @@ const EDGE_STYLE = {
   'disputed-with': { color: '#ef4444', dash: [2, 4], width: 1.25 },
 };
 
-export async function initGraph({ canvas, detailEl, toolbarEl, apiBase = '/api' }) {
+export async function initGraph({ canvas, detailEl, toolbarEl, apiBase = '/api', scope = '' }) {
   const ctx = canvas.getContext('2d');
   const state = {
     nodes: [],
@@ -61,7 +61,10 @@ export async function initGraph({ canvas, detailEl, toolbarEl, apiBase = '/api' 
   /* ---------- 数据加载 ---------- */
   let loadError = null;
   try {
-    const res = await fetch(`${apiBase}/graph?limit=300&days=90`);
+    // 分库必须跟着顶栏走，否则切了分库图谱还是老库（issue #25）
+    const q = new URLSearchParams({ limit: '300', days: '90' });
+    if (scope) q.set('scope', scope);
+    const res = await fetch(`${apiBase}/graph?${q.toString()}`);
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     const data = await res.json();
     state.nodes = Array.isArray(data.nodes) ? data.nodes : [];

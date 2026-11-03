@@ -15,8 +15,10 @@ import { scopeKeyOf } from '../../src/config/paths.js';
 
 const SCOPE = 'dir:test-web-handlers';
 
+/** 「东为正」的时区下的今天。服务端窗口是 [date 00:00 本地, +24h)，所以要把 now **加上**偏移再取日期；
+ * 早先写成减偏移，只有在 UTC 16:00–24:00（CST 00:00–08:00）才会暴露——今天上午就撞上了。 */
 function todayInTz(tzOffsetMinutes) {
-  return new Date(Date.now() - tzOffsetMinutes * 60000).toISOString().slice(0, 10);
+  return new Date(Date.now() + tzOffsetMinutes * 60000).toISOString().slice(0, 10);
 }
 
 async function writeRec(service, { subject, predicate, value, text, kind = 'fact' }) {
