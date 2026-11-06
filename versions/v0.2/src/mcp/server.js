@@ -5,6 +5,7 @@
  * 入口层：只做 JSON-RPC 编解码与参数透传，业务全部委托 MemoryService。
  */
 import process from 'node:process';
+import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
 import readline from 'node:readline';
@@ -33,7 +34,20 @@ const INSTRUCTIONS =
   '裁决用 memory_curate(action="apply", decisions=[{ids:[pairs[].aId, pairs[].bId], decision:"a_wins|b_wins|merge|keep_both", note}])；' +
   '若走 memory_curate(action="export") 的批次，则改用 {pairIndex, decision, note} 并带 batchId。' +
   '同簇 merge 是**非破坏**的（败者 superseded 且真相层保留），所以宁判勿漏。这是本记忆系统自我迭代的主通道。';
-const SERVER_INFO = { name: 'memo', version: '0.1.1' };
+/**
+ * serverInfo.version 从 package.json 读，别写死（issue #41）：
+ * 这个字段是客户端确认「我加载的是哪一版服务」的唯一手段，
+ * 写死过一次 0.1.1 就落后了四个版本，排查时反而误导人。
+ */
+const SERVER_INFO = (() => {
+  const fallback = '0.2.1';
+  try {
+    const pkg = JSON.parse(readFileSync(new URL('../../package.json', import.meta.url), 'utf8'));
+    return { name: 'memo', version: String(pkg.version ?? fallback) };
+  } catch {
+    return { name: 'memo', version: fallback };
+  }
+})();
 
 function rpcResult(id, result) {
   return { jsonrpc: '2.0', id, result };
