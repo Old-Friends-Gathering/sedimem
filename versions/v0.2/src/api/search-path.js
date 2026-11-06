@@ -7,7 +7,7 @@ import { validateRecord, withPatch } from '../core/record.js';
 import { monotonicDecay } from '../hygiene/conflict.js';
 import { isExpired } from '../hygiene/decay.js';
 import { renderBrief } from '../render/brief.js';
-import { defaultPolicy as POLICY } from '../config/policy.js';
+import { defaultPolicy as POLICY, kindMeta } from '../config/policy.js';
 import { maskSuspiciousRecord } from './mask.js';
 // 错误工厂从 service.js 反向引用（错误文本被测试断言，必须单一来源）。
 import { invalid, invalidArg } from './service.js';
@@ -81,7 +81,9 @@ export async function searchRecords(svc, query, {
   for (const { id, score } of hits) {
     const rec = pickedById.get(id);
     if (!rec) continue;
-    const kw = POLICY.kindWeight[rec.kind] ?? 1.0;
+    // 裁决 49：kind 的唯一真相是 policy.kinds（kindMeta 内部 kinds 优先、旧 kindWeight 兜底），
+    // 这里不能再直接读 POLICY.kindWeight —— 否则新加的 kind 会静默按 1.0 计权。
+    const kw = kindMeta(POLICY, rec.kind)?.weight ?? 1.0;
     const ageMs = Math.max(0, nowMs - Date.parse(rec.createdAt));
     const decay = monotonicDecay(ageMs, halfLife);
     const final = score * kw * decay * (typeof rec.confidence === 'number' ? rec.confidence : 0.8);

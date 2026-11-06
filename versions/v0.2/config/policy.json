@@ -22,7 +22,8 @@
     "state": 0.6
   },
   "quota": {
-    "maxActive": 5000
+    "maxActive": 5000,
+    "purgeGraceMs": 604800000
   },
   "search": {
     "limitDefault": 10,

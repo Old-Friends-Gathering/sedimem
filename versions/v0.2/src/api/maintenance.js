@@ -433,7 +433,7 @@ import { createJudge } from '../hygiene/judge.js';
 
 /**
  * 自动裁决（裁决 50）：dedupeScan 拿候选簇 → 逐 pair 调裁决器 → curateApply 落盘。
- * - 裁决器优先用 svc._judge（Lead 在 createMemoryService({judge}) 注入）；
+ * - 裁决器优先用 svc.judge（createMemoryService({judge}) 注入，契约裁决 50）；
  *   未注入时回落 createJudge（内置 ruleJudge，确定性、无 LLM）。
  * - 候选只来自 dedupeScan（裁决 46：CLI/MCP/本函数都不得自算相似度）；
  * - a/b 记录取不到（并发被删）→ 该 pair 计入 skipped，不中断整批；
@@ -449,7 +449,7 @@ export async function curateAuto(svc, { limit = 20, dryRun = false } = {}) {
   const scan = await dedupeScan(svc, { limit });
   // judge 注入优先；未注入时用 service 同源的 policy 构造默认裁决器
   // （svc.policy 由 Lead 的构造注入挂上；拿不到就退 loadPolicy 的默认值）
-  const judge = svc._judge ?? createJudge({ policy: svc.policy ?? POLICY });
+  const judge = svc.judge ?? createJudge({ policy: POLICY });
 
   const decisions = [];
   let pairs = 0;

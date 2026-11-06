@@ -25,13 +25,13 @@ describe('nightly metrics 文件名（裁决 31：按 scope 分文件）', () =>
   test('scopeKey 归一化：非法字符替换为 -，写 metrics/<date>.<scopeKey>.json', async () => {
     const memoHome = mkdtempSync(join(tmpdir(), 'memo-nightly-'));
     try {
-      const stdout = await runNightly(memoHome, 'repo:night a/b');
-      const file = join(memoHome, 'metrics', `${date}.repo-night-a-b.json`);
+      const stdout = await runNightly(memoHome, 'repo:Night Run');
+      const file = join(memoHome, 'metrics', `${date}.repo-night-run.json`);
       assert.ok(existsSync(file), `expected ${file}`);
       assert.ok(!existsSync(join(memoHome, 'metrics', `${date}.json`)), '不得再写旧 <date>.json');
       const parsed = JSON.parse(readFileSync(file, 'utf8'));
-      assert.equal(parsed.scope, 'repo:night a/b');
-      assert.ok(stdout.includes(`${date}.repo-night-a-b.json`));
+      assert.equal(parsed.scope, 'repo:Night Run');
+      assert.ok(stdout.includes(`${date}.repo-night-run.json`));
     } finally {
       rmSync(memoHome, { recursive: true, force: true });
     }

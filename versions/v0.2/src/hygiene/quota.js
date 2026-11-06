@@ -28,7 +28,15 @@ export class QuotaPolicy {
       throw err;
     }
     this.maxActive = maxActive;
-    this.kindWeight = kindWeight ?? POLICY?.kindWeight ?? { pref: 1.3, decision: 1.4, gotcha: 1.2, fact: 1.0, state: 0.6 };
+    // 裁决 49：缺省权重来自 policy.kinds（kinds 优先、旧 kindWeight 兜底）；显式注入仍然优先（测试用）。
+    // 这里不用 config/policy.js 的 kindMeta：本模块刻意保留「policy.js 不可用也能跑」的动态加载兜底，
+    // 因此只吃已加载好的 POLICY 对象，不引入额外静态依赖。
+    const kindsTable = POLICY?.kinds ?? {};
+    this.kindWeight = kindWeight ?? Object.fromEntries(
+      Object.entries(kindsTable).length > 0
+        ? Object.entries(kindsTable).map(([k, meta]) => [k, Number(meta?.weight) || 1.0])
+        : Object.entries(POLICY?.kindWeight ?? {}).map(([k, w]) => [k, Number(w) || 1.0]),
+    );
     this.recencyHalfLifeMs =
       recencyHalfLifeMs ?? POLICY?.search?.recencyHalflifeMs ?? 7776000000;
   }

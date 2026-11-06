@@ -99,6 +99,11 @@ export async function supersedeRecord(svc, { oldId, value, text, source, reason 
   svc._ensureOpen();
   const old = svc._records.get(oldId);
   if (!old) throw notFound(`supersede: record ${oldId} not found`);
+  // 墓碑是「已删除」的终态：允许 supersede 会把它改回 superseded 并新建 active，
+  // 等于用一次普通写操作把 purge 语义打断（对抗审核实测过）。要恢复就重新 write 一条新记录。
+  if (old.status === 'tombstoned') {
+    throw invalid(`supersede: record ${oldId} is tombstoned（已删除的记录不可取代，请直接写新记录）`);
+  }
   const body = text ?? value;
   const record = createRecord({
     text: body,

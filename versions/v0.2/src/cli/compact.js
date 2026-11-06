@@ -43,7 +43,8 @@ export function parseGraceMs(value) {
 export async function compactCli(service, opts = {}) {
   const dryRun = opts.dryRun === true || opts['dry-run'] === true;
   const asJson = opts.json === true;
-  const graceMs = parseGraceMs(opts.grace);
+  // 未显式给 --grace 时不传 purgeGraceMs，让 maintenance 走 policy.quota.purgeGraceMs（契约裁决 51）
+  const graceMs = opts.grace === undefined ? undefined : parseGraceMs(opts.grace);
 
   const { compact } = await import('../api/maintenance.js');
   const result = await compact(service, { dryRun, purgeGraceMs: graceMs });

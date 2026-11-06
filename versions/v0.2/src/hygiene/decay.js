@@ -14,16 +14,22 @@ async function loadPolicySafe() {
     const url = new URL('../../config/policy.json', import.meta.url);
     policy = JSON.parse(readFileSync(url, 'utf8'));
   }
-  if (!policy || typeof policy.halfLifeMs !== 'object' || policy.halfLifeMs === null) {
-    const err = new Error('decay: policy.halfLifeMs missing');
+  if (!policy || typeof policy.kinds !== 'object' || policy.kinds === null) {
+    const err = new Error('decay: policy.kinds missing（v0.2.1 起 kind 的唯一真相是 policy.kinds）');
     err.code = 'E_POLICY';
     throw err;
   }
   return policy;
 }
 
-/** @type {{pref:number, decision:number, fact:number, gotcha:number, state:number}} */
-export const HALF_LIFE_MS = (await loadPolicySafe()).halfLifeMs;
+/**
+ * 半衰期表：由 policy.kinds 派生（裁决 49——kind 是数据）。
+ * 保留同名导出是因为它是既有模块契约的一部分（测试与 hygiene 都引用 HALF_LIFE_MS）。
+ * @type {Record<string, number>}
+ */
+export const HALF_LIFE_MS = Object.fromEntries(
+  Object.entries((await loadPolicySafe()).kinds).map(([k, meta]) => [k, meta.halfLifeMs]),
+);
 
 /**
  * state 类返回 nowMs + halfLife（ISO）；其余 kind 返回 null（靠整合期标记，不设 TTL）。

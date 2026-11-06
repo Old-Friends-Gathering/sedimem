@@ -5,6 +5,19 @@ import path from 'node:path';
 import fsp from 'node:fs/promises';
 import { withLock } from './lock.js';
 
+/**
+ * scope → 文件名安全校验：只挡真正危险的东西（路径分隔符 / NUL / 前导点 / 超长），
+ * 不限制大小写与空格——真实项目目录名带空格（`dir:my project`）是合法输入，
+ * 卡成白名单只会把一个「安全加固」变成「用户装不上」。
+ */
+export function isSafeScopeName(scope) {
+  if (typeof scope !== 'string') return false;
+  if (scope.length === 0 || scope.length > 128) return false;
+  if (scope.includes('/') || scope.includes('\\') || scope.includes('\u0000')) return false;
+  if (scope.startsWith('.')) return false; // `.` / `..` / 隐藏文件形状一律拒
+  return true;
+}
+
 export class JsonlStore {
   /** @param {{memoHome: string}} opts */
   constructor({ memoHome }) {
@@ -18,7 +31,23 @@ export class JsonlStore {
     this.eventsPath = path.join(memoHome, 'events.jsonl');
   }
 
+  /**
+   * scope 是文件名的一部分，必须挡住路径穿越（`../x`、`a/b`）。
+   * 对抗审核实测：不校验时 rewriteScope("../ESCAPED") 会把备份写到 items/ 之外，
+   * 一次 `MEMO_SCOPE=../x` 的笔误就能把库写散。
+   * @param {string} scope
+   * @returns {string}
+   */
   _scopePath(scope) {
+    if (!isSafeScopeName(scope)) {
+      const err = new Error(`invalid scope for storage: ${JSON.stringify(scope)}（不得含路径分隔符、不得以 . 开头、长度 ≤128）`);
+      err.code = 'E_INVALID_ARG';
+      throw err;
+    }
+    return this._rawScopePath(scope);
+  }
+
+  _rawScopePath(scope) {
     return path.join(this.itemsDir, `${scope}.jsonl`);
   }
 
@@ -177,14 +206,10 @@ export class JsonlStore {
         throw e;
       }
 
-      // 备份：先清更早的 .bak.*（只保留最新一份），再复制当前文件
-      const bakPrefix = path.basename(file) + '.bak.';
-      for (const f of await fsp.readdir(this.itemsDir)) {
-        if (f.startsWith(bakPrefix)) {
-          await fsp.rm(path.join(this.itemsDir, f), { force: true });
-        }
-      }
+      // 备份：**先写新备份**，等 rename 成功后再清旧备份。
+      // 反过来（先删后写）会在 copyFile 失败时把唯一一份备份也弄丢——审计审核 B2。
       // 时间戳里的 `:` / `.` 在部分文件系统非法，替换成 `-`
+      const bakPrefix = path.basename(file) + '.bak.';
       const stamp = new Date().toISOString().replace(/[:.]/g, '-');
       const backupPath = `${file}.bak.${stamp}`;
       await fsp.copyFile(file, backupPath);
@@ -205,6 +230,12 @@ export class JsonlStore {
         if (fh) await fh.close().catch(() => {});
         await fsp.rm(tmp, { force: true });
         throw e;
+      }
+      // rename 已成功：现在才清掉更早的 .bak.*，只保留刚写的那一份
+      for (const f of await fsp.readdir(this.itemsDir)) {
+        if (f.startsWith(bakPrefix) && path.join(this.itemsDir, f) !== backupPath) {
+          await fsp.rm(path.join(this.itemsDir, f), { force: true });
+        }
       }
       return { before, after, backupPath };
     });

@@ -338,7 +338,7 @@ async function cmdCurate(sub, positional, opts, asJson) {
     const service = await loadService();
     try {
       await curate.curateAutoCli(service, {
-        limit: parseNumber(opts, 'limit'), dryRun: opts['dry-run'] === true, asJson,
+        limit: parseNumber(opts, 'limit'), dryRun: opts['dry-run'] === true, json: asJson,
       });
     } finally {
       await service.close();
@@ -617,7 +617,8 @@ async function main() {
       const { compactCli } = await import('./compact.js');
       const service = await loadService();
       try {
-        await compactCli(service, { dryRun: opts['dry-run'] === true, grace: opts.grace ?? '7d', asJson });
+        // grace 不写死 7d：交给 policy.quota.purgeGraceMs（契约裁决 51），CLI 只透传用户显式值
+        await compactCli(service, { dryRun: opts['dry-run'] === true, grace: opts.grace, json: asJson });
       } finally {
         await service.close();
       }

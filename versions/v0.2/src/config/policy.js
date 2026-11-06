@@ -41,8 +41,12 @@ function validateKinds(policy) {
   // 颜色必须是 #rrggbb（六位十六进制），canvas 与 CSS 都能直接吃这个形状
   const colorRe = /^#[0-9a-fA-F]{6}$/;
   for (const [kind, meta] of Object.entries(kinds)) {
+    // Number.isFinite 而不是 `> 0`：后者会放过 "1.3" 这种字符串（JS 比较会隐式转数字），
+    // 于是 policy 里一个引号写错，排序权重就变成字符串参与运算 → 静默 NaN。
     if (!meta || typeof meta !== 'object'
-      || !(meta.halfLifeMs > 0) || !(meta.weight > 0) || !colorRe.test(String(meta.color))) {
+      || !Number.isFinite(meta.halfLifeMs) || meta.halfLifeMs <= 0
+      || !Number.isFinite(meta.weight) || meta.weight <= 0
+      || !colorRe.test(String(meta.color))) {
       const err = new Error(`policy: kinds.${kind} must be {halfLifeMs>0, weight>0, color:#rrggbb}, got ${JSON.stringify(meta)}`);
       err.code = 'E_POLICY';
       throw err;

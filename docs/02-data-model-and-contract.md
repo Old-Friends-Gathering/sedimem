@@ -607,3 +607,17 @@ await svc.exportRecords({ since, until, status = 'active', kind, limit = 2000 })
 
 nightly metrics 新增 `searchCount` / `noHitRate` / `staleHitRate` / `avgTopScore`；**分母为 0 时写 `null`**——
 「没有数据」与「命中率 0%」是两回事，混用会让趋势图说谎。
+
+### 裁决 53：v0.2.1 双审核后的四处加固（2026-11-06）
+
+| 问题（审核来源） | 处置 | 守它的测试 |
+|---|---|---|
+| 注入的 JudgePort 被静默忽略（`maintenance.js` 读 `svc._judge`，`service.js` 只设 `this.judge`） | 统一读 `svc.judge`；注入即生效 | `tests/unit/v021-hardening.test.js` 的「JudgePort：注入的裁决器必须真的被用」 |
+| kind 只做了「清单数据化」，衰减/权重仍读旧 `halfLifeMs`/`kindWeight` 段（两份真相） | `search-path` 走 `kindMeta`；`quota` 从 `POLICY.kinds` 派生默认权重；`decay` 的 `HALF_LIFE_MS` 由 `kinds` 派生 | 同文件「kinds 是唯一真相」 |
+| `--json` 旗标名不一致（CLI 传 `asJson`、实现读 `json`），两个新子命令都不出 JSON | 统一传 `json`；`compactCli` 的 grace 缺省改为不传（走 `policy.quota.purgeGraceMs`） | 同文件「CLI --json 真的输出 JSON」 |
+| scope 直接拼文件名，`MEMO_SCOPE=../x` 可把真相层写出 `items/` 之外 | `JsonlStore` 加 `isSafeScopeName()`：禁路径分隔符 / NUL / 前导点 / 超长；**不限制空格与大小写**（`dir:my project` 是合法目录名） | 同文件「scope 文件名安全」 |
+
+附带：`rewriteScope` 的备份改为「先写新备份 → rename 成功 → 再删旧」，避免 copyFile 失败时连唯一备份也丢；
+`supersede` 拒绝 `tombstoned` 记录（否则一次普通写就能把 purge 语义打断）；
+`validateKinds` 用 `Number.isFinite`（`"1.3"` 这类字符串不再静默通过）；
+`policy.json` 补 `quota.purgeGraceMs = 604800000`，让裁决 51 的字面承诺成立。

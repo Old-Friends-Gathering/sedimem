@@ -27,6 +27,20 @@
   **I20**（指标口径与 null≠0）；eval 扩到 I1–I20，全 PASS。
 - 修掉 `--dry-run` 失效的真 bug：CLI 的 `parseArgs` 存的是 `dry-run`（连字符），旧代码读 `opts.dryRun` 永远 undefined。
 
+### 双审核后的加固（2026-11-06）
+
+架构 + 对抗两路审核（glm-5.3）各报严重项，逐条修掉并补了守它们的测试：
+
+| 问题 | 处置 |
+|---|---|
+| 注入的 `judge` 被静默忽略（读 `svc._judge`，实际只设了 `svc.judge`） | 统一读 `svc.judge`，并补「注入即生效」单测 |
+| kind 只做了清单数据化，权重/半衰期仍读旧段（两份真相） | `search-path` 走 `kindMeta`、`quota` 与 `decay` 从 `policy.kinds` 派生 |
+| `--json` 两个新子命令都不出 JSON（键名 `asJson` vs `json`） | 统一键名；顺带让 compact 的 grace 缺省走 policy |
+| scope 直接拼文件名，`MEMO_SCOPE=../x` 能把库写出 items/ | `isSafeScopeName()`：禁分隔符/NUL/前导点，但保留空格与大小写 |
+| 备份「先删旧再写新」的空窗 | 改成先写新备份、rename 成功后再删旧 |
+| `supersede` 能复活墓碑，打断 purge 语义 | 墓碑一律拒绝取代 |
+| `validateKinds` 放过 `"1.3"` 字符串 | 改 `Number.isFinite` |
+
 ### 契约
 
 `docs/02` 新增 §3.13 裁决 48–52（拆分不改语义 / kind 是数据 / 默认裁决器必须确定性 / 只有 compact 能物理删 /
