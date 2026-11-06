@@ -365,6 +365,7 @@ Claude Code / Codex 每次会话按**项目 cwd** 解析。结果：同一项目
 |---|---|---|
 | `migrateDshMemory` | `src/cli/migrate-dsh-memory.js` | 从 dsh-memory 的 SQLite 一次性迁移，CLI 子命令内部实现 |
 | `loadPolicy` / `defaultPolicy` | `src/config/policy.js` | 策略唯一加载点与冻结默认值；对外的"契约"是 `config/policy.json` 的键 |
+| `kindNames` / `kindMeta` / `kindColor` / `FALLBACK_KIND_COLOR` | `src/config/policy.js` | kind 注册表数据化（issue #33）后的读取函数：kind 清单 / 单 kind 三类元数据（优先 `policy.kinds`，回落旧 `halfLifeMs`+`kindWeight` 段）/ 展示色（未知 kind 回落兜底色）；`record.js` 用 `kindNames` 判合法 kind |
 | `dedupeSlotKey` / `clusterNearDuplicates` | `src/hygiene/conflict.js` | `service.dedupeScan` 的候选簇实现；对外契约是 `dedupeScan` 的返回形状（裁决 22） |
 | `normalizeForMatch` / `detectSuspicious` / `isSuspicious` | `src/hygiene/suspicious.js` | 投毒检测；对外契约只有"读路径默认遮蔽"语义（裁决 16） |
 | `SCOPE_PATTERN` / `scopeFilePath` / `readScopeOverride` / `writeScopeOverride` / `initScopeState` / `resolveUseTarget` | `src/mcp/scope-state.js` | `memory_scope` 工具的纯函数实现；对外契约是工具语义（裁决 28） |
@@ -555,3 +556,68 @@ await svc.exportRecords({ since, until, status = 'active', kind, limit = 2000 })
 | `src/core/record.js` | `AGENT_PATTERN` | 裁决 47 的唯一身份正则 |
 | `src/core/record.js` | `RESERVED_AGENTS` | 裁决 47 的保留名集合 |
 | `src/web/scopes.js` | `listScopes(memoHome, currentScope)` | 分库发现：读 `items/*.jsonl`，只承认过 `SCOPE_PATTERN` 的名字（docs/08 §13） |
+
+## 3.13 v0.2.1 契约（拆分 / kind 数据化 / 裁决器 / 压实 / 检索指标）
+
+### 裁决 48：`service.js` 拆分是「只搬不改语义」
+
+`src/api/service.js` 从 898 行拆成「类 + 薄委托」+ 四个承接模块，**`MemoryService` 的公开方法集合、签名、返回形状、错误码一律不变**。
+承接模块导出「以 service 为第一参数的函数」，属于内部实现，不是新的对外 API：
+
+| 导出 | 位置 | 说明 |
+|---|---|---|
+| `initService` / `reloadService` / `refreshView` / `refreshIncremental` / `ensureOpen` / `appendEvent` / `commitRecord` / `closeService` | `src/api/lifecycle.js` | 生命周期与提交 |
+| `writeRecord` / `supersedeRecord` / `forgetRecord` / `enforceQuotaNow` / `enforceQuotaPrivate` / `applyQuotaEviction` | `src/api/write-path.js` | 写入路径（`enforceQuotaNow` 公开、`enforceQuotaPrivate` 供内部淘汰调用） |
+| `searchRecords` / `maskSuspicious` / `withExtraHits` / `flushHitCounter` / `getRecord` / `briefRecords` / `statusOk` | `src/api/search-path.js` | 检索与读路径 |
+| `statsOf` / `reindexAll` / `doctorReport` / `parseCorruptLocation` / `corruptIssue` / `curateExport` / `curateApply` / `commitPairVerdict` / `applyIdsDecision` / `dedupeScanOf` | `src/api/maintenance.js` | 维护与裁决 |
+| `invalid` / `notFound` / `invalidArg` | `src/api/service.js` | 三个错误工厂，四模块共用（唯一权威） |
+
+**判据**：`Object.getOwnPropertyNames(MemoryService.prototype)` 在拆分前后必须集合相等（CI 里由 `tests/unit/service-facade.test.js` 守住）。
+
+### 裁决 49：`kind` 是数据，不是代码
+
+- 唯一真相：`config/policy.json` 的 `kinds` 段，每项 `{halfLifeMs, weight, color}`；旧的 `halfLifeMs` / `kindWeight` 两段只作向后兼容读取。
+- 新增 kind = **只改 `config/policy.json`**，`src/` 与 `ui/` 零改动；未登记的 kind 在 `createRecord` 处即 `E_INVALID_RECORD`。
+- `kindNames/kindMeta/kindColor` 是读取函数（`src/config/policy.js`）；`record.js` 不再持有清单。
+- UI 的 kind 配色从 `/api/summary` 的 `policy.kinds[*].color` 取，未知 kind 回落兜底色。
+
+### 裁决 50：`JudgePort` 的默认实现必须确定性、无 LLM
+
+`createJudge({policy})` 返回 `{name, decide({pair, a, b}) → {decision, note}}`；
+内置 `ruleJudge`：`pair.strength === 'strong'` 且 `a`/`b` 同 slot → `hits` 高者胜（相等则保留更早的 `createdAt`）；其余一律 `keep_both`。
+自定义裁决器只能通过 `createMemoryService({judge})` 注入，不得读环境变量。
+`service.curateAuto({limit, dryRun})` = `dedupeScan → 逐 pair 判 → curateApply`，复用既有幂等键与 V1–V5 校验；
+每条决策的 `note` 必须写明依据（形如 `rule:strong+hits`），且**只做非破坏决策**（merge/supersede 的败者仍可 as-of 回查）。
+
+### 裁决 51：只有 `compact` 会物理删除，且必须三重条件
+
+`service.compact({dryRun, purgeGraceMs})` 只删除满足全部三条的记录：
+① `status === 'tombstoned'`；② `tags` 含 `purge`；③ `validTo` 早于 `now - purgeGraceMs`（默认 `policy.quota.purgeGraceMs = 7d`）。
+- 普通墓碑（不带 `purge`）保留，as-of 仍可回查；
+- 压实走 `JsonlStore.rewriteScope(scope, transform)`：写 `<file>.tmp` → `fsync` → `rename` 原子替换，替换前备份 `<file>.bak.<ts>`（只保留最近一份）；
+- `events.jsonl` **永不删**（审计面），因此「为什么这条被删」永远可查；
+- `memo forget --purge` 必须给墓碑打 `purge` 标签（否则 compact 永远删不掉它）。
+
+### 裁决 52：检索健康指标的口径与「null ≠ 0」
+
+`service.search()` 每次调用追加一条 `search` 事件，`detail = {hits, topScore, staleHits, qHash}`：
+- `qHash` = query 的 sha256 前 12 位；**不存 query 原文**（真相层不是查询日志）；
+- `staleHits` = 命中里 `status !== 'active'` 或已过期（`isExpired`）的条数；
+- 事件走与 `hit` 相同的批量 flush 通道，不逐条 fsync。
+
+nightly metrics 新增 `searchCount` / `noHitRate` / `staleHitRate` / `avgTopScore`；**分母为 0 时写 `null`**——
+「没有数据」与「命中率 0%」是两回事，混用会让趋势图说谎。
+
+### 裁决 53：v0.2.1 双审核后的四处加固（2026-11-06）
+
+| 问题（审核来源） | 处置 | 守它的测试 |
+|---|---|---|
+| 注入的 JudgePort 被静默忽略（`maintenance.js` 读 `svc._judge`，`service.js` 只设 `this.judge`） | 统一读 `svc.judge`；注入即生效 | `tests/unit/v021-hardening.test.js` 的「JudgePort：注入的裁决器必须真的被用」 |
+| kind 只做了「清单数据化」，衰减/权重仍读旧 `halfLifeMs`/`kindWeight` 段（两份真相） | `search-path` 走 `kindMeta`；`quota` 从 `POLICY.kinds` 派生默认权重；`decay` 的 `HALF_LIFE_MS` 由 `kinds` 派生 | 同文件「kinds 是唯一真相」 |
+| `--json` 旗标名不一致（CLI 传 `asJson`、实现读 `json`），两个新子命令都不出 JSON | 统一传 `json`；`compactCli` 的 grace 缺省改为不传（走 `policy.quota.purgeGraceMs`） | 同文件「CLI --json 真的输出 JSON」 |
+| scope 直接拼文件名，`MEMO_SCOPE=../x` 可把真相层写出 `items/` 之外 | `JsonlStore` 加 `isSafeScopeName()`：禁路径分隔符 / NUL / 前导点 / 超长；**不限制空格与大小写**（`dir:my project` 是合法目录名） | 同文件「scope 文件名安全」 |
+
+附带：`rewriteScope` 的备份改为「先写新备份 → rename 成功 → 再删旧」，避免 copyFile 失败时连唯一备份也丢；
+`supersede` 拒绝 `tombstoned` 记录（否则一次普通写就能把 purge 语义打断）；
+`validateKinds` 用 `Number.isFinite`（`"1.3"` 这类字符串不再静默通过）；
+`policy.json` 补 `quota.purgeGraceMs = 604800000`，让裁决 51 的字面承诺成立。

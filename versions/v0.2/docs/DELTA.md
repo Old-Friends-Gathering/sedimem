@@ -112,10 +112,18 @@ v0.2.1 的两个能力（代码合入本版）：**A) 检索后端可换**（`in
 | 多进程并发写 sqlite 索引 | 与真相层「同一 scope 单写者」约定一致；不做跨进程写并发 |
 | `MEMO_INDEX` 环境变量 | 切换收敛到 `policy.json` 的 `index.backend` 一处；有第二配置源需求再加 |
 
-### v0.2.2 入口
+### v0.2.1（已交付，2026-11-06）
 
-1. **修 I16**：`tests/injection/i16-index-parity.test.js:75` 的 service 检索命中断言当前红（sqlite 后端下 `search('连接池')` 返回两条但断言未过），先让它回绿再谈其它。
-2. **Q5 契约覆盖补登记**：curate.js 7 个导出、`createIndex`、`buildMatchExpr`/`SqliteIndex` 等登记进 `docs/02` §3.x（当前 86.3% < 90%）。
-3. **`memo curate auto`**：任务包生成 → Agent 裁决 → apply 一条命令跑完（依赖 JudgePort 或会话内 Agent 协议）。
-4. `MEMO_INDEX` 环境变量（覆盖 policy，CI/一次性会话用）。
-5. `hybrid-index.js`（BM25+dense，RRF k=60）：仅当检索失败率有实测数据。
+施工图见 `docs/plans/v0.2.1-plan.md`（对应 issue #32–#37）。本轮 5 个交付项**均为进行中 / v0.2.1 将提供**，未完成的不得写成已完成：
+
+1. **拆分 service**（[#32](https://github.com/Old-Friends-Gathering/strata/issues/32)）：`src/api/service.js` 拆为 lifecycle / write-path / search-path / maintenance 四个承接模块，主文件回落到 ≤320 行；只搬不改语义（`MemoryService` 仍是唯一对外类）。
+2. **kind 注册表数据化**（[#33](https://github.com/Old-Friends-Gathering/strata/issues/33)）：kind 清单从代码迁到 `config/policy.json`，新增 kind 只改配置、代码零改动。
+3. **JudgePort + `memo curate auto`**（[#34](https://github.com/Old-Friends-Gathering/strata/issues/34)）：确定性规则 judge（默认无 LLM）+ 一条命令跑完 scan→判→apply，幂等。
+4. **compact 物理清理**（[#35](https://github.com/Old-Friends-Gathering/strata/issues/35)）：墓碑 + `purge` 标签 + 超 grace 才物理删；原子替换 + 自动备份，events 永不删。
+5. **检索健康指标**（[#36](https://github.com/Old-Friends-Gathering/strata/issues/36)）：metrics 新增 `searchCount` / `noHitRate` / `staleHitRate` / `avgTopScore`，无数据写 `null`；不存 query 原文。
+
+仍在候选池（本轮不做）：
+
+- `hybrid-index.js`（BM25+dense，RRF k=60）：仅当 #36 的检索指标暴露实测痛点时启动。
+- `EmbeddingIndex`：与向量/语义检索的非目标一致，等词法检索被证明不够再上。
+- `MEMO_INDEX` 环境变量：切换已收敛到 `policy.json` 的 `index.backend` 一处；等出现第二配置源需求再加。

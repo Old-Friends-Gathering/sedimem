@@ -19,7 +19,11 @@
  * - sampled.shown < sampled.total 时画布右上角常驻「已采样 shown / total 条」。
  */
 
-/** kind → 基础色（docs §5.2 四色 + state 灰蓝） */
+/**
+ * kind → 基础色（docs §5.2 四色 + state 灰蓝）。
+ * issue #33 后降级为「兜底色表」：正式颜色以 /api/summary 返回的 policy.kinds 为准
+ * （kindColorsFromPolicy），本表只在接口缺 kinds / 未知 kind 时保底，保证画布永远有色可画。
+ */
 export const KIND_COLORS = Object.freeze({
   fact: '#5b9cf5',
   pref: '#c084fc',
@@ -27,6 +31,27 @@ export const KIND_COLORS = Object.freeze({
   gotcha: '#fbbf24',
   state: '#94a3b8',
 });
+
+/**
+ * 由 policy.kinds 生成 kind → 颜色映射（issue #33：颜色唯一真相随 policy 下发）。
+ * kinds 缺失或某 kind 缺色时回落 KIND_COLORS，视觉与数据化之前保持一致。
+ * @param {{kinds?: Record<string,{color?:string}>}} policy /api/summary 返回的 policy 对象
+ * @returns {Record<string,string>} 新建的普通对象（可自由覆写，不含 fallback 语义）
+ */
+export function kindColorsFromPolicy(policy) {
+  const colors = {};
+  const entries = policy?.kinds && typeof policy.kinds === 'object' ? policy.kinds : {};
+  // 先铺兜底表再允许 policy 覆盖：policy 只需给出差异项也能得到完整色表
+  for (const [k, v] of Object.entries(KIND_COLORS)) {
+    const c = typeof entries[k]?.color === 'string' && entries[k].color ? entries[k].color : v;
+    colors[k] = c;
+  }
+  // policy 新增的 kind（兜底表没有）也要带上，否则新 kind 节点画不出专属色
+  for (const [k, meta] of Object.entries(entries)) {
+    if (!(k in colors) && typeof meta?.color === 'string' && meta.color) colors[k] = meta.color;
+  }
+  return colors;
+}
 
 /** 默认开启的边类型（用户 2026-11-02 决策：默认只开两类） */
 export const DEFAULT_EDGE_TYPES = ['same-entity', 'supersedes'];

@@ -28,6 +28,8 @@ const USAGE = `memo —— 本地跨会话记忆系统 v0.1
   memo reindex
   memo curate export [--limit 20]
   memo curate prompt  [--limit N] [--json]              # 生成裁决任务包（docs/10）
+  memo curate auto    [--limit N] [--dry-run] [--json]   # 自动裁决（JudgePort，确定性无 LLM；裁决 50）
+  memo compact        [--dry-run] [--grace 7d] [--json]  # 物理清理：只删 purge+过期的墓碑（裁决 51）
   memo curate status                                  # 列出批次与进度
   memo curate apply   --file <任务包.json>              # 应用裁决（严格校验）
   memo curate apply <batchId> --decisions <file|->
@@ -331,6 +333,18 @@ async function cmdDedupe(sub, opts, asJson) {
  *  旧：`curate apply <batchId> --decisions <file|->`；新：`curate apply --file <pkg.json>`。 */
 async function cmdCurate(sub, positional, opts, asJson) {
   // 新增子命令走 src/cli/curate.js（任务包生成/状态/严格校验应用）
+  if (sub === 'auto') {
+    const curate = await import('./curate.js');
+    const service = await loadService();
+    try {
+      await curate.curateAutoCli(service, {
+        limit: parseNumber(opts, 'limit'), dryRun: opts['dry-run'] === true, json: asJson,
+      });
+    } finally {
+      await service.close();
+    }
+    return;
+  }
   if (sub === 'prompt' || sub === 'status' || (sub === 'apply' && opts.file !== undefined)) {
     const curate = await import('./curate.js');
     const service = await loadService();
@@ -599,6 +613,17 @@ async function main() {
     case 'dedupe':
       await cmdDedupe(positional[0], opts, asJson);
       return 0;
+    case 'compact': {
+      const { compactCli } = await import('./compact.js');
+      const service = await loadService();
+      try {
+        // grace 不写死 7d：交给 policy.quota.purgeGraceMs（契约裁决 51），CLI 只透传用户显式值
+        await compactCli(service, { dryRun: opts['dry-run'] === true, grace: opts.grace, json: asJson });
+      } finally {
+        await service.close();
+      }
+      return 0;
+    }
     case 'migrate':
       if (positional[0] !== 'dsh-memory') {
         throw new UsageError(`未知的 migrate 目标: ${positional[0] ?? '(空)'}\n${USAGE}`);

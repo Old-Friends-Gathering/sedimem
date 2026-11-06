@@ -191,3 +191,30 @@ node src/cli/memo.js curate status            # 看各批次进度（未开始/�
 - 任务包文件被删 → apply 报「未知批次」，重新 `curate prompt` 即可。
 - MCP 侧等价物仍是 `memory_dedupe_scan` + `memory_curate(apply)`（同一份 `service.dedupeScan()` /
   `service.curateApply()` 数据与语义，见 `docs/10` §5）。
+
+## 10. 自动裁决重复记忆（v0.2.1 起）
+
+```bash
+memo curate auto --dry-run          # 先看会怎么判，不落盘
+memo curate auto                    # 真跑：scan → 判 → apply，一条命令
+memo curate auto --json             # 机读
+```
+
+默认裁决器是 `ruleJudge`（确定性、无 LLM）：同 slot 且 `strength=strong` 时比 `hits` 高者胜，其余一律 `keep_both`——
+**宁漏不误杀**，因为误合并一次就要靠 as-of 回查才能发现。要换裁决器（例如接本地小模型），
+在代码里 `createMemoryService({ judge })` 注入即可，CLI 不读环境变量。
+
+## 11. 物理清理（v0.2.1 起）
+
+记忆默认只失效不删除。要让某些记录**真的消失**，两步：
+
+```bash
+memo forget <id> --purge --reason "..."   # 第一步：打 purge 标记（仍是墓碑，仍可 as-of 回查）
+memo compact --dry-run                    # 看会删几条、留几条、备份到哪
+memo compact                              # 真删（默认只删 validTo 早于 7 天前的）
+memo compact --grace 0                    # 立刻删（小心：不可回查）
+```
+
+`compact` 是**唯一**会物理删除的入口，且同时满足「墓碑 + purge 标签 + 超过 grace」三条才动；
+替换前自动备份 `<scope>.jsonl.bak.<ts>`（只留最近一份），`events.jsonl` 永不删——「为什么这条没了」永远查得到。
+

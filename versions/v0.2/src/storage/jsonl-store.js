@@ -5,6 +5,19 @@ import path from 'node:path';
 import fsp from 'node:fs/promises';
 import { withLock } from './lock.js';
 
+/**
+ * scope → 文件名安全校验：只挡真正危险的东西（路径分隔符 / NUL / 前导点 / 超长），
+ * 不限制大小写与空格——真实项目目录名带空格（`dir:my project`）是合法输入，
+ * 卡成白名单只会把一个「安全加固」变成「用户装不上」。
+ */
+export function isSafeScopeName(scope) {
+  if (typeof scope !== 'string') return false;
+  if (scope.length === 0 || scope.length > 128) return false;
+  if (scope.includes('/') || scope.includes('\\') || scope.includes('\u0000')) return false;
+  if (scope.startsWith('.')) return false; // `.` / `..` / 隐藏文件形状一律拒
+  return true;
+}
+
 export class JsonlStore {
   /** @param {{memoHome: string}} opts */
   constructor({ memoHome }) {
@@ -18,7 +31,23 @@ export class JsonlStore {
     this.eventsPath = path.join(memoHome, 'events.jsonl');
   }
 
+  /**
+   * scope 是文件名的一部分，必须挡住路径穿越（`../x`、`a/b`）。
+   * 对抗审核实测：不校验时 rewriteScope("../ESCAPED") 会把备份写到 items/ 之外，
+   * 一次 `MEMO_SCOPE=../x` 的笔误就能把库写散。
+   * @param {string} scope
+   * @returns {string}
+   */
   _scopePath(scope) {
+    if (!isSafeScopeName(scope)) {
+      const err = new Error(`invalid scope for storage: ${JSON.stringify(scope)}（不得含路径分隔符、不得以 . 开头、长度 ≤128）`);
+      err.code = 'E_INVALID_ARG';
+      throw err;
+    }
+    return this._rawScopePath(scope);
+  }
+
+  _rawScopePath(scope) {
     return path.join(this.itemsDir, `${scope}.jsonl`);
   }
 
@@ -145,6 +174,71 @@ export class JsonlStore {
       throw e;
     }
     return entries.filter((f) => f.endsWith('.jsonl')).map((f) => f.slice(0, -'.jsonl'.length)).sort();
+  }
+
+  /**
+   * 全量重写 items/<scope>.jsonl（compact 物理删除的唯一通道，契约 docs/02 §3.13 裁决 51）。
+   * 为什么这样设计：
+   * - 整个操作在 memoHome 锁临界区内完成（读 → transform → 备份 → 原子替换），
+   *   否则并发 append 会与重写竞争，丢失临界期内新写入的记录；
+   * - 替换前先备份 `<file>.bak.<ts>`（同目录），并清掉更早的 .bak.*（只保留最新一份，
+   *   防止反复 compact 把备份堆成无限增长的外部垃圾）；
+   * - 原子性靠「写 `<file>.tmp` → fh.sync() → rename」：rename 在同一目录内是原子的，
+   *   崩溃最坏情况是留下一个 .tmp（下次重写会覆盖）而不是半截 jsonl；
+   * - 异常时删 tmp 并抛原错，绝不把半成品静默留在 items 目录里。
+   * @param {string} scope
+   * @param {(records: MemoryRecord[]) => Promise<MemoryRecord[]> | MemoryRecord[]} transform
+   * @returns {Promise<{before: number, after: number, backupPath: string|null}>}
+   */
+  async rewriteScope(scope, transform) {
+    return withLock(this.memoHome, async () => {
+      const file = this._scopePath(scope);
+      const records = await this.loadScope(scope); // 临界区内只读，fold 后即当前真相
+      const records2 = await transform(records);
+      const before = records.length;
+      const after = records2.length;
+
+      // 原文件不存在（空 scope）→ 没有可破坏的内容，也不产生备份，直接返回
+      try {
+        await fsp.stat(file);
+      } catch (e) {
+        if (e.code === 'ENOENT') return { before, after, backupPath: null };
+        throw e;
+      }
+
+      // 备份：**先写新备份**，等 rename 成功后再清旧备份。
+      // 反过来（先删后写）会在 copyFile 失败时把唯一一份备份也弄丢——审计审核 B2。
+      // 时间戳里的 `:` / `.` 在部分文件系统非法，替换成 `-`
+      const bakPrefix = path.basename(file) + '.bak.';
+      const stamp = new Date().toISOString().replace(/[:.]/g, '-');
+      const backupPath = `${file}.bak.${stamp}`;
+      await fsp.copyFile(file, backupPath);
+
+      // 原子替换：tmp → fsync → rename；任何异常都清掉 tmp 再抛原错
+      const tmp = `${file}.tmp`;
+      let fh;
+      try {
+        fh = await fsp.open(tmp, 'w');
+        for (const r of records2) {
+          await fh.write(JSON.stringify(r) + '\n', 'utf8');
+        }
+        await fh.sync();
+        await fh.close();
+        fh = null;
+        await fsp.rename(tmp, file);
+      } catch (e) {
+        if (fh) await fh.close().catch(() => {});
+        await fsp.rm(tmp, { force: true });
+        throw e;
+      }
+      // rename 已成功：现在才清掉更早的 .bak.*，只保留刚写的那一份
+      for (const f of await fsp.readdir(this.itemsDir)) {
+        if (f.startsWith(bakPrefix) && path.join(this.itemsDir, f) !== backupPath) {
+          await fsp.rm(path.join(this.itemsDir, f), { force: true });
+        }
+      }
+      return { before, after, backupPath };
+    });
   }
 
   /** 审计事件：{ts, op, scope, id, detail} → events.jsonl */
