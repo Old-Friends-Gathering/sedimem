@@ -18,7 +18,7 @@ cd versions/v0.2 && node eval/run.js   # 行为（I1–I12）
 
 | 项 | 指标 | 阈值 | 失败含义 |
 |---|---|---|---|
-| `test (22)` / `test (24)` | `node --test 'tests/**/*.test.js'` | **0 失败**（2026-11-06 实测 187 用例） | 行为回归，或测试自身有竞态（历史上 I8 就因此偶发红，已修根因） |
+| `test (22)` / `test (24)` | `node --test 'tests/**/*.test.js'` | **0 失败**（2026-11-06 实测 214 用例） | 行为回归，或测试自身有竞态（历史上 I8 就因此偶发红，已修根因） |
 | `eval (I1–I12)` | `eval/run.js` 退出码 | **全 PASS** | 注入式行为契约破了：重复/冲突/过时/删除/投毒/配额/改写/并发/时区/遮蔽/裁决回路/中文改写 |
 | 关键指标 | `dupRatio` / `conflictRate` | `dupRatio = 0`；`conflictRate` 只允许由**真冲突用例**产生 | 冗余或冲突治理失效 |
 | 性能 | `bench n5000` search p95 | **< 50ms**（实测 1.9–2.4ms） | 索引退化（例如误改成 O(n) 扫描） |
@@ -90,12 +90,12 @@ cd versions/v0.2 && node eval/run.js   # 行为（I1–I12）
 
 | 门禁 | 结果 |
 |---|---|
-| 单元 + 注入式 | 187 tests / 187 pass（`node --test 'tests/**/*.test.js'`） |
+| 单元 + 注入式 | 214 tests / 214 pass（`node --test 'tests/**/*.test.js'`） |
 | 质量 | 9/9；Q5 契约覆盖 **100.0%**（75/75 导出，下限 90%）；Q2 源码 33 文件 / **6503 行**（上限 8000） |
 | 覆盖率 | 见 `quality-report.json` / coverage-gate 输出（阈值不变：lines ≥ 85% / branches ≥ 70% / functions ≥ 90%） |
 | 平台侧 | secret scanning ✅ / push protection ✅ / dependabot security updates ✅（见 §八） |
 
-> Q2 单文件上限仍是 900 行（当前最大 `src/api/service.js` 899 行，已贴顶）；v0.2.1 拆分（[#32](https://github.com/Old-Friends-Gathering/strata/issues/32)）后 service 主文件将回落到 ≤ 320 行，四个承接模块各 ≤ 420 行。
+> Q2 单文件上限仍是 900 行；v0.2.1 拆分后 `src/api/service.js` 只剩 130 行，当前最大文件是 `src/api/maintenance.js`（约 470 行），仍有充足余量。
 
 ## 八、线上状态与验收证据（2026-11-02 实测）
 
