@@ -155,6 +155,9 @@ function toTimelineRows(events, index) {
   const seenDecision = new Set();
   for (const ev of events) {
     const d = ev.detail ?? {};
+    // search 事件是「检索统计」不是「库的变化」（#43）：它没有记录 id、也没有分类含义，
+    // 放进时间线只会多一行空 label。nightly 直接读事件流算指标，不受这里过滤影响。
+    if (ev.op === 'search') continue;
     // 人工 supersede 会额外写一条 write(action='supersede')，以 op='supersede' 那行为准，避免重复
     if (ev.op === 'write' && d.action === 'supersede') continue;
     if (ev.op === 'curate_apply') {

@@ -248,3 +248,25 @@ test('hygiene 候选簇：payload 只有 items 时仍能给出条数与成员（
   assert.equal(cl.size, 2, 'size 必须等于簇内条数');
   assert.ok(cl.items.every((it) => typeof it.text === 'string' && it.text.length > 0), 'items 应带 text 供 UI 显示');
 });
+
+test('今日时间线不把 search 事件当「库的变化」（issue #43）', async (t) => {
+  const memoHome = fs.mkdtempSync(path.join(os.tmpdir(), 'memo-wh-search-'));
+  t.after(() => fs.rmSync(memoHome, { recursive: true, force: true }));
+  const service = await createMemoryService({ memoHome, scope: SCOPE });
+  t.after(() => service.close());
+  const web = await createWebServer({ memoHome, scope: SCOPE, port: 0, includeUi: false, service });
+  t.after(() => new Promise((resolve) => web.server.close(resolve)));
+  const date = todayInTz(480);
+
+  await writeRec(service, { subject: 'cache', predicate: 'hit', value: '0.9', text: '缓存命中率 0.9' });
+  const before = await (await fetch(`${web.url}api/today?date=${date}&tzOffset=480`)).json();
+  await service.search('缓存');         // 会产生一条 op='search' 事件
+  const after = await (await fetch(`${web.url}api/today?date=${date}&tzOffset=480`)).json();
+
+  assert.equal(after.timeline.length, before.timeline.length, 'search 事件不该增加时间线行');
+  assert.ok(!after.timeline.some((r) => r.op === 'search'), '时间线里不得出现 op=search');
+  assert.deepEqual(after.counts, before.counts, 'counts 也不该被检索事件影响');
+  // 指标侧仍能看到检索次数（nightly 直接读事件流）
+  const evs = await service.events({ ops: ['search'], limit: 10 });
+  assert.ok(evs.events.length >= 1, 'search 事件必须还在事件流里，供指标使用');
+});
