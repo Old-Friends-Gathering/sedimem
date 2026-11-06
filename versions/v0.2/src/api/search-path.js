@@ -1,6 +1,8 @@
 // api/search-path.js — 检索路径承接模块（车道 A，issue #32）
 // search/get/brief/flushHits 及其私有辅助的原方法体搬到此，this → svc，语义零改动。
 
+import { createHash } from 'node:crypto';
+
 import { validateRecord, withPatch } from '../core/record.js';
 import { monotonicDecay } from '../hygiene/conflict.js';
 import { isExpired } from '../hygiene/decay.js';
@@ -87,6 +89,21 @@ export async function searchRecords(svc, query, {
   }
   items.sort((a, b) => b.score - a.score);
   const top = items.slice(0, limit);
+
+  // 检索健康事件（issue #36，裁决 52）：只记统计，绝不写 query 原文——
+  // 真相层的 events.jsonl 是审计面，不是查询日志；qHash 取 sha256 前 12 位仅供聚合影射。
+  // 走 svc._event 既有批量通道（与 hit 相同的 appendEvent 路径），不逐条 fsync。
+  // staleHits 统计口径：命中里 status!=='active' 或 isExpired 的条数
+  // （默认检索路径过滤后通常为 0，includeDisputed / asOf 查询时才可能非零）。
+  const staleHits = top.reduce((n, { record }) => (
+    record.status !== 'active' || isExpired(record, svc.clock) ? n + 1 : n
+  ), 0);
+  await svc._event('search', null, {
+    hits: top.length,
+    topScore: top.length > 0 ? top[0].score : null,
+    staleHits,
+    qHash: createHash('sha256').update(query, 'utf8').digest('hex').slice(0, 12),
+  });
 
   // hits 只增：召回一次记一次（内存累加，flushHits 时一次性落盘，避免检索写盘刷快照）
   if (asOfMs === null) {

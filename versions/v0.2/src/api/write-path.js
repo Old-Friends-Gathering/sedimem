@@ -119,14 +119,17 @@ export async function supersedeRecord(svc, { oldId, value, text, source, reason 
   return { record };
 }
 
-/** 删除：v0.1 只写墓碑（mode='purge' 同样落地为 tombstone，物理删留给整合期） */
+/** 删除：只写墓碑；mode='purge' 额外打 tags:['purge']，物理删由 service.compact 负责（裁决 51） */
 export async function forgetRecord(svc, { id, mode = 'tombstone', reason }) {
   svc._ensureOpen();
   const rec = svc._records.get(id);
   if (!rec) throw notFound(`forget: record ${id} not found`);
+  // purge 只是「允许将来被压实掉」的标记，不是立即删除：误记 purge 也还能 as-of 回查，直到 compact 越过 grace。
+  const tags = mode === 'purge' && !rec.tags.includes('purge') ? [...rec.tags, 'purge'] : rec.tags;
   const tomb = withPatch(rec, {
     status: 'tombstoned',
     validTo: rec.validTo ?? svc._nowIso(),
+    tags,
   });
   await svc._commit(tomb, 'forget', { mode, reason: reason ?? null });
   return { id, status: 'tombstoned' };

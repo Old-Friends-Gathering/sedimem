@@ -1,5 +1,37 @@
 # CHANGELOG · v0.2
 
+## [0.2.1] - 2026-11-06（拆分 / 数据化 / 裁决器 / 压实 / 检索指标）
+
+### Added
+
+- **`JudgePort` + `memo curate auto`**（#34）：`src/hygiene/judge.js` 的 `createJudge({policy})` 注入点，内置
+  `ruleJudge`（确定性、无 LLM）；`service.curateAuto({limit,dryRun})` 一条命令跑完 scan→判→apply，
+  幂等、可 `--dry-run`。规则：strong 且同 slot 比 hits，其余一律 keep_both（宁漏不误杀）。
+- **`memo compact`**（#35）：唯一会物理删除的入口。只删「墓碑 + `purge` 标签 + 超过 grace」三重条件的记录；
+  `JsonlStore.rewriteScope()` 走「备份 → tmp → fsync → rename」原子替换，`events.jsonl` 永不删。
+- **检索健康指标**（#36）：`search` 事件（`hits/topScore/staleHits/qHash`，**不存 query 原文**）；
+  nightly metrics 新增 `searchCount/noHitRate/staleHitRate/avgTopScore`，**无数据写 `null`**；
+  卫生页趋势图加「检索空结果率」「检索命中过期率」两条线（null 点跳过，不画成 0）。
+
+### Changed
+
+- **`src/api/service.js` 898 → 130 行**（#32）：拆出 `lifecycle/write-path/search-path/maintenance` 四个承接模块，
+  `MemoryService` 公开方法集合、签名、返回形状、错误码零变化（prototype 34 项对象 diff 为空）。
+- **`kind` 成为数据**（#33）：唯一真相是 `config/policy.json` 的 `kinds` 段（`halfLifeMs/weight/color` 三合一）；
+  `record.js` 不再硬编码清单，UI 配色改从 `/api/summary` 取。新增 kind = 只改 policy。
+- `memo forget --purge` 现在给墓碑打 `tags:['purge']`（否则 compact 永远删不掉它）。
+
+### Tests
+
+- 187 → **208 tests**；新增注入用例 **I18**（curateAuto 收敛+幂等）、**I19**（compact 真删 + events 仍在）、
+  **I20**（指标口径与 null≠0）；eval 扩到 I1–I20，全 PASS。
+- 修掉 `--dry-run` 失效的真 bug：CLI 的 `parseArgs` 存的是 `dry-run`（连字符），旧代码读 `opts.dryRun` 永远 undefined。
+
+### 契约
+
+`docs/02` 新增 §3.13 裁决 48–52（拆分不改语义 / kind 是数据 / 默认裁决器必须确定性 / 只有 compact 能物理删 /
+指标 null≠0）。
+
 ## [0.2.0] - 2026-11-03（大版本归位：目录 versions/v0.1 → versions/v0.2）
 
 ### Changed

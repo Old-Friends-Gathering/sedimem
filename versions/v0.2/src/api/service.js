@@ -9,6 +9,7 @@ import { resolveScope } from '../core/scope.js';
 import { JsonlStore } from '../storage/jsonl-store.js';
 import { createIndex } from '../index/create-index.js';
 import { QuotaPolicy } from '../hygiene/quota.js';
+import { createJudge } from '../hygiene/judge.js';
 import { CurateQueue } from '../hygiene/curate.js';
 import { defaultPolicy as POLICY } from '../config/policy.js';
 import * as lifecycle from './lifecycle.js';
@@ -41,7 +42,7 @@ export function invalidArg(msg) {
  */
 export async function createMemoryService({
   memoHome, scope, cwd, clock = systemClock,
-  store, index, quota,
+  store, index, quota, judge,
 } = {}) {
   if (!memoHome) throw invalid('createMemoryService: memoHome is required');
   const resolvedScope = scope ?? resolveScope({ cwd, env: process.env }).scope;
@@ -52,19 +53,23 @@ export async function createMemoryService({
     store: store ?? new JsonlStore({ memoHome }),
     index: index ?? createIndex({ policy: POLICY, memoHome, scope: resolvedScope, clock }),
     quota: quota ?? new QuotaPolicy({}),
+    // 裁决 50：裁决器是注入点（JudgePort）。缺省 ruleJudge 确定性、无 LLM，保证 curateAuto 行为可复现。
+    judge: judge ?? createJudge({ policy: POLICY }),
   });
   await service._init();
   return service;
 }
 
 export class MemoryService {
-  constructor({ memoHome, scope, clock, store, index, quota }) {
+  constructor({ memoHome, scope, clock, store, index, quota, judge }) {
     this.memoHome = memoHome;
     this.scope = scope;
     this.clock = clock;
     this.store = store;
     this.index = index;
     this.quota = quota;
+    /** @type {{name: string, decide: Function}} 裁决器（裁决 50：构造注入，不读 env） */
+    this.judge = judge;
     this.queue = new CurateQueue({ memoHome, clock });
     /** @type {Map<string, MemoryRecord>} 同 id 最后一行胜出 */
     this._records = new Map();
@@ -118,6 +123,8 @@ export class MemoryService {
   async _commitPairVerdict(a, b, d, detail) { return maintenance.commitPairVerdict(this, a, b, d, detail); }
   async _applyIdsDecision(d) { return maintenance.applyIdsDecision(this, d); }
   async dedupeScan(opts) { return maintenance.dedupeScan(this, opts); }
+  async curateAuto(opts) { return maintenance.curateAuto(this, opts); }
+  async compact(opts) { return maintenance.compact(this, opts); }
 
   // —— read-only（裁决 30：实现本就在 api/read-only.js）——
   async events(args = {}) { return queryEvents(this, args); }

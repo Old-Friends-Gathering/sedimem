@@ -129,7 +129,7 @@ strata/
 |---|---|---|
 | v0.1.x（`versions/v0.1`） | 核心记忆层（append-only 真相层 + 派生索引 + brief）、四条卫生路径、MCP/CLI、注入式评测 I1–I12、门禁体系 | 🔒 冻结在 0.1.2 |
 | **v0.2.0**（`versions/v0.2`） | 只读 Web 观察台（今日/图谱/卫生）+ SQLite FTS5 后端 + curate 裁决任务包 + 多分库浏览 + 图谱跟随分库 | ✅ 已交付 |
-| **v0.2.1（进行中）**（同目录递增） | 拆分 service（[#32](https://github.com/Old-Friends-Gathering/strata/issues/32)）、kind 注册表数据化（[#33](https://github.com/Old-Friends-Gathering/strata/issues/33)）、JudgePort + `curate auto`（[#34](https://github.com/Old-Friends-Gathering/strata/issues/34)）、compact 物理清理（[#35](https://github.com/Old-Friends-Gathering/strata/issues/35)）、检索健康指标（[#36](https://github.com/Old-Friends-Gathering/strata/issues/36)）；施工图见 [`docs/plans/v0.2.1-plan.md`](docs/plans/v0.2.1-plan.md) | 🚧 进行中 |
+| **v0.2.1**（同目录递增） | 拆分 service（[#32](https://github.com/Old-Friends-Gathering/strata/issues/32)）、kind 注册表数据化（[#33](https://github.com/Old-Friends-Gathering/strata/issues/33)）、JudgePort + `curate auto`（[#34](https://github.com/Old-Friends-Gathering/strata/issues/34)）、compact 物理清理（[#35](https://github.com/Old-Friends-Gathering/strata/issues/35)）、检索健康指标（[#36](https://github.com/Old-Friends-Gathering/strata/issues/36)）；施工图见 [`docs/plans/v0.2.1-plan.md`](docs/plans/v0.2.1-plan.md) | ✅ 已交付 |
 | 后续候选 | EmbeddingIndex、hybrid 检索（等 #36 指标给出实测痛点） | 未开始 |
 
 版本目录规则：**大版本换目录（v0.1 → v0.2），小版本在同一目录内递增（0.2.0 → 0.2.1）**；

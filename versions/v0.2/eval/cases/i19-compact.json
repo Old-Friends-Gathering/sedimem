@@ -1,0 +1,51 @@
+{
+  "id": "I19",
+  "name": "compact",
+  "desc": "purge 墓碑过宽限期被物理删除；普通墓碑保留；events 永不删；stats.total 下降而 superseded/disputed 不变",
+  "scope": "repo:eval-i19",
+  "graceMs": 604800000,
+  "staleDaysAgo": 10,
+  "purgeIndices": [0, 1],
+  "plainTombstoneIndex": 2,
+  "records": [
+    {
+      "text": "旧部署密钥 rot-key-01 已作废，等待物理清除",
+      "subject": "deploy.key",
+      "predicate": "value",
+      "value": "rot-key-01",
+      "kind": "state"
+    },
+    {
+      "text": "临时调试开关 debug-flag-77 已关闭并待清除",
+      "subject": "debug.flag",
+      "predicate": "value",
+      "value": "debug-flag-77",
+      "kind": "state"
+    },
+    {
+      "text": "过期的临时便签 scratch-19，普通墓碑应保留",
+      "subject": "temp.note",
+      "predicate": "content",
+      "value": "scratch-19",
+      "kind": "state"
+    },
+    {
+      "text": "strata 仓库门禁：零运行时依赖、只用 node: 内置模块",
+      "subject": "strata.policy",
+      "predicate": "deps",
+      "value": "node-builtins-only",
+      "kind": "fact"
+    },
+    {
+      "text": "compact 备份策略：只保留最新一份 .bak.<ts>",
+      "subject": "strata.compact",
+      "predicate": "backup",
+      "value": "keep-latest-one",
+      "kind": "decision"
+    }
+  ],
+  "queries": {
+    "purged": "rot-key-01",
+    "kept": "node-builtins-only"
+  }
+}

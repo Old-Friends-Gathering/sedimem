@@ -150,6 +150,63 @@ export async function doctor(svc) {
   }
 }
 
+// —— 车道 D（issue #35）：物理压实段（按施工图 §3 插在 doctor 之后，不重排既有函数）——
+
+/**
+ * 裁决 51 的缺省宽限期兜底：7 天。
+ * 为什么是常量而不是内联数字：policy.quota.purgeGraceMs 尚未登记进 config/policy.json，
+ * 缺省链「显式入参 > policy > 7d」只在这一处落地，避免魔法数字散落。
+ */
+const DEFAULT_PURGE_GRACE_MS = 7 * 24 * 60 * 60 * 1000;
+
+/**
+ * 物理压实（契约 docs/02 §3.13 裁决 51）：只物理删除**同时**满足三重条件的记录：
+ * ① status === 'tombstoned'；② tags 含 'purge'；③ validTo 早于 now - purgeGraceMs。
+ * - 普通墓碑（不带 purge）必须保留：as-of 回查依赖它们；
+ * - events.jsonl 永不删（审计面），「这条为什么被删」永远可查；
+ * - dryRun 只统计不动文件；真删走 store.rewriteScope（备份 + 原子替换），
+ *   删后必须 reindex 重建索引，否则内存缓存仍持有已删记录（复活假象）。
+ * @param {{dryRun?: boolean, purgeGraceMs?: number}} [opts]
+ * @returns {Promise<{before: number, after: number, purged: number, kept: number,
+ *           backupPath: string|null, dryRun: boolean}>}
+ */
+export async function compact(svc, { dryRun = false, purgeGraceMs } = {}) {
+  svc._ensureOpen();
+  if (purgeGraceMs !== undefined
+    && (typeof purgeGraceMs !== 'number' || !Number.isFinite(purgeGraceMs) || purgeGraceMs < 0)) {
+    throw invalidArg(`compact: purgeGraceMs must be a non-negative number, got ${JSON.stringify(purgeGraceMs)}`);
+  }
+  // 缺省链：显式入参 > policy.quota.purgeGraceMs > 7d 常量（policy 未配置该键时兜底）
+  const graceMs = purgeGraceMs ?? POLICY.quota?.purgeGraceMs ?? DEFAULT_PURGE_GRACE_MS;
+  const cutoff = new Date(svc.clock.nowMs() - graceMs).toISOString();
+
+  // 三重条件抽成谓词：dryRun 统计与真删过滤必须用同一份判定，否则两边口径漂移
+  const isPurgeable = (r) => r.status === 'tombstoned'
+    && Array.isArray(r.tags) && r.tags.includes('purge')
+    && r.validTo !== null && String(r.validTo) < cutoff;
+
+  const all = [...svc._records.values()];
+  const purged = all.filter(isPurgeable).length;
+  if (dryRun) {
+    return { before: all.length, after: all.length - purged, purged, kept: all.length - purged, backupPath: null, dryRun: true };
+  }
+
+  const res = await svc.store.rewriteScope(svc.scope, (records) => records.filter((r) => !isPurgeable(r)));
+  await svc.reindex(); // 物理删除后重建索引（缓存/索引不得残留已删记录）
+  await svc._event('compact', svc.scope, {
+    purged: res.before - res.after, before: res.before, after: res.after,
+    backupPath: res.backupPath, graceMs,
+  });
+  return {
+    before: res.before,
+    after: res.after,
+    purged: res.before - res.after,
+    kept: res.after,
+    backupPath: res.backupPath,
+    dryRun: false,
+  };
+}
+
 /** 裁决导出：把 disputed 对交给 curate 队列；无候选返回 null */
 export async function curateExport(svc, { limit = 20 } = {}) {
   svc._ensureOpen();
@@ -365,4 +422,57 @@ export async function dedupeScan(svc, {
       })),
   }));
   return { clusters: top, totalClusters, scanned: records.length, threshold, diceThreshold, mode };
+}
+
+// ============================================================================
+// 车道 C（issue #34）：curateAuto —— scan → 判 → apply 的一条命令闭环（裁决 50）。
+// 只追加在文件末尾（施工图 §3），不得重排上方既有函数。
+// ============================================================================
+
+import { createJudge } from '../hygiene/judge.js';
+
+/**
+ * 自动裁决（裁决 50）：dedupeScan 拿候选簇 → 逐 pair 调裁决器 → curateApply 落盘。
+ * - 裁决器优先用 svc._judge（Lead 在 createMemoryService({judge}) 注入）；
+ *   未注入时回落 createJudge（内置 ruleJudge，确定性、无 LLM）。
+ * - 候选只来自 dedupeScan（裁决 46：CLI/MCP/本函数都不得自算相似度）；
+ * - a/b 记录取不到（并发被删）→ 该 pair 计入 skipped，不中断整批；
+ * - dryRun=true 只返回决策不落盘（预览裁决器的判断，不动真相层）；
+ * - 复用 curateApply 既有幂等与 V1–V5 校验，本函数不重复实现落盘语义。
+ * @param {{limit?: number, dryRun?: boolean}} [opts]
+ * @returns {Promise<{clusters: number, pairs: number,
+ *    decisions: {ids: string[], decision: string, note: string}[],
+ *    applied: number, skipped: number, dryRun: boolean}>}
+ */
+export async function curateAuto(svc, { limit = 20, dryRun = false } = {}) {
+  svc._ensureOpen();
+  const scan = await dedupeScan(svc, { limit });
+  // judge 注入优先；未注入时用 service 同源的 policy 构造默认裁决器
+  // （svc.policy 由 Lead 的构造注入挂上；拿不到就退 loadPolicy 的默认值）
+  const judge = svc._judge ?? createJudge({ policy: svc.policy ?? POLICY });
+
+  const decisions = [];
+  let pairs = 0;
+  let skipped = 0;
+  for (const cluster of scan.clusters) {
+    for (const p of cluster.pairs ?? []) {
+      pairs += 1;
+      const a = await svc.get(p.aId);
+      const b = await svc.get(p.bId);
+      if (!a || !b) {
+        // 候选生成后记录被并发删除/墓碑：诚实跳过，不猜
+        skipped += 1;
+        continue;
+      }
+      const { decision, note } = judge.decide({ pair: p, a, b });
+      decisions.push({ ids: [p.aId, p.bId], decision, note });
+    }
+  }
+
+  let applied = 0;
+  if (!dryRun && decisions.length > 0) {
+    const out = await curateApply(svc, { decisions });
+    applied = out.applied.filter((r) => r.applied).length;
+  }
+  return { clusters: scan.clusters.length, pairs, decisions, applied, skipped, dryRun };
 }

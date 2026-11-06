@@ -436,6 +436,12 @@ async function apiHygiene(service) {
         maxActive,
         activeRatio: Number.isFinite(Number(m.active)) ? Number(m.active) / maxActive : null,
         total: m.total ?? null,
+        // 检索健康指标透传（issue #36，裁决 52）：metrics 文件里没有（旧快照）→ null，
+        // UI 端 null 点跳过不画，绝不折算成 0。
+        searchCount: m.searchCount ?? null,
+        noHitRate: m.noHitRate ?? null,
+        staleHitRate: m.staleHitRate ?? null,
+        avgTopScore: m.avgTopScore ?? null,
       });
     }
   }
@@ -489,6 +495,11 @@ async function apiTimeline(service, query) {
       merged: b.merged,
       dupRatio: m?.dupRatio ?? null,
       conflictRate: m?.conflictRate ?? null,
+      // 检索健康指标透传（issue #36）：卫生页趋势优先吃 /timeline 的 series，这里同样透传
+      searchCount: m?.searchCount ?? null,
+      noHitRate: m?.noHitRate ?? null,
+      staleHitRate: m?.staleHitRate ?? null,
+      avgTopScore: m?.avgTopScore ?? null,
     });
   }
   return { series };

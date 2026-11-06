@@ -79,6 +79,9 @@ const CASE_FILES = [
   ['I15', 'i15-live-refresh.test.js'],
   ['I16', 'i16-index-parity.test.js'],
   ['I17', 'i17-curate-loop.test.js'],
+  ['I18', 'i18-curate-auto.test.js'],
+  ['I19', 'i19-compact.test.js'],
+  ['I20', 'i20-search-metrics.test.js'],
 ];
 
 function runCase(id, file) {

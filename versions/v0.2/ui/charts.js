@@ -1,7 +1,8 @@
 /**
  * charts.js —— 手写 SVG 折线图（零依赖）。
- * 供卫生页渲染 30 天趋势：dupRatio / conflictRate / active 三条折线 + 图例。
+ * 供卫生页渲染 30 天趋势：任意条折线，每条线独立 fmt（悬停文案格式化）。
  * 全部用 DOM API + createElementNS 构建，数据只进 textContent / 属性，无 innerHTML。
+ * null 点跳过不画（issue #36：检索指标可能整列为 null，「没数据」≠「值是 0」）。
  */
 
 // SVG 命名空间 URI（拆开写，避免 S9 门禁对 http(s):// 字面量的误报；这是标识符，不是资源链接）
@@ -59,13 +60,26 @@ export function renderLineChart(container, opts) {
     return;
   }
 
-  // 值域：覆盖所有序列（比 0 略高一点，避免平线贴边）
+  // 值域：覆盖所有序列的非空有限值（null 点跳过不画，不折算成 0——「没数据」≠「值是 0」）
   let vMax = 0;
+  let hasValue = false;
   for (const ln of lines)
     for (const pt of series) {
-      const v = Number(pt[ln.key]);
-      if (Number.isFinite(v) && v > vMax) vMax = v;
+      const v = pt[ln.key];
+      if (v === null || v === undefined) continue;
+      const n = Number(v);
+      if (Number.isFinite(n)) {
+        hasValue = true;
+        if (n > vMax) vMax = n;
+      }
     }
+  if (!hasValue) {
+    const p = document.createElement('p');
+    p.className = 'dim';
+    p.textContent = '暂无趋势数据。';
+    container.replaceChildren(p);
+    return;
+  }
   if (vMax <= 0) vMax = 1;
   const vTop = vMax * 1.08;
   const innerW = W - padL - padR;
@@ -100,21 +114,47 @@ export function renderLineChart(container, opts) {
   xlab.append(first, last);
   svg.append(xlab);
 
-  // 折线 + 逐点悬停提示
+  // 折线 + 逐点悬停提示。null/undefined 点跳过不画（issue #36：检索指标当天可能整列为 null，
+  // 画成 0 会把「没数据」伪装成「空结果率 0%」）；连续非空段各自成线，段间自然断开。
+  // 每条线独立的 fmt（ln.fmt）作用于悬停文案，缺省回落到通用 String。
   for (const ln of lines) {
-    const pts = series.map((pt, i) => [x(i), y(Number(pt[ln.key]) || 0)]);
-    const pl = svgEl('polyline', {
-      fill: 'none', stroke: ln.color, 'stroke-width': '2',
-      points: pts.map((p) => p.map((n) => n.toFixed(1)).join(',')).join(' '),
-    });
-    if (ln.dash) pl.setAttribute('stroke-dasharray', '5 4');
-    svg.append(pl);
-    const circles = svgEl('g', { fill: ln.color });
+    const val = (pt) => {
+      const raw = pt[ln.key];
+      if (raw === null || raw === undefined) return null;
+      const n = Number(raw);
+      return Number.isFinite(n) ? n : null;
+    };
+    // 把序列切成连续非空段：[[i0,i1],...]，每段一条 polyline
+    const segments = [];
+    let start = -1;
     series.forEach((pt, i) => {
-      const c = svgEl('circle', { cx: pts[i][0].toFixed(1), cy: pts[i][1].toFixed(1), r: '2.5' });
+      if (val(pt) !== null) {
+        if (start < 0) start = i;
+      } else if (start >= 0) {
+        segments.push([start, i - 1]);
+        start = -1;
+      }
+    });
+    if (start >= 0) segments.push([start, series.length - 1]);
+
+    for (const [from, to] of segments) {
+      const pts = [];
+      for (let i = from; i <= to; i++) pts.push(`${x(i).toFixed(1)},${y(val(series[i])).toFixed(1)}`);
+      const pl = svgEl('polyline', {
+        fill: 'none', stroke: ln.color, 'stroke-width': '2', points: pts.join(' '),
+      });
+      if (ln.dash) pl.setAttribute('stroke-dasharray', '5 4');
+      svg.append(pl);
+    }
+
+    const circles = svgEl('g', { fill: ln.color });
+    const fmt = ln.fmt ?? ((v) => String(v));
+    series.forEach((pt, i) => {
+      const v = val(pt);
+      if (v === null) return; // 空点不画圆点，悬停提示也不给假值
+      const c = svgEl('circle', { cx: x(i).toFixed(1), cy: y(v).toFixed(1), r: '2.5' });
       const t = svgEl('title');
-      const fmt = ln.fmt ?? ((v) => String(v));
-      t.textContent = `${pt.date ?? ''} · ${ln.label}: ${fmt(Number(pt[ln.key]) || 0)}`;
+      t.textContent = `${pt.date ?? ''} · ${ln.label}: ${fmt(v)}`;
       c.append(t);
       circles.append(c);
     });

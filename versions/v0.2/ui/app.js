@@ -257,6 +257,9 @@ async function loadHygiene() {
       { key: 'dupRatio', label: 'dupRatio（冗余率）', color: '#f97316', fmt: pct },
       { key: 'conflictRate', label: 'conflictRate（冲突率）', color: '#ef4444', fmt: pct },
       { key: 'activeRatio', label: 'active 占比（相对配额）', color: '#5b9cf5', dash: true, fmt: pct },
+      // 检索健康（issue #36）：null 的点由 charts.js 跳过不画，不会伪装成 0%
+      { key: 'noHitRate', label: '检索空结果率', color: '#a78bfa', fmt: pct },
+      { key: 'staleHitRate', label: '检索命中过期率', color: '#22d3ee', fmt: pct },
     ],
   });
 }

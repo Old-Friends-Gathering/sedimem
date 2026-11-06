@@ -356,3 +356,31 @@ export async function curateStatus(service) {
   });
   return { batches: rows.length, rows };
 }
+
+// ============================================================================
+// 车道 C（issue #34）：memo curate auto —— 参数透传与打印，逻辑只在 maintenance.curateAuto。
+// ============================================================================
+
+import { curateAuto as curateAutoOf } from '../api/maintenance.js';
+
+/**
+ * `memo curate auto [--limit N] [--dry-run] [--json]` 的入口。
+ * 为什么直接调 maintenance.curateAuto(service, …)：service.curateAuto 由 Lead 在
+ * 类上补一行委托（车道边界，本文件不改 service.js）；直调承接模块保证两种形态语义同源。
+ * JSON 输出字段与 service 返回完全一致（供 Agent 消费）；中文摘要只做可读投影。
+ * @param {object} service MemoryService
+ * @param {{limit?: number, dryRun?: boolean, json?: boolean}} [opts]
+ */
+export async function curateAutoCli(service, { limit, dryRun = false, json = false } = {}) {
+  const out = await curateAutoOf(service, { limit: limit ?? 20, dryRun });
+  if (json) {
+    process.stdout.write(`${JSON.stringify(out)}\n`);
+    return out;
+  }
+  const dryNote = out.dryRun ? '（dry-run，未落盘）' : '';
+  process.stdout.write(`簇: ${out.clusters}，对: ${out.pairs}，applied: ${out.applied}，skipped: ${out.skipped}${dryNote}\n`);
+  for (const d of out.decisions) {
+    process.stdout.write(`  ${d.ids[0]} <-> ${d.ids[1]} → ${d.decision}（${d.note}）\n`);
+  }
+  return out;
+}

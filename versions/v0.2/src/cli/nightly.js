@@ -102,6 +102,34 @@ function extractHitsFlushed(result) {
   return 0;
 }
 
+/**
+ * 检索健康指标（issue #36，裁决 52）：聚合当天 [date 00:00 UTC, now) 的 search 事件。
+ * 分母为 0 → 全部写 null（不是 0）：夜跑时当天没有检索是常态，
+ * 写 0 会把「没数据」画成「命中率 0%」，趋势图会说谎。
+ * @returns {Promise<{searchCount:number|null,noHitRate:number|null,staleHitRate:number|null,avgTopScore:number|null}>}
+ */
+async function computeSearchMetrics(service, date) {
+  const since = `${date}T00:00:00.000Z`; // 与 metrics 文件名同一 date 窗口（UTC）
+  const until = new Date().toISOString();
+  const { events } = await service.events({ since, until, ops: ['search'], limit: 100000 });
+  const searchCount = events.length;
+  if (searchCount === 0) {
+    return { searchCount: null, noHitRate: null, staleHitRate: null, avgTopScore: null };
+  }
+  const noHit = events.filter((ev) => ev.detail?.hits === 0).length;
+  const stale = events.filter((ev) => (ev.detail?.staleHits ?? 0) > 0).length;
+  const scores = events
+    .map((ev) => ev.detail?.topScore)
+    .filter((v) => typeof v === 'number' && Number.isFinite(v));
+  return {
+    searchCount,
+    noHitRate: noHit / searchCount,
+    staleHitRate: stale / searchCount,
+    // 当天全是空结果（topScore 全 null）时均值分母为 0 → 同样写 null
+    avgTopScore: scores.length > 0 ? scores.reduce((a, b) => a + b, 0) / scores.length : null,
+  };
+}
+
 async function main() {
   const argv = process.argv.slice(2);
   if (argv.includes('--help') || argv.includes('-h')) {
@@ -180,6 +208,12 @@ async function main() {
     const stats = dryRun
       ? await service.stats() // dry-run 未写盘，统计即当前态
       : await service.stats();
+
+    // 检索健康指标（issue #36，裁决 52）：当天（同一 date 窗口）的 search 事件聚合。
+    // 口径：searchCount=事件数；noHitRate=hits===0 占比；staleHitRate=staleHits>0 占比；
+    // avgTopScore=topScore 非 null 的均值。分母为 0 一律写 null——
+    // 「没有数据」≠「命中率 0%」，混用会让趋势图说谎。
+    const searchMetrics = await computeSearchMetrics(service, plan.date);
     plan.metrics = {
       ts: new Date().toISOString(),
       scope,
@@ -196,6 +230,7 @@ async function main() {
       evictedCount: Array.isArray(plan.evicted) ? plan.evicted.length : plan.evicted,
       hitsFlushed: plan.hitsFlushed,
       dedupeCandidates: plan.dedupe ? plan.dedupe.clusters : 0, // 裁决 23：候选簇数量（不自动裁决）
+      ...searchMetrics,
     };
 
     if (!dryRun) {
@@ -223,7 +258,7 @@ async function main() {
           `  配额淘汰: ${plan.metrics.evictedCount} 条（service.enforceQuota，墓碑 tags:['quota']，maxActive=${policy?.quota?.maxActive}）\n` +
           `  hits 落盘: ${plan.hitsFlushed} 条（service.flushHits）\n` +
           `  brief: ${plan.briefLines} 行 → ${plan.briefPath}\n` +
-          `  metrics: active=${plan.metrics.active} dupRatio=${plan.metrics.dupRatio} conflictRate=${plan.metrics.conflictRate} hitsFlushed=${plan.metrics.hitsFlushed}\n` +
+          `  metrics: active=${plan.metrics.active} dupRatio=${plan.metrics.dupRatio} conflictRate=${plan.metrics.conflictRate} hitsFlushed=${plan.metrics.hitsFlushed} searchCount=${plan.metrics.searchCount}\n` +
           (plan.dedupe
             ? `  去重候选: ${plan.dedupe.clusters} 簇（threshold=${plan.dedupe.threshold}，不自动裁决，裁决 23）\n` +
               plan.dedupe.summary

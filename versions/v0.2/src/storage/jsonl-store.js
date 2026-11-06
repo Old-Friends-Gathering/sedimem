@@ -147,6 +147,69 @@ export class JsonlStore {
     return entries.filter((f) => f.endsWith('.jsonl')).map((f) => f.slice(0, -'.jsonl'.length)).sort();
   }
 
+  /**
+   * 全量重写 items/<scope>.jsonl（compact 物理删除的唯一通道，契约 docs/02 §3.13 裁决 51）。
+   * 为什么这样设计：
+   * - 整个操作在 memoHome 锁临界区内完成（读 → transform → 备份 → 原子替换），
+   *   否则并发 append 会与重写竞争，丢失临界期内新写入的记录；
+   * - 替换前先备份 `<file>.bak.<ts>`（同目录），并清掉更早的 .bak.*（只保留最新一份，
+   *   防止反复 compact 把备份堆成无限增长的外部垃圾）；
+   * - 原子性靠「写 `<file>.tmp` → fh.sync() → rename」：rename 在同一目录内是原子的，
+   *   崩溃最坏情况是留下一个 .tmp（下次重写会覆盖）而不是半截 jsonl；
+   * - 异常时删 tmp 并抛原错，绝不把半成品静默留在 items 目录里。
+   * @param {string} scope
+   * @param {(records: MemoryRecord[]) => Promise<MemoryRecord[]> | MemoryRecord[]} transform
+   * @returns {Promise<{before: number, after: number, backupPath: string|null}>}
+   */
+  async rewriteScope(scope, transform) {
+    return withLock(this.memoHome, async () => {
+      const file = this._scopePath(scope);
+      const records = await this.loadScope(scope); // 临界区内只读，fold 后即当前真相
+      const records2 = await transform(records);
+      const before = records.length;
+      const after = records2.length;
+
+      // 原文件不存在（空 scope）→ 没有可破坏的内容，也不产生备份，直接返回
+      try {
+        await fsp.stat(file);
+      } catch (e) {
+        if (e.code === 'ENOENT') return { before, after, backupPath: null };
+        throw e;
+      }
+
+      // 备份：先清更早的 .bak.*（只保留最新一份），再复制当前文件
+      const bakPrefix = path.basename(file) + '.bak.';
+      for (const f of await fsp.readdir(this.itemsDir)) {
+        if (f.startsWith(bakPrefix)) {
+          await fsp.rm(path.join(this.itemsDir, f), { force: true });
+        }
+      }
+      // 时间戳里的 `:` / `.` 在部分文件系统非法，替换成 `-`
+      const stamp = new Date().toISOString().replace(/[:.]/g, '-');
+      const backupPath = `${file}.bak.${stamp}`;
+      await fsp.copyFile(file, backupPath);
+
+      // 原子替换：tmp → fsync → rename；任何异常都清掉 tmp 再抛原错
+      const tmp = `${file}.tmp`;
+      let fh;
+      try {
+        fh = await fsp.open(tmp, 'w');
+        for (const r of records2) {
+          await fh.write(JSON.stringify(r) + '\n', 'utf8');
+        }
+        await fh.sync();
+        await fh.close();
+        fh = null;
+        await fsp.rename(tmp, file);
+      } catch (e) {
+        if (fh) await fh.close().catch(() => {});
+        await fsp.rm(tmp, { force: true });
+        throw e;
+      }
+      return { before, after, backupPath };
+    });
+  }
+
   /** 审计事件：{ts, op, scope, id, detail} → events.jsonl */
   async appendEvent(event) {
     await withLock(this.memoHome, () => this.appendEventImmediate(event));
