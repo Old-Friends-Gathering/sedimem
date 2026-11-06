@@ -156,6 +156,9 @@ node versions/v0.2/src/cli/memo.js serve        # 打开 http://127.0.0.1:7788
 node versions/v0.2/src/cli/memo.js serve --help # 端口、分库、无 UI 模式
 ```
 
+想让它开机自启、挂了自动重起（macOS launchd）：见 [`docs/06-usage.md`](docs/06-usage.md) §12 ——
+模板在 [`versions/v0.2/configs/launchd/`](versions/v0.2/configs/launchd/)。
+
 ## 许可
 
 [MIT](LICENSE) © 2026 Old Friends Gathering
