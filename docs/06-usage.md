@@ -218,42 +218,73 @@ memo compact --grace 0                    # 立刻删（小心：不可回查）
 `compact` 是**唯一**会物理删除的入口，且同时满足「墓碑 + purge 标签 + 超过 grace」三条才动；
 替换前自动备份 `<scope>.jsonl.bak.<ts>`（只留最近一份），`events.jsonl` 永不删——「为什么这条没了」永远查得到。
 
-## 12. 常驻观察台（开机自启，macOS）
+## 12. 常驻服务（macOS launchd）：观察台 + 夜间整合
 
-`memo serve` 默认只在前台跑，关掉终端就没了。想让它一直在：
+两件事适合常驻：**只读观察台**（随时打开看）和 **夜间整合**（每天跑一次）。都走同一个入口脚本
+`scripts/strata-run.sh`——它读 `versions/CURRENT` 决定跑哪个版本目录，所以换大版本时 plist 不用动。
+
+> 为什么非要这个脚本：有台机器的 crontab 里写死了 `versions/v0.1/src/cli/nightly.js`，
+> 版本目录切到 v0.2 之后，**夜间整合一直在跑冻结代码**，仓库里的门禁扫不到，只有查 crontab 才发现。
+
+### 12.1 安装
 
 ```bash
-# 1) 拷模板并替换三处占位符（node 路径 / 仓库根 / MEMO_HOME）
-cp versions/v0.2/configs/launchd/live.strata.observer.plist /tmp/observer.plist
-sed -i '' \
-  -e "s|__NODE__|$(command -v node)|" \
-  -e "s|__REPO_ROOT__|$PWD|" \
-  -e "s|__MEMO_HOME__|$HOME/.memo|" /tmp/observer.plist
-plutil -lint /tmp/observer.plist        # 先体检再装
+cd <仓库根>
 
-# 2) 装成用户级 LaunchAgent（登录即启动，进程挂了自动重起）
+# 观察台：登录即启动、挂了自动拉起
+sed -e "s|__REPO_ROOT__|$PWD|" \
+    -e "s|__MEMO_HOME__|$HOME/.memo|" \
+    -e "s|__NODE__|$(command -v node)|" \
+    versions/v0.2/configs/launchd/live.strata.observer.plist > /tmp/observer.plist
+plutil -lint /tmp/observer.plist
 mv /tmp/observer.plist ~/Library/LaunchAgents/live.strata.observer.plist
 launchctl load ~/Library/LaunchAgents/live.strata.observer.plist
 
-# 3) 确认
-launchctl list | grep strata            # 第一列是 PID，第二列 0 = 上次退出码正常
+# 夜间整合：每天 03:30（机器睡眠时唤醒后补跑）
+sed -e "s|__REPO_ROOT__|$PWD|" \
+    -e "s|__MEMO_HOME__|$HOME/.memo|" \
+    -e "s|__NODE__|$(command -v node)|" \
+    versions/v0.2/configs/launchd/live.strata.nightly.plist > /tmp/nightly.plist
+plutil -lint /tmp/nightly.plist
+mv /tmp/nightly.plist ~/Library/LaunchAgents/live.strata.nightly.plist
+launchctl load ~/Library/LaunchAgents/live.strata.nightly.plist
+```
+
+### 12.2 确认与操作
+
+```bash
+launchctl list | grep strata            # 第一列 PID，第二列 0 = 上次退出码正常
 curl -s http://127.0.0.1:7788/api/summary | head -c 80
-```
 
-**升级代码后让它加载新版本**（launchd 不会自动重载文件）：
-
-```bash
+# 改完代码让它加载新版本（launchd 不会自动重载文件）
 launchctl kickstart -k gui/$(id -u)/live.strata.observer
+
+# 立刻跑一次夜间整合，看效果
+launchctl kickstart -k gui/$(id -u)/live.strata.nightly
+tail -f ~/.memo/nightly.log
+
+# 停掉（卸载后不再自启）
+launchctl unload ~/Library/LaunchAgents/live.strata.observer.plist
+launchctl unload ~/Library/LaunchAgents/live.strata.nightly.plist
 ```
 
-看日志 / 停掉：
+### 12.3 别同时用 crontab
+
+launchd 与 crontab 二选一。两边都装会让 nightly 一天跑两次：metrics 同日同 scope 是覆盖写（看不出问题），
+但配额淘汰会跑两遍（虽然只写墓碑、非破坏），而且 **crontab 里的绝对路径最容易在换版时忘掉**。
+
+迁移到 launchd 之后记得清 crontab：
 
 ```bash
-tail -f ~/.memo/serve.log ~/.memo/serve.err.log
-launchctl unload ~/Library/LaunchAgents/live.strata.observer.plist
+crontab -l                 # 先看一眼现在有什么
+crontab -l | grep -v nightly.js > /tmp/ct.new && crontab /tmp/ct.new
 ```
 
-**端口被占**（`EADDRINUSE`）：先 `lsof -ti tcp:7788` 看是谁；确认是旧的 `memo serve` 就
-`kill $(lsof -ti tcp:7788)`，KeepAlive 会把它拉起来；要换端口就改 plist 里的 `--port` 再重载。
+> macOS 上写 crontab 需要给终端「完全磁盘访问权限」，否则命令可能直接挂住不报错。
 
-> 注意：观察台是**只读**的，它不写记忆，所以常驻不会污染真相层。
+### 12.4 端口被占
+
+`lsof -ti tcp:7788` 看是谁；确认是旧的 `memo serve` 就 `kill $(lsof -ti tcp:7788)`，
+KeepAlive 会把它拉起来；要换端口就改 plist 里的 `--port` 再重载。
+
+> 观察台是**只读**的，常驻不会污染真相层；夜间整合会写 brief / metrics / 墓碑，但都是既有语义内的写入。
