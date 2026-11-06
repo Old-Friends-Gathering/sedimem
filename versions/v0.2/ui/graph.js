@@ -15,7 +15,7 @@
  */
 
 import {
-  KIND_COLORS, DEFAULT_EDGE_TYPES, OPTIONAL_EDGE_TYPES, EDGE_PREF_KEY, layoutTick,
+  KIND_COLORS, kindColorsFromPolicy, DEFAULT_EDGE_TYPES, OPTIONAL_EDGE_TYPES, EDGE_PREF_KEY, layoutTick,
   MIN_SCALE, MAX_SCALE, ALPHA_MIN,
 } from './layout.js';
 
@@ -60,6 +60,8 @@ export async function initGraph({ canvas, detailEl, toolbarEl, apiBase = '/api',
 
   /* ---------- 数据加载 ---------- */
   let loadError = null;
+  // 颜色随 policy.kinds 下发（issue #33）；拉取失败或接口未带 kinds 时用兜底表，视觉不回归
+  let kindColors = KIND_COLORS;
   try {
     // 分库必须跟着顶栏走，否则切了分库图谱还是老库（issue #25）
     const q = new URLSearchParams({ limit: '300', days: '90' });
@@ -70,6 +72,15 @@ export async function initGraph({ canvas, detailEl, toolbarEl, apiBase = '/api',
     state.nodes = Array.isArray(data.nodes) ? data.nodes : [];
     state.edges = Array.isArray(data.edges) ? data.edges : [];
     state.sampled = data.sampled || { shown: state.nodes.length, total: state.nodes.length };
+    // 颜色唯一真相在 policy（/api/summary 的 policy.kinds）；单独 try 包住，
+    // 摘要接口异常不能连累图谱主数据加载
+    try {
+      const sr = await fetch(`${apiBase}/summary${scope ? `?scope=${encodeURIComponent(scope)}` : ''}`);
+      if (sr.ok) {
+        const summary = await sr.json();
+        if (summary?.policy?.kinds) kindColors = kindColorsFromPolicy(summary.policy);
+      }
+    } catch { /* summary 失败 → 继续用兜底色 */ }
   } catch (err) {
     loadError = err;
     state.nodes = [];
@@ -240,7 +251,7 @@ export async function initGraph({ canvas, detailEl, toolbarEl, apiBase = '/api',
     for (const nd of state.nodes) {
       const [px, py] = toScreen(nd.x, nd.y);
       const r = radiusOf(nd) * state.view.scale;
-      const color = KIND_COLORS[nd.kind] || KIND_COLORS.state;
+      const color = kindColors[nd.kind] || KIND_COLORS.state;
       const superseded = nd.status === 'superseded';
       ctx.beginPath();
       ctx.globalAlpha = superseded ? 0.4 : 1;

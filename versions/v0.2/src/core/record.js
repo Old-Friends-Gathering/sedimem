@@ -3,8 +3,10 @@
 import { newId, isId } from './ids.js';
 import { contentHash } from './hash.js';
 import { systemClock } from './clock.js';
+// kind 清单唯一真相在 config/policy.json 的 kinds 段（issue #33 / 裁决 D2）；
+// 依赖方向必须是 record → policy（policy.js 只校验数据形状，绝不反向 import 本文件，否则成环）。
+import { defaultPolicy, kindNames } from '../config/policy.js';
 
-const KINDS = new Set(['fact', 'pref', 'decision', 'gotcha', 'state']);
 const STATUSES = new Set(['active', 'superseded', 'disputed', 'tombstoned']);
 // 已知 agent 只是「带颜色的标签」，不是白名单（裁决 25：允许任意新客户端接入，避免写死）
 export const KNOWN_AGENTS = new Set(['dsh', 'codex', 'claude', 'cli', 'test', 'unknown']);
@@ -16,11 +18,13 @@ const MAX_TEXT = 4000;
 /**
  * 创建 MemoryRecord（version=1）。非法输入抛 err.code='E_INVALID_RECORD'。
  * @param {object} input {text, kind, subject, predicate, value, confidence, source, tags, privacy, validFrom}
- * @param {{clock?: object}} deps
+ * @param {{clock?: object, kinds?: Iterable<string>}} deps kinds 缺省回落 defaultPolicy.kinds（裁决 D2）
  * @returns {MemoryRecord}
  */
 export function createRecord(input, deps = {}) {
   const clock = deps?.clock ?? systemClock;
+  // kind 注册表数据化：合法集合由调用方注入或取自 policy，本文件不再持清单
+  const kinds = deps?.kinds ?? kindNames(defaultPolicy);
   if (!input || typeof input !== 'object') {
     throw invalid(`createRecord: input must be an object, got ${typeof input}`);
   }
@@ -63,7 +67,7 @@ export function createRecord(input, deps = {}) {
     tags,
   };
 
-  const v = validateRecord(record);
+  const v = validateRecord(record, kinds);
   if (!v.ok) throw invalid(`createRecord: ${v.errors.join('; ')}`);
   return record;
 }
@@ -71,8 +75,10 @@ export function createRecord(input, deps = {}) {
 /**
  * 逐条校验不变式（docs/02 §2）。返回 {ok, errors[]}，不抛错。
  * @param {MemoryRecord} r
+ * @param {Iterable<string>} [kinds] 合法 kind 集合，缺省回落 defaultPolicy.kinds
  */
-export function validateRecord(r) {
+export function validateRecord(r, kinds = kindNames(defaultPolicy)) {
+  const kindList = [...kinds];
   const errors = [];
   if (!r || typeof r !== 'object') return { ok: false, errors: ['record: not an object'] };
   if (!isId(r.id)) errors.push(`id: invalid ULID ${JSON.stringify(r.id)}`);
@@ -92,7 +98,7 @@ export function validateRecord(r) {
   }
   if (typeof r.text !== 'string' || r.text.length === 0) errors.push('text: must be non-empty');
   if (r.text.length > MAX_TEXT) errors.push(`text: length ${r.text.length} exceeds ${MAX_TEXT}`);
-  if (!KINDS.has(r.kind)) errors.push(`kind: must be one of ${[...KINDS].join('|')}, got ${r.kind}`);
+  if (!kindList.includes(r.kind)) errors.push(`kind: must be one of ${kindList.join('|')}, got ${r.kind}`);
   if (!STATUSES.has(r.status)) errors.push(`status: must be one of ${[...STATUSES].join('|')}, got ${r.status}`);
   if (typeof r.hits !== 'number' || r.hits < 0) errors.push(`hits: must be >= 0, got ${r.hits}`);
   if (r.privacy !== 'private' && r.privacy !== 'shared') errors.push(`privacy: must be private|shared, got ${r.privacy}`);

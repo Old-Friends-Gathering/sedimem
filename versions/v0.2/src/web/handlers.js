@@ -111,6 +111,8 @@ async function apiSummary(service) {
     memoHome: service.memoHome,
     version: appVersion(),
     policy: {
+      // kinds 随摘要下发给图谱页取色（issue #33：颜色唯一真相在 policy）
+      kinds: POLICY.kinds ?? null,
       maxActive: POLICY.quota?.maxActive ?? null,
       nearDupThreshold: POLICY.dedupe?.nearDupThreshold ?? null,
       scanThreshold: POLICY.dedupe?.scanThreshold ?? null,

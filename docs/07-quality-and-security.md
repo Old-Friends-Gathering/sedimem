@@ -18,7 +18,7 @@ cd versions/v0.2 && node eval/run.js   # 行为（I1–I12）
 
 | 项 | 指标 | 阈值 | 失败含义 |
 |---|---|---|---|
-| `test (22)` / `test (24)` | `node --test 'tests/**/*.test.js'` | **0 失败**（当前 117 用例） | 行为回归，或测试自身有竞态（历史上 I8 就因此偶发红，已修根因） |
+| `test (22)` / `test (24)` | `node --test 'tests/**/*.test.js'` | **0 失败**（2026-11-06 实测 187 用例） | 行为回归，或测试自身有竞态（历史上 I8 就因此偶发红，已修根因） |
 | `eval (I1–I12)` | `eval/run.js` 退出码 | **全 PASS** | 注入式行为契约破了：重复/冲突/过时/删除/投毒/配额/改写/并发/时区/遮蔽/裁决回路/中文改写 |
 | 关键指标 | `dupRatio` / `conflictRate` | `dupRatio = 0`；`conflictRate` 只允许由**真冲突用例**产生 | 冗余或冲突治理失效 |
 | 性能 | `bench n5000` search p95 | **< 50ms**（实测 1.9–2.4ms） | 索引退化（例如误改成 O(n) 扫描） |
@@ -86,17 +86,16 @@ cd versions/v0.2 && node eval/run.js   # 行为（I1–I12）
   指标发生漂移就更新本文件（指标漂移本身就是信号，不要静默改阈值让数字好看）。
 - **禁止**：删除检查项、加 `// q-check-ignore` 式逃逸、把失败改成 warning 了事。
 
-## 七、当前基线（2026-11-02，v0.1.3）
+## 七、当前基线（2026-11-06 实测，v0.2）
 
 | 门禁 | 结果 |
 |---|---|
-| 单元 + 注入式 | 156 tests / 156 pass（Node 24.21.0） |
-| 评测 | I1–I15 全 PASS；`dupRatio=0`、`conflictRate=0`、`nearDupBlocked=19`、`dedupeClusters=1`、`agentMerged=5` |
-| 性能 | n5000：write p95 5.7ms / search p95 2.8ms |
-| 覆盖率 | lines 89.7% / branches 78.4% / functions 90.4%（`ui/**` 排除，理由见 Q9：浏览器渲染/交互由 I13–I15 承担） |
-| 质量 | 9/9（新增 Q9 Web UI 层边界） |
-| 安全 | 9/9（新增 S9 部署面安全；S3/S1 对调研快照做了显式豁免，理由写在脚本注释里） |
-| 平台侧 | secret scanning ✅ / push protection ✅ / dependabot security updates ✅（validity checks 与 non-provider patterns 需要 GHAS，公开仓本组织不可用） |
+| 单元 + 注入式 | 187 tests / 187 pass（`node --test 'tests/**/*.test.js'`） |
+| 质量 | 9/9；Q5 契约覆盖 **100.0%**（75/75 导出，下限 90%）；Q2 源码 33 文件 / **6503 行**（上限 8000） |
+| 覆盖率 | 见 `quality-report.json` / coverage-gate 输出（阈值不变：lines ≥ 85% / branches ≥ 70% / functions ≥ 90%） |
+| 平台侧 | secret scanning ✅ / push protection ✅ / dependabot security updates ✅（见 §八） |
+
+> Q2 单文件上限仍是 900 行（当前最大 `src/api/service.js` 899 行，已贴顶）；v0.2.1 拆分（[#32](https://github.com/Old-Friends-Gathering/strata/issues/32)）后 service 主文件将回落到 ≤ 320 行，四个承接模块各 ≤ 420 行。
 
 ## 八、线上状态与验收证据（2026-11-02 实测）
 

@@ -48,9 +48,11 @@ v0.1 刻意用最笨的实现（纯 JS 倒排索引、规则化裁决、无 embe
 1. **只读 Web UI（记忆观察台）** —— 用户 2026-11-02 提出，v0.2 核心交付：三页分别回答「今天变了什么」「这些记忆是什么关系」「库在变健康还是变脏」。零依赖零构建、只读、只绑回环。规格见 [`08-web-ui.md`](08-web-ui.md)，线框图见 [`ui-mockup.html`](ui-mockup.html)。
 2. **`sqlite-index.js`**：FTS5 + WAL，5k 条以上检索延迟收益明显；同时验证 IndexPort 是否真的可换。——**已完成（v0.2.1-A，见 [`09-sqlite-index.md`](09-sqlite-index.md)）**：`config/policy.json` 的 `index.backend=memory|sqlite` 切换，回滚 = 改回 `memory` 一条配置。
 3. **curate 裁决 prompt + Agent 调用器**：把「导出批次 → Agent 判断 → 回写」跑成一条命令（`memo curate auto`）；Web UI 的「待裁决」区就是它的观察面。——**已完成（v0.2.1-B，见 [`10-curate-auto.md`](10-curate-auto.md)）**：落地为 `memo curate prompt`（生成任务包）→ Agent 回填 `decisions` → `memo curate apply --file` → `memo curate status` 三步；单命令 `auto`（含自动 LLM 裁决）仍留给 `JudgePort`。
-4. **夜间整合的收口**：`memo nightly`（launchd/cron），含配额淘汰与 brief 重建，输出 metrics。
-5. **投毒防线**：记忆正文里夹带的指令永不进入 brief，且写入时打 `suspicious` 标签（v0.1 仅做 brief 渲染时转义 + 不执行）。
-6. **hybrid 检索**：仅当 `stale_hit_rate` 或召回失败率有实测痛点时才做。
+4. **夜间整合的收口** ——**已在 v0.1 落地**：crontab 已装（夜间跑 `memo nightly`），输出 metrics 快照；实现见 `versions/v0.2/src/cli/nightly.js`。
+5. **投毒防线** ——**已在 v0.1 落地**：写入打 `suspicious` 标签 + 读路径默认遮蔽 + brief 逐行复检；实现见 `versions/v0.2/src/hygiene/suspicious.js`。
+6. **service 拆分** ——**v0.2.1 已做（进行中，[#32](https://github.com/Old-Friends-Gathering/strata/issues/32)）**：`api/service.js` 拆为 lifecycle / write-path / search-path / maintenance 四个承接模块，主文件回落到 ≤320 行，对外类与签名不变。
+7. **hybrid 检索**（BM25+dense）：**等 #36 的检索健康指标**（`noHitRate` / `staleHitRate`）给出实测痛点后再决定，v0.2.1 只先把指标立起来。
+8. **EmbeddingIndex**（`EmbedderPort` 第二实现）：与「先证明治理机制、再加检索能力」的排序一致，词法检索被证明不够时才启动。
 
 > **扩展点验证结论（v0.2.1 实测）**：IndexPort 真的只在一处注入就能换后端——`src/api/service.js` 只改了
 > import（`versions/v0.2/src/api/service.js:10`）+ 一行 `createIndex({...})` 调用
