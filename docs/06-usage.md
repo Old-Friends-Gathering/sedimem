@@ -218,3 +218,42 @@ memo compact --grace 0                    # 立刻删（小心：不可回查）
 `compact` 是**唯一**会物理删除的入口，且同时满足「墓碑 + purge 标签 + 超过 grace」三条才动；
 替换前自动备份 `<scope>.jsonl.bak.<ts>`（只留最近一份），`events.jsonl` 永不删——「为什么这条没了」永远查得到。
 
+## 12. 常驻观察台（开机自启，macOS）
+
+`memo serve` 默认只在前台跑，关掉终端就没了。想让它一直在：
+
+```bash
+# 1) 拷模板并替换三处占位符（node 路径 / 仓库根 / MEMO_HOME）
+cp versions/v0.2/configs/launchd/live.strata.observer.plist /tmp/observer.plist
+sed -i '' \
+  -e "s|__NODE__|$(command -v node)|" \
+  -e "s|__REPO_ROOT__|$PWD|" \
+  -e "s|__MEMO_HOME__|$HOME/.memo|" /tmp/observer.plist
+plutil -lint /tmp/observer.plist        # 先体检再装
+
+# 2) 装成用户级 LaunchAgent（登录即启动，进程挂了自动重起）
+mv /tmp/observer.plist ~/Library/LaunchAgents/live.strata.observer.plist
+launchctl load ~/Library/LaunchAgents/live.strata.observer.plist
+
+# 3) 确认
+launchctl list | grep strata            # 第一列是 PID，第二列 0 = 上次退出码正常
+curl -s http://127.0.0.1:7788/api/summary | head -c 80
+```
+
+**升级代码后让它加载新版本**（launchd 不会自动重载文件）：
+
+```bash
+launchctl kickstart -k gui/$(id -u)/live.strata.observer
+```
+
+看日志 / 停掉：
+
+```bash
+tail -f ~/.memo/serve.log ~/.memo/serve.err.log
+launchctl unload ~/Library/LaunchAgents/live.strata.observer.plist
+```
+
+**端口被占**（`EADDRINUSE`）：先 `lsof -ti tcp:7788` 看是谁；确认是旧的 `memo serve` 就
+`kill $(lsof -ti tcp:7788)`，KeepAlive 会把它拉起来；要换端口就改 plist 里的 `--port` 再重载。
+
+> 注意：观察台是**只读**的，它不写记忆，所以常驻不会污染真相层。
