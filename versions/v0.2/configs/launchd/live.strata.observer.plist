@@ -2,27 +2,22 @@
 <!--
   本地常驻观察台（macOS launchd）。
 
-  用法：
-    1) 把下面三处 __占位符__ 换成你机器上的真实路径：
-         __NODE__       node 绝对路径（建议用 DSH 自带 runtime 的 node，>=22）
-         __REPO_ROOT__  本仓库根目录
-         __MEMO_HOME__  记忆库目录，通常是 $HOME/.memo
-    2) cp versions/v0.2/configs/launchd/live.strata.observer.plist ~/Library/LaunchAgents/
-       launchctl load ~/Library/LaunchAgents/live.strata.observer.plist
-    3) 打开 http://127.0.0.1:7788
+  它不直接调 CLI，而是调 scripts/strata-run.sh —— 那个脚本读 versions/CURRENT 决定跑哪个版本目录。
+  换大版本（v0.2 → v0.3）时这个 plist 不用改，这正是 issue #47 要防的事：
+  旧机器的 crontab 写死了 versions/v0.1，版本切换后 nightly 一直在跑冻结代码。
 
-  KeepAlive=true：进程挂了自动拉起来；RunAtLoad=true：登录即启动。
-  改了代码想让它加载新版本，用：
-       launchctl kickstart -k gui/$(id -u)/live.strata.observer
-  （直接 kill 也行，KeepAlive 会重起，但 kickstart 更明确。）
+  用法：
+    1) 把两处占位符换成真实路径：__REPO_ROOT__（本仓库根）/ __MEMO_HOME__（通常 $HOME/.memo）
+    2) cp 到 ~/Library/LaunchAgents/ && launchctl load ~/Library/LaunchAgents/live.strata.observer.plist
+    3) 打开 http://127.0.0.1:7788
+  改了代码要它加载新版本：launchctl kickstart -k gui/$(id -u)/live.strata.observer
 -->
 <plist version="1.0">
 <dict>
   <key>Label</key><string>live.strata.observer</string>
   <key>ProgramArguments</key>
   <array>
-    <string>__NODE__</string>
-    <string>__REPO_ROOT__/versions/v0.2/src/cli/memo.js</string>
+    <string>__REPO_ROOT__/scripts/strata-run.sh</string>
     <string>serve</string>
     <string>--port</string>
     <string>7788</string>
@@ -30,6 +25,7 @@
   <key>EnvironmentVariables</key>
   <dict>
     <key>MEMO_HOME</key><string>__MEMO_HOME__</string>
+    <key>MEMO_NODE</key><string>__NODE__</string>
     <key>PATH</key><string>/usr/local/bin:/usr/bin:/bin:/opt/homebrew/bin</string>
   </dict>
   <key>WorkingDirectory</key><string>__REPO_ROOT__</string>
