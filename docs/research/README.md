@@ -12,6 +12,7 @@
 | [`agent-memory-projects-survey-2026-11.md`](agent-memory-projects-survey-2026-11.md) | **开源项目实测**：mem0/OpenMemory、Letta、Zep+Graphiti、cognee、MemOS、memU、Supermemory、Memobase 的 star/license/存储/检索/MCP 暴露/自我维护能力/成本 | 402 行 | 子代理 A，GitHub REST API + 源码核验，2026-11-02 |
 | [`memory-ecosystem-2026.md`](memory-ecosystem-2026.md) | **编码 Agent 侧生态**：claude-mem、basic-memory、mcp-memory-service、Cline Memory Bank，以及 Claude Code / Codex CLI / DSH 各自的原生记忆机制与可插拔接缝 | 345 行 | 子代理 B，官方文档当天抓取 + 仓库 Issue 证据 |
 | [`ai-memory-hygiene-survey.md`](ai-memory-hygiene-survey.md) | **治理机制综述**：冗余/重复/冲突/过时四类熵增的治理路径、阈值纪律、bi-temporal 失效语义、成本模型、评测方法、真实反模式 | 519 行 | 子代理 C，论文（arXiv 全部核验）+ 公开实现 |
+| [`layered-memory-2026.md`](layered-memory-2026.md) | **分层蒸馏（L0–L3）在 GitHub 上更好的做法**：确定性聚合 vs LLM 生成、捕获/注入的成本与噪声治理、检索与评测（先校准裁判）；附对 strata 的三条建议与最小 A/B 实验设计 | 119 行 | 三名调研代理并行（glm-5.3），2026-11-07，只记打开过的页面/源码 |
 | [`readmes/`](readmes/) | 上述 8 个项目 README 的**当日快照**（防止上游改动后结论无法复核） | 8 份 | 子代理 A 抓取 |
 
 ## 这些调研直接决定了哪些设计

@@ -1,9 +1,9 @@
 {
   "name": "@old-friends-gathering/strata",
-  "version": "0.2.1",
+  "version": "0.3.0",
   "private": true,
   "type": "module",
-  "description": "strata v0.2：本地跨会话、跨客户端（DSH/Codex/Claude）自我迭代记忆层（零运行时依赖）",
+  "description": "strata v0.2\uff1a\u672c\u5730\u8de8\u4f1a\u8bdd\u3001\u8de8\u5ba2\u6237\u7aef\uff08DSH/Codex/Claude\uff09\u81ea\u6211\u8fed\u4ee3\u8bb0\u5fc6\u5c42\uff08\u96f6\u8fd0\u884c\u65f6\u4f9d\u8d56\uff09",
   "bin": {
     "memo": "./src/cli/memo.js",
     "memo-mcp": "./src/mcp/server.js"

@@ -88,6 +88,9 @@ export async function queryExportRecords(service, {
       createdAt: r.createdAt,
       hits: r.hits ?? 0,
       tags: r.tags,
+      // 溯源字段（裁决 54）：只在存在时投影。L3 的出处必须能随导出一起出去，
+      // 否则 `memo view trace` / Web 侧根本看不到它是从哪几条记录派生的。
+      ...(r.sourceRefs !== undefined ? { sourceRefs: r.sourceRefs } : {}),
       // 来源对象保留 agent（用于区分谁写的），但 quote 可能夹带正文 → 遮蔽
       source: mask && r.source
         ? { ...r.source, quote: r.source.quote === undefined ? undefined : MASK }

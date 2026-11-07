@@ -621,3 +621,47 @@ nightly metrics 新增 `searchCount` / `noHitRate` / `staleHitRate` / `avgTopSco
 `supersede` 拒绝 `tombstoned` 记录（否则一次普通写就能把 purge 语义打断）；
 `validateKinds` 用 `Number.isFinite`（`"1.3"` 这类字符串不再静默通过）；
 `policy.json` 补 `quota.purgeGraceMs = 604800000`，让裁决 51 的字面承诺成立。
+
+## §3.14 v0.3 分层视图契约（裁决 54–57）
+
+设计依据：[`docs/plans/v0.3-layered-views.md`](plans/v0.3-layered-views.md)、
+[`docs/research/layered-memory-2026.md`](research/layered-memory-2026.md)。
+
+### 裁决 54：`sourceRefs` 是溯源字段，出现即强校验
+
+- 可选字段；**出现时**必须是非空 ULID 数组、无重复、不得引用自身（`core/record.js` 的 `validateRecord`）
+- 只有「派生于其它记录」的记录才带（L3 画像）；普通记录不写这个键（不是 `null`、不是 `[]`）
+- 空数组一律 `E_INVALID_RECORD`：空数组等于"假装有出处"
+
+### 裁决 55：L2 视图是派生物，必须可字节重建
+
+- 位置 `$MEMO_HOME/views/<scopeKey>/L2.jsonl` + `meta.json`；**不进真相层**
+- `blockId = sha256(key).slice(0,12)`；`key` 为 `slot:<subject>\u0001<predicate>` 或 `cluster:<最小 recordId>`（`\u0001` 防 subject 含 `/` 撞键）
+- `builtAt` 取记录里最晚的 `createdAt`，**不是 `Date.now()`** —— 否则同一真相层两次构建字节不同
+- 不变式：`sum(block.recordIds.length) === sourceCount`（单条 unstructured 也自成簇，保证守恒）
+- 删除整个 `views/` 后 `memo view rebuild` 必须逐字节复原（eval I21）
+
+### 裁决 56：注入分级的字符预算与排序
+
+- `policy.brief.tier0Chars`（默认 800）：`memo brief --tier0` 的硬上限；排序 hits 降序 → createdAt 降序
+- Tier-0 每行带**完整 ULID**（证据链：可 `memory_get` 反查原文）；截断 id 等于让证据链失效
+- `policy.brief.totalChars`（默认 8000）+ `policy.brief.quota`（L2/L3 份额）：超限先砍散条 → 再砍 L3 → 最后砍 L2
+- 视图缺失时 brief **必须**降级为扁平渲染（视图是加速层，不是依赖）
+
+### 裁决 57：L3 的预算与校验（成本有上界）
+
+- `policy.l3 = { maxCallsPerRun: 20, batchSize: 10, ttlMs: 30d }`
+- 一次 `memo view l3 apply` 最多 `batchSize` 条；`planL3` 的 `callsEstimate` 不得超过 `maxCallsPerRun`
+- 每份草稿过 `validateL3Draft`：`sourceRefs` 必填且为 ULID、`text` ≤2000 字、`confidence ∈ (0,1]`
+- TTL 用 `expiredAt` 表达（真相层不变式要求 active 记录的 `validTo` 必须为 null）
+- L3 落盘走既有 `service.write`，不新开写入路径
+
+### 第十一轮导出登记（v0.3 新增）
+
+| 模块 | 导出 |
+|---|---|
+| `src/views/l2.js` | `viewDir` `buildL2` `writeL2` `readL2` `traceRecord` |
+| `src/views/l3.js` | `planL3` `validateL3Draft` `buildL3Record` `traceL3` |
+| `src/render/tier0.js` | `renderTier0` |
+| `src/cli/view.js` | `cmdView` `cmdBriefTier0` `L2_VIEW_FILE` |
+| `src/render/brief.js` | `renderBrief`（v0.3 起支持 `blocks` 分层，旧单对象签名兼容） |
