@@ -39,7 +39,7 @@ jobs:
         run: node tools/coverage-gate.mjs
 
   eval:
-    name: eval (I1–I17)
+    name: eval (I1–I23)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
