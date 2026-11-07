@@ -64,6 +64,9 @@ export function createRecord(input, deps = {}) {
     contentHash: input.contentHash ?? contentHash({ text: finalText, subject: input.subject, predicate: input.predicate, value: input.value ?? finalText }),
     hits: input.hits ?? 0,
     privacy: input.privacy ?? 'private',
+    // L3 溯源（issue #52 / 裁决 54）：只有「派生于其它记录」的记录才带；
+    // 普通记录保持不含该字段（不是 null 空数组），避免真相层被无意义的键撑大。
+    ...(input.sourceRefs !== undefined ? { sourceRefs: input.sourceRefs } : {}),
     tags,
   };
 
@@ -102,6 +105,20 @@ export function validateRecord(r, kinds = kindNames(defaultPolicy)) {
   if (!STATUSES.has(r.status)) errors.push(`status: must be one of ${[...STATUSES].join('|')}, got ${r.status}`);
   if (typeof r.hits !== 'number' || r.hits < 0) errors.push(`hits: must be >= 0, got ${r.hits}`);
   if (r.privacy !== 'private' && r.privacy !== 'shared') errors.push(`privacy: must be private|shared, got ${r.privacy}`);
+  // 溯源字段（裁决 54）：出现就必须是非空 ULID 数组且去重；空数组等于「假装有出处」，直接拒
+  if (r.sourceRefs !== undefined) {
+    if (!Array.isArray(r.sourceRefs) || r.sourceRefs.length === 0) {
+      errors.push('sourceRefs: must be a non-empty array of ULIDs when present');
+    } else {
+      const seen = new Set();
+      for (const ref of r.sourceRefs) {
+        if (!isId(ref)) errors.push(`sourceRefs: invalid ULID ${JSON.stringify(ref)}`);
+        else if (seen.has(ref)) errors.push(`sourceRefs: duplicate ${ref}`);
+        else seen.add(ref);
+      }
+      if (r.sourceRefs.includes(r.id)) errors.push('sourceRefs: record may not cite itself');
+    }
+  }
   return { ok: errors.length === 0, errors };
 }
 

@@ -20,7 +20,10 @@ export const THRESHOLDS = {
    *  已登记 v0.2 拆分项（quota / search / curate 三个子模块），暂以 900 为硬线防止继续膨胀。 */
   maxFileLines: 900,
   /** src 总行数上限：v0.1 约 4.7k，留一倍余量防无声膨胀 */
-  maxTotalSrcLines: 8000,
+  // v0.3 调高到 9000：分层视图新增 4 个模块（views/l2 302 行、views/l3 272 行、
+  // render/tier0 103 行、cli/view 177 行 = 854 行）。单文件 900 硬线不动 ——
+  // 总量放大允许「多个小模块」，不允许「一个大文件」。改这条要同步 docs/07 基线表与 CHANGELOG。
+  maxTotalSrcLines: 9000,
   /** 单元测试文件数下限 */
   minTestFiles: 8,
   /** 契约文档对 src 导出名的覆盖率（%）；内部工具函数在 contract-exempt.json 里登记豁免 */

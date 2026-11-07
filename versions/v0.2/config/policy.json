@@ -1,11 +1,31 @@
 {
   "version": "0.1.0",
   "kinds": {
-    "fact": { "halfLifeMs": 7776000000, "weight": 1.0, "color": "#5b9cf5" },
-    "pref": { "halfLifeMs": 15552000000, "weight": 1.3, "color": "#c084fc" },
-    "decision": { "halfLifeMs": 31536000000, "weight": 1.4, "color": "#34d399" },
-    "gotcha": { "halfLifeMs": 31536000000, "weight": 1.2, "color": "#fbbf24" },
-    "state": { "halfLifeMs": 7200000, "weight": 0.6, "color": "#94a3b8" }
+    "fact": {
+      "halfLifeMs": 7776000000,
+      "weight": 1.0,
+      "color": "#5b9cf5"
+    },
+    "pref": {
+      "halfLifeMs": 15552000000,
+      "weight": 1.3,
+      "color": "#c084fc"
+    },
+    "decision": {
+      "halfLifeMs": 31536000000,
+      "weight": 1.4,
+      "color": "#34d399"
+    },
+    "gotcha": {
+      "halfLifeMs": 31536000000,
+      "weight": 1.2,
+      "color": "#fbbf24"
+    },
+    "state": {
+      "halfLifeMs": 7200000,
+      "weight": 0.6,
+      "color": "#94a3b8"
+    }
   },
   "halfLifeMs": {
     "pref": 15552000000,
@@ -36,7 +56,13 @@
   },
   "brief": {
     "lines": 80,
-    "recentCount": 15
+    "recentCount": 15,
+    "tier0Chars": 800,
+    "totalChars": 8000,
+    "quota": {
+      "L2": 0.25,
+      "L3": 0.15
+    }
   },
   "suspiciousPatterns": [
     "忽略之前",
@@ -52,5 +78,14 @@
   },
   "index": {
     "backend": "memory"
+  },
+  "views": {
+    "maxBlockSize": 64,
+    "maxClusterRecords": 2000
+  },
+  "l3": {
+    "maxCallsPerRun": 20,
+    "batchSize": 10,
+    "ttlMs": 2592000000
   }
 }

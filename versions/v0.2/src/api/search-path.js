@@ -174,7 +174,7 @@ export async function getRecord(svc, id, { includeSuspicious = false } = {}) {
 
 /** 确定性 brief：pinned/decision 优先 → 最近 active 事实；suspicious 不进 brief。
  *  裁决 23：末节追加待裁决去重候选数（dedupeCandidates 显式传入则不再现算）。 */
-export async function briefRecords(svc, { lines = 80, dedupeCandidates } = {}) {
+export async function briefRecords(svc, { lines = 80, dedupeCandidates, blocks } = {}) {
   svc._ensureOpen();
   const records = [...svc._records.values()].filter(
     (r) => r.status === 'active' && r.validTo === null
@@ -186,7 +186,21 @@ export async function briefRecords(svc, { lines = 80, dedupeCandidates } = {}) {
     const scan = await svc.dedupeScan({ limit: 1 });
     candidates = scan.totalClusters;
   }
+  // 分层 brief（#51）：只有在视图**新鲜**时才启用，否则静默走扁平路径。
+  // 判定用 sourceCount vs 真相层条数（视图是派生物，陈旧视图比没有视图更糟：
+  // 架构审核 S5 实测，陈旧视图会让 L2 目录把死记录数展示给 Agent）。
+  let viewBlocks = blocks;
+  if (viewBlocks === undefined) {
+    try {
+      const { readL2 } = await import('../views/l2.js');
+      const view = readL2(svc.memoHome, svc.scope);
+      viewBlocks = view && view.sourceCount === svc._records.size ? view.blocks : null;
+    } catch {
+      viewBlocks = null; // 视图模块缺失/损坏不影响 brief 主路径（降级为扁平）
+    }
+  }
   return renderBrief({
     scope: svc.scope, records, lines, clock: svc.clock, dedupeCandidates: candidates,
+    blocks: viewBlocks,
   });
 }

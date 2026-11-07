@@ -8,6 +8,7 @@ import process from 'node:process';
 import path from 'node:path';
 import os from 'node:os';
 import { AGENT_PATTERN, RESERVED_AGENTS } from '../core/record.js';
+import { cmdView, cmdBriefTier0 } from './view.js';
 
 function resolveMemoHome() {
   return process.env.MEMO_HOME || path.join(os.homedir(), '.memo');
@@ -18,7 +19,12 @@ const USAGE = `memo —— 本地跨会话记忆系统 v0.1
 用法:
   memo write --text "..." [--kind fact] [--subject s] [--predicate p] [--agent dsh] [--value v] [--confidence 0.8] [--tags a,b] [--privacy private|shared] [--json]
   memo search "..." [--limit 10] [--kind fact] [--as-of ISO] [--json]
-  memo brief [--lines 80]
+  memo brief [--lines 80] [--tier0]              # --tier0：一条一行的目录（≤800 字符，v0.3）
+  memo view build|rebuild                        # 重建 L2 场景块视图（纯派生，可删可重建）
+  memo view show L2 [--limit 50] [--json]
+  memo view trace <recordId> [--json]            # 这条记录属哪个 L2 块 / 它是哪几条的派生（L3 溯源）
+  memo view l3 plan [--json]                     # L3 候选（预算上限来自 policy.l3）
+  memo view l3 apply --file drafts.json          # 写入 L3（必须带 sourceRefs，一次 ≤ batchSize）
   memo get <id>
   memo supersede <id> --value "..." [--text "..."] [--agent dsh] [--json]
   memo forget <id> [--purge] [--reason "..."] [--json]
@@ -585,9 +591,19 @@ async function main() {
     case 'search':
       await cmdSearch(positional, opts, asJson);
       return 0;
-    case 'brief':
+    case 'brief': {
+      if (opts.tier0) {
+        const service = await loadService();
+        try { await cmdBriefTier0(opts, asJson, service); } finally { await service.close(); }
+        return 0;
+      }
       await cmdBrief(opts);
       return 0;
+    }
+    case 'view': {
+      const service = await loadService();
+      try { return await cmdView(positional, opts, asJson, service); } finally { await service.close(); }
+    }
     case 'get':
       await cmdGet(positional);
       return 0;

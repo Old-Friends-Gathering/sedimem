@@ -288,3 +288,51 @@ crontab -l | grep -v nightly.js > /tmp/ct.new && crontab /tmp/ct.new
 KeepAlive 会把它拉起来；要换端口就改 plist 里的 `--port` 再重载。
 
 > 观察台是**只读**的，常驻不会污染真相层；夜间整合会写 brief / metrics / 墓碑，但都是既有语义内的写入。
+
+## 13. 分层视图（L2 / L3 / 注入分级，v0.3）
+
+`brief` 给的是"这个库里有什么"；视图给的是"这些记录怎么聚在一起、哪几条构成了某个结论"。
+两者都是**派生**的：删掉 `~/.memo/views/` 随时可以重建，真相层一条不动。
+
+```bash
+# L2 场景块：按 slot 分组 + 对无结构记录做相似度聚类
+memo view build          # 构建到 $MEMO_HOME/views/<scopeKey>/L2.jsonl
+memo view rebuild        # 删了再建（结果字节相同，I21 守着）
+memo view show L2        # 看块列表：key / 条数 / 时间跨度
+memo view trace <id>     # 这条记录属哪个块；如果它是 L3，还能看出处
+
+# 注入分级：一条一行的目录（≤800 字符），每行带完整 id 供反查
+memo brief --tier0
+```
+
+### 13.1 L3 画像（需要你/Agent 写草稿）
+
+L3 不是自动生成的——`memo view l3 plan` 只给**候选**，草稿由 Agent 写进 JSON，
+再 `apply` 落盘。**每份草稿必须带 `sourceRefs`**（空数组会被拒：空等于假装有出处）。
+
+```bash
+memo view l3 plan                       # 候选 + 预计调用数（≤ policy.l3.maxCallsPerRun）
+cat > /tmp/l3.json <<'JSON'
+{ "drafts": [
+  { "text": "这个项目坚持零运行时依赖，宁可自己写", "sourceRefs": ["01M6…"], "confidence": 0.9 }
+] }
+JSON
+memo view l3 apply --file /tmp/l3.json  # 一次最多 batchSize（10）条
+memo view trace <L3 的 id>               # 核出处：哪些已 superseded / 缺失
+```
+
+预算与 TTL 都在 `config/policy.json` 的 `l3` 段：`maxCallsPerRun` / `batchSize` / `ttlMs`（默认 30 天，
+过期后 brief 不再注入，但记录保留）。
+
+### 13.2 注入预算怎么分
+
+`policy.brief`：
+
+| 键 | 默认 | 作用 |
+|---|---|---|
+| `lines` | 80 | 完整 brief 的总行数 |
+| `tier0Chars` | 800 | `--tier0` 目录的字符上限 |
+| `totalChars` | 8000 | 完整 brief 的总字符上限（超了先砍散条 → 再砍 L3 → 最后砍 L2） |
+| `quota` | `{L2:0.25, L3:0.15}` | 分层行数份额；视图不存在时自动降级为扁平渲染 |
+
+> 为什么要有硬配额：调研里 dsh-auto-memory 的实测——纯按优先级排序，单层会把预算吃光（77 chunks 全占）。
