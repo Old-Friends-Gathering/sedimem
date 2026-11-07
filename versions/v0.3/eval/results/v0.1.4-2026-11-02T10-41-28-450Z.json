@@ -1,0 +1,152 @@
+{
+  "version": "0.1.4",
+  "ts": "2026-11-02T10:41:28.451Z",
+  "cases": [
+    {
+      "id": "I1",
+      "pass": true,
+      "ms": 73,
+      "detail": "ok"
+    },
+    {
+      "id": "I2",
+      "pass": true,
+      "ms": 72,
+      "detail": "ok"
+    },
+    {
+      "id": "I3",
+      "pass": true,
+      "ms": 73,
+      "detail": "ok"
+    },
+    {
+      "id": "I4",
+      "pass": true,
+      "ms": 69,
+      "detail": "ok"
+    },
+    {
+      "id": "I5",
+      "pass": true,
+      "ms": 68,
+      "detail": "ok"
+    },
+    {
+      "id": "I6",
+      "pass": true,
+      "ms": 107,
+      "detail": "ok"
+    },
+    {
+      "id": "I7",
+      "pass": true,
+      "ms": 110,
+      "detail": "ok"
+    },
+    {
+      "id": "I8",
+      "pass": true,
+      "ms": 238,
+      "detail": "ok"
+    },
+    {
+      "id": "I9",
+      "pass": true,
+      "ms": 68,
+      "detail": "ok"
+    },
+    {
+      "id": "I10",
+      "pass": true,
+      "ms": 72,
+      "detail": "ok"
+    },
+    {
+      "id": "I11",
+      "pass": true,
+      "ms": 91,
+      "detail": "ok"
+    },
+    {
+      "id": "I12",
+      "pass": true,
+      "ms": 100,
+      "detail": "ok"
+    },
+    {
+      "id": "I13",
+      "pass": true,
+      "ms": 93,
+      "detail": "ok"
+    },
+    {
+      "id": "I14",
+      "pass": true,
+      "ms": 128,
+      "detail": "ok"
+    },
+    {
+      "id": "I15",
+      "pass": true,
+      "ms": 137,
+      "detail": "ok"
+    },
+    {
+      "id": "I16",
+      "pass": true,
+      "ms": 103,
+      "detail": "ok"
+    },
+    {
+      "id": "I17",
+      "pass": true,
+      "ms": 80,
+      "detail": "ok"
+    }
+  ],
+  "metrics": {
+    "active": 3,
+    "dupRatio": 0,
+    "conflictRate": 0,
+    "unitCost": 12.667,
+    "nearDupBlocked": 19,
+    "disputedAfterCurate": 0,
+    "dedupeClusters": 1,
+    "agentMerged": 5,
+    "agentLoopActive": 1,
+    "gate": {
+      "dupRatio": true,
+      "conflictRate": true,
+      "disputedCountI7": true,
+      "dedupeClustersFound": true,
+      "agentLoopConverged": true
+    }
+  },
+  "bench": {
+    "n1000": {
+      "write": {
+        "p50": 0.9077910000000884,
+        "p95": 1.3210840000001554,
+        "n": 1000
+      },
+      "search": {
+        "p50": 0.27683299999989686,
+        "p95": 0.41333399999984977,
+        "n": 200
+      }
+    },
+    "n5000": {
+      "write": {
+        "p50": 2.7401660000004995,
+        "p95": 4.984000000000378,
+        "n": 5000
+      },
+      "search": {
+        "p50": 1.295125000000553,
+        "p95": 1.7596250000024156,
+        "n": 200
+      }
+    }
+  }
+}

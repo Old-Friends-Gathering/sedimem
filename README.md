@@ -62,7 +62,7 @@ MCP 工具名仍是 `memory_*`、`serverName` 仍是 `memo`（改这些要同步
 
 ```bash
 NODE=${MEMO_NODE:-node}     # 任意 Node ≥ 22
-cd versions/v0.2
+cd versions/v0.3
 
 $NODE --test 'tests/**/*.test.js'   # 单元 + 注入式回归（117 用例）
 $NODE eval/run.js                   # I1–I12 评测，结果写 eval/results/
@@ -71,10 +71,10 @@ $NODE src/mcp/server.js             # MCP server（stdio）
 ```
 
 三端接入（DSH / Codex CLI / Claude Code）见 [`docs/06-usage.md`](docs/06-usage.md)，
-模板在 [`versions/v0.2/configs/`](versions/v0.2/configs/)；一键验证脚本：
+模板在 [`versions/v0.3/configs/`](versions/v0.3/configs/)；一键验证脚本：
 
 ```bash
-bash versions/v0.2/configs/verify-three-clients.sh   # dsh 写 → 另一进程 recall → 用召回值回答
+bash versions/v0.3/configs/verify-three-clients.sh   # dsh 写 → 另一进程 recall → 用召回值回答
 ```
 
 ## 门禁（每次 push / PR 自动跑）
@@ -117,9 +117,10 @@ strata/
 ├── tools/                   # 门禁脚本（quality / security / coverage，零依赖）
 ├── .github/                 # 四个 workflow + issue/PR 模板 + CODEOWNERS
 ├── versions/
-│   ├── CURRENT              # 当前版本指针（v0.2）——门禁与 CI 都读它
+│   ├── CURRENT              # 当前版本指针（v0.3）——门禁与 CI 都读它
 │   ├── v0.1/                # 🔒 冻结（0.1.2 快照，见 FROZEN.md）
-│   └── v0.2/                # ✅ 当前开发线：src/ tests/ eval/ configs/ ui/ docs/ CHANGELOG
+│   ├── v0.2/                # 🔒 冻结（0.2.1 快照，见 FROZEN.md）
+│   └── v0.3/                # ✅ 当前开发线：src/ tests/ eval/ configs/ ui/ docs/ CHANGELOG
 └── README.md
 ```
 
@@ -128,11 +129,11 @@ strata/
 | 版本 | 主题 | 状态 |
 |---|---|---|
 | v0.1.x（`versions/v0.1`） | 核心记忆层（append-only 真相层 + 派生索引 + brief）、四条卫生路径、MCP/CLI、注入式评测 I1–I12、门禁体系 | 🔒 冻结在 0.1.2 |
-| **v0.2.0**（`versions/v0.2`） | 只读 Web 观察台（今日/图谱/卫生）+ SQLite FTS5 后端 + curate 裁决任务包 + 多分库浏览 + 图谱跟随分库 | ✅ 已交付 |
-| **v0.2.1**（同目录递增） | 拆分 service（[#32](https://github.com/Old-Friends-Gathering/strata/issues/32)）、kind 注册表数据化（[#33](https://github.com/Old-Friends-Gathering/strata/issues/33)）、JudgePort + `curate auto`（[#34](https://github.com/Old-Friends-Gathering/strata/issues/34)）、compact 物理清理（[#35](https://github.com/Old-Friends-Gathering/strata/issues/35)）、检索健康指标（[#36](https://github.com/Old-Friends-Gathering/strata/issues/36)）；施工图见 [`docs/plans/v0.2.1-plan.md`](docs/plans/v0.2.1-plan.md) | ✅ 已交付 |
+| v0.2.x（`versions/v0.2`） | 只读 Web 观察台（今日/图谱/卫生）+ SQLite FTS5 后端 + curate 裁决任务包 + 多分库浏览；0.2.1 起拆分 service、kind 数据化、JudgePort/`curate auto`、`compact`、检索健康指标 | 🔒 冻结在 0.2.1 |
+| **v0.3.0**（`versions/v0.3`） | 分层视图：L2 场景块（确定性、可字节重建）+ 注入分级 tier0（≤800 字符、带完整 id）+ L3 画像（固定预算 + 强制溯源） | ✅ 已交付 |
 | 后续候选 | EmbeddingIndex、hybrid 检索（等 #36 指标给出实测痛点） | 未开始 |
 
-版本目录规则：**大版本换目录（v0.1 → v0.2），小版本在同一目录内递增（0.2.0 → 0.2.1）**；
+版本目录规则：**`X.Y` 换目录**（v0.2 → v0.3 新建 `versions/v0.3/`），**`X.Y.Z` 补丁同目录递增**（0.3.0 → 0.3.1 都在 `versions/v0.3/`）；
 老目录冻结并保留 `FROZEN.md`。指针在 `versions/CURRENT`。
 
 ## 看一眼（只读观察台）
@@ -152,12 +153,12 @@ strata/
 ![卫生洞察](docs/shots/hygiene.png)
 
 ```bash
-node versions/v0.2/src/cli/memo.js serve        # 打开 http://127.0.0.1:7788
-node versions/v0.2/src/cli/memo.js serve --help # 端口、分库、无 UI 模式
+node versions/v0.3/src/cli/memo.js serve        # 打开 http://127.0.0.1:7788
+node versions/v0.3/src/cli/memo.js serve --help # 端口、分库、无 UI 模式
 ```
 
 想让它开机自启、挂了自动重起（macOS launchd）：见 [`docs/06-usage.md`](docs/06-usage.md) §12 ——
-模板在 [`versions/v0.2/configs/launchd/`](versions/v0.2/configs/launchd/)。
+模板在 [`versions/v0.3/configs/launchd/`](versions/v0.3/configs/launchd/)。
 
 ## 许可
 

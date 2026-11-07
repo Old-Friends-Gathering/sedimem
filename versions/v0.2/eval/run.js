@@ -82,9 +82,6 @@ const CASE_FILES = [
   ['I18', 'i18-curate-auto.test.js'],
   ['I19', 'i19-compact.test.js'],
   ['I20', 'i20-search-metrics.test.js'],
-  ['I21', 'i21-view-rebuild.test.js'],
-  ['I22', 'i22-brief-quota.test.js'],
-  ['I23', 'i23-l3-budget.test.js'],
 ];
 
 function runCase(id, file) {

@@ -25,7 +25,7 @@ main（受保护分支，禁止直推 / 禁止 force push）
 ## 二、提交前必跑（本地，与 CI 同源）
 
 ```bash
-cd versions/v0.2
+cd versions/v0.3
 node --test 'tests/**/*.test.js'     # 单元 + 注入式回归
 node eval/run.js                     # I1–I12 评测
 
