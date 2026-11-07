@@ -1,0 +1,18 @@
+# Codex CLI 接入 memo MCP server —— 追加到 ~/.codex/config.toml
+#
+# 步骤：
+#   1) 把下面 [mcp_servers.memo] 段（含 env 行）复制进 ~/.codex/config.toml
+#   2) 把两个占位路径换成你机器上的绝对路径：
+#        command → node ≥ 22 的可执行文件（which node）
+#        args    → 本仓库 versions/vX.Y/src/mcp/server.js 的绝对路径
+#      TOML 不会展开 ~ 或 $VAR，必须写字面绝对路径。
+#   3) 验证：codex mcp list   /   codex mcp get memo
+#
+# 注意：环境变量名里含 KEY/PASSWORD/SECRET/TOKEN 的会被 DSH 侧 MCP 客户端 scrub，
+# 但 Codex 不做这个 scrub；MEMO_HOME / MEMO_SCOPE 两端都安全。
+
+[mcp_servers.memo]
+command = "/abs/path/to/node"
+args = ["/abs/path/to/memo/versions/v0.2/src/mcp/server.js"]
+env = { MEMO_HOME = "/abs/path/to/.memo" }
+enabled = true

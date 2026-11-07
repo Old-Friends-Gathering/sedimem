@@ -32,7 +32,7 @@ jobs:
         with:
           node-version: ${{ matrix.node }}
       - name: 单元测试 + 注入式回归
-        working-directory: versions/v0.2
+        working-directory: versions/v0.3
         run: node --test 'tests/**/*.test.js'
       - name: 覆盖率门禁
         if: matrix.node == '22'
@@ -47,14 +47,14 @@ jobs:
         with:
           node-version: '22'
       - name: 跑评测套件
-        working-directory: versions/v0.2
+        working-directory: versions/v0.3
         run: node eval/run.js
       - name: 归档评测结果
         if: always()
         uses: actions/upload-artifact@v7
         with:
           name: eval-results
-          path: versions/v0.2/eval/results/LATEST.json
+          path: versions/v0.3/eval/results/LATEST.json
           if-no-files-found: warn
 
   gate:

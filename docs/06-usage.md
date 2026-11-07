@@ -56,14 +56,14 @@ memory_scope({action:'use', path:'/abs/path/to/project'})  # 切到项目分库�
 - **每次会话结束前**（Agent 自觉）：`memory_dedupe_scan` → 逐簇判定 → `memory_curate(apply)`。不确定就 `keep_both` 并在 `note` 里写理由——系统宁可并存，也不静默删。
 - **每天一次**（cron，不占会话时间）：
   ```cron
-  0 3 * * * cd /abs/path/to/memo/versions/v0.2 && /abs/path/to/node src/cli/nightly.js >> ~/.memo/nightly.log 2>&1
+  0 3 * * * cd /abs/path/to/memo/versions/v0.3 && /abs/path/to/node src/cli/nightly.js >> ~/.memo/nightly.log 2>&1
   ```
   nightly 做：TTL 过期、配额淘汰（墓碑打 `quota` tag）、hits 落盘、brief 重建写 `~/.memo/brief/<scope>.md`、metrics 快照，并打印去重候选簇摘要（**只报告不自动裁决**）。
 - **每周一眼**：`memory_stats` 的 `dupRatio`/`conflictRate` 上升 → 说明有人在重复写或事实在漂移，去看 `brief` 与 `dedupe_scan`。
 - **命令行等价物**（不想开 Agent 时）：
   ```bash
   NODE=${MEMO_NODE:-node}
-  cd strata/versions/v0.2
+  cd strata/versions/v0.3
   $NODE src/cli/memo.js brief
   $NODE src/cli/memo.js dedupe scan          # 可加 --threshold 0.45 --dice 0.15 --json
   $NODE src/cli/memo.js doctor
@@ -106,7 +106,7 @@ memory_scope({action:'use', path:'/abs/path/to/project'})  # 切到项目分库�
 ### 7.1 启动
 
 ```bash
-cd strata/versions/v0.2
+cd strata/versions/v0.3
 node src/cli/memo.js serve --port 7788     # 默认 127.0.0.1:7788；--no-ui 只提供 API
 ```
 
@@ -133,7 +133,7 @@ node src/cli/memo.js serve --port 7788     # 默认 127.0.0.1:7788；--no-ui 只
 | 现象 | 原因 / 处理 |
 |---|---|
 | 端口占用报错 | 换 `--port`；`lsof -i :7788` 查占用者。服务不自动递增端口 |
-| 打开是 404 / 提示 ui 缺失 | `versions/v0.2/ui/` 目录不完整（拷贝/打包时漏了）；补齐目录后刷新；`--no-ui` 模式下本来就不出页面，只给 `/api/*` |
+| 打开是 404 / 提示 ui 缺失 | `versions/v0.3/ui/` 目录不完整（拷贝/打包时漏了）；补齐目录后刷新；`--no-ui` 模式下本来就不出页面，只给 `/api/*` |
 | 页面数字和预期对不上 | 先看页眉 scope：**页面显示的是 `memo serve` 启动进程按 cwd 解析出的那个分库**（与 CLI 同规则）。scope 不对就到目标项目目录重新 `serve`，或设 `MEMO_SCOPE` 后再启动 |
 | 图谱某些节点没标签 | 标签防重叠跳过（见 `docs/08` §12 偏差 b）；点节点看详情即可 |
 
@@ -142,7 +142,7 @@ node src/cli/memo.js serve --port 7788     # 默认 127.0.0.1:7788；--no-ui 只
 默认内存倒排索引（BM25，纯 JS）。数据量大时可以切到 SQLite FTS5 后端，行为语义不变（同一套
 IndexPort 契约：同一 `tokenize()` 切词、同一排序与过滤约定）。
 
-**切换**：改 `versions/v0.2/config/policy.json`：
+**切换**：改 `versions/v0.3/config/policy.json`：
 
 ```json
 { "index": { "backend": "sqlite" } }
@@ -167,7 +167,7 @@ IndexPort 契约：同一 `tokenize()` 切词、同一排序与过滤约定）�
 把「候选 → 裁决 → 落盘」固定成三步，Agent 不用手工拼 JSON：
 
 ```bash
-cd strata/versions/v0.2
+cd strata/versions/v0.3
 node src/cli/memo.js curate prompt            # 1. 生成裁决任务包
 #    → $MEMO_HOME/curate/<batchId>.md（人读：裁决表 + 全文对照）
 #    → 同名 .json（机读：Agent 只回填这个，避免从 Markdown 反解析）
@@ -235,7 +235,7 @@ cd <仓库根>
 sed -e "s|__REPO_ROOT__|$PWD|" \
     -e "s|__MEMO_HOME__|$HOME/.memo|" \
     -e "s|__NODE__|$(command -v node)|" \
-    versions/v0.2/configs/launchd/live.strata.observer.plist > /tmp/observer.plist
+    versions/v0.3/configs/launchd/live.strata.observer.plist > /tmp/observer.plist
 plutil -lint /tmp/observer.plist
 mv /tmp/observer.plist ~/Library/LaunchAgents/live.strata.observer.plist
 launchctl load ~/Library/LaunchAgents/live.strata.observer.plist
@@ -244,7 +244,7 @@ launchctl load ~/Library/LaunchAgents/live.strata.observer.plist
 sed -e "s|__REPO_ROOT__|$PWD|" \
     -e "s|__MEMO_HOME__|$HOME/.memo|" \
     -e "s|__NODE__|$(command -v node)|" \
-    versions/v0.2/configs/launchd/live.strata.nightly.plist > /tmp/nightly.plist
+    versions/v0.3/configs/launchd/live.strata.nightly.plist > /tmp/nightly.plist
 plutil -lint /tmp/nightly.plist
 mv /tmp/nightly.plist ~/Library/LaunchAgents/live.strata.nightly.plist
 launchctl load ~/Library/LaunchAgents/live.strata.nightly.plist

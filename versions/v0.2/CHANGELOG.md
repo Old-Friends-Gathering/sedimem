@@ -1,34 +1,5 @@
 # CHANGELOG · v0.2
 
-## [0.3.0] - 2026-11-07（分层视图：L2 场景块 / 注入分级 / L3 画像）
-
-> 依据 `docs/research/layered-memory-2026.md` 与 `docs/plans/v0.3-layered-views.md`：
-> **结构层用确定性算法、LLM 只写可重算的表述层；注入分级 + 每层硬配额；L3 固定预算 + 强制溯源。**
-
-### Added
-
-- **L2 场景块**（#50）：`src/views/l2.js` 把记录按 slot 分组、对无结构记录做相似度聚类，
-  产出 `$MEMO_HOME/views/<scopeKey>/L2.jsonl`。`blockId = sha256(key)[0:12]`，`builtAt` 取记录最晚
-  `createdAt`（不用时钟），因此**同一真相层两次构建字节相同**，删目录后 `memo view rebuild` 可逐字节复原（I21）。
-- **注入分级**（#51）：`memo brief --tier0` 输出「一条一行」的目录（≤`brief.tier0Chars`=800 字符），
-  每行带**完整 ULID** 供 `memory_get` 反查（证据链）；完整 brief 支持按 `brief.quota`（L2/L3 份额）分层，
-  受 `brief.totalChars`=8000 总上限约束，超限按「散条 → L3 → L2」顺序砍。视图缺失时自动降级为扁平渲染。
-- **L3 画像**（#52）：`src/views/l3.js` 的 `planL3/validateL3Draft/buildL3Record/traceL3`；
-  `memo view l3 plan|apply --file`。强制 `sourceRefs`（空即拒）、`text ≤2000`、`confidence ∈ (0,1]`；
-  预算 `policy.l3 = {maxCallsPerRun:20, batchSize:10, ttlMs:30d}`；TTL 用 `expiredAt` 表达（保 active 不变式）。
-- **溯源字段 `sourceRefs`**：`core/record.js` 新增可选字段 + 强校验（非空 ULID 数组、无重复、不得自引）；
-  `memo view trace <id>` 同时给出「属哪个 L2 块」与「L3 出处里的失效/缺失」。
-
-### Changed
-
-- `renderBrief` 支持 `blocks` 分层渲染，**旧单对象签名与输出保持字节一致**（视图是加速层不是依赖）。
-- Q2 源码总量上限 8000 → **9000**（新增 4 个模块共 854 行；单文件 900 行硬线不动）。
-- 版本 0.2.1 → **0.3.0**（`versions/CURRENT` 仍指 `v0.2`：小版本同目录递增，大版本才换目录）。
-
-### Tests
-
-- 258 tests / 258 pass；eval **I1–I23 全 PASS**（新增 I21 视图重建、I22 配额、I23 L3 预算）。
-
 ## [0.2.1] - 2026-11-06（拆分 / 数据化 / 裁决器 / 压实 / 检索指标）
 
 ### Added

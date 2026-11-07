@@ -9,7 +9,7 @@
 node tools/quality-check.mjs      # 质量（8 项）
 node tools/security-check.mjs     # 安全（8 项）
 node tools/coverage-gate.mjs      # 覆盖率（3 项）
-cd versions/v0.2 && node eval/run.js   # 行为（I1–I12）
+cd versions/v0.3 && node eval/run.js   # 行为（I1–I12）
 ```
 
 ---

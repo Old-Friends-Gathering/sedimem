@@ -420,7 +420,7 @@ await svc.exportRecords({ since, until, status = 'active', kind, limit = 2000 })
 **裁决 34（Web 层不得越权）**
 
 - `src/web/*` 只允许 `import` `src/api/service.js`、`src/core/*`、`src/config/*`；**禁止** import `src/hygiene/*`、`src/storage/*`、`src/index/*`（关系与判定都在 service 内完成，Web 只做投影）。
-- 静态资源只从 `versions/v0.2/ui/` 读取；路径穿越（`..`、绝对路径、软链接）一律 404。
+- 静态资源只从 `versions/v0.3/ui/` 读取；路径穿越（`..`、绝对路径、软链接）一律 404。
 - 服务只绑 `127.0.0.1`；无鉴权（用户决策 D1），因此**不得**提供任何写操作端点。
 
 ## 3.10 第八轮裁决（2026-11-02，Web 只读层实现期冻结；原记作 v0.1.3，0.2.0 起归入 v0.2 线）
@@ -463,7 +463,7 @@ await svc.exportRecords({ since, until, status = 'active', kind, limit = 2000 })
 
 ### 3.11 第九轮裁决 39–44（v0.2 双审核整改：常驻进程一致性 / 遮蔽 / 回环 / 拆分 / 导出顺序）
 
-> 来源：`versions/v0.2/reviews/arch-v0.2.md`（5 严重）与 `reviews/adversarial-v0.2.md`（4 严重）。
+> 来源：`versions/v0.3/reviews/arch-v0.2.md`（5 严重）与 `reviews/adversarial-v0.2.md`（4 严重）。
 > 两路结论均为「阻断项 no」，但以下五条属于「结构上会腐化」的问题，本版一次修掉并冻结语义。
 
 **裁决 39（常驻只读进程必须显式刷新视图）**

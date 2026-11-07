@@ -38,7 +38,7 @@
 ## 复核方式
 
 ```bash
-cd versions/v0.2
+cd versions/v0.3
 node --test "tests/**/*.test.js"     # 271 pass
 node eval/run.js                     # I1–I23 全 PASS
 cd ../.. && node tools/quality-check.mjs && node tools/security-check.mjs && node tools/coverage-gate.mjs

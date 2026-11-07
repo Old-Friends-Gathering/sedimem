@@ -127,9 +127,3 @@ v0.2.1 的两个能力（代码合入本版）：**A) 检索后端可换**（`in
 - `hybrid-index.js`（BM25+dense，RRF k=60）：仅当 #36 的检索指标暴露实测痛点时启动。
 - `EmbeddingIndex`：与向量/语义检索的非目标一致，等词法检索被证明不够再上。
 - `MEMO_INDEX` 环境变量：切换已收敛到 `policy.json` 的 `index.backend` 一处；等出现第二配置源需求再加。
-
-## v0.3.0（已交付）：分层视图
-
-- **做了什么**：L2 场景块（`src/views/l2.js`，确定性聚类、可字节重建）、注入分级（`brief --tier0` + 每层硬配额 + 完整 id 证据链）、L3 画像（`src/views/l3.js`，固定预算 + 强制 `sourceRefs` + TTL）
-- **刻意不做**：向量检索（等 `noHitRate` 有痛感）、自动捕获 hook（跨端与成本未解）、L2/L3 由 LLM 全量生成（结构层必须确定性）
-- **入口**：`memo view build|show|trace|l3`、`memo brief --tier0`；契约见 `docs/02` §3.14（裁决 54–57）
