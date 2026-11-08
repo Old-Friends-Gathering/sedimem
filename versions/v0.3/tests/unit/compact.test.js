@@ -3,6 +3,7 @@
 // 注意：service.forget 的 purge 打标签属另一车道，这里用 withPatch 手工构造带 tags:['purge']
 // 的墓碑快照再走 svc._commit 落盘（等价于 forget --purge 的真相层结果）。
 import { test } from 'node:test';
+import { itemsFileName } from '../../src/config/paths.js';
 import assert from 'node:assert/strict';
 import { readFileSync, readdirSync, mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -41,7 +42,7 @@ async function writeOne(svc, { text, subject, tombstone = null, validToMs = null
 }
 
 function itemsPath(memoHome, scope) {
-  return join(memoHome, 'items', `${scope}.jsonl`);
+  return join(memoHome, 'items', itemsFileName(scope));
 }
 
 test('compact：purge+超期 物理消失；purge 未超期/普通墓碑 保留；dryRun 字节不变；二次压实只留一份 .bak', async () => {
@@ -93,7 +94,7 @@ test('compact：purge+超期 物理消失；purge 未超期/普通墓碑 保留�
     // —— 第二次压实：只留最新一份 .bak ——
     await new Promise((r) => setTimeout(r, 5)); // 时间戳去掉冒点后毫秒级仍可能同值，稍错开
     await compact(svc, {});
-    const baks = readdirSync(join(memoHome, 'items')).filter((f) => f.startsWith(`${scope}.jsonl.bak.`));
+    const baks = readdirSync(join(memoHome, 'items')).filter((f) => f.startsWith(`${itemsFileName(scope)}.bak.`));
     assert.equal(baks.length, 1, `第二次压实后应只保留一份 .bak，实际: ${baks.join(',')}`);
     // 剩余记录 ≥5 条快照行（未删的 3 条 fold 后仍在，历史 append 行不减少表述不适用于重写后文件）
     const keptLines = readFileSync(file, 'utf8').trim().split('\n').filter(Boolean);

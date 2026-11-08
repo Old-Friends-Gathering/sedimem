@@ -1,4 +1,5 @@
 import { test } from 'node:test';
+import { itemsFileName } from '../../src/config/paths.js';
 import assert from 'node:assert/strict';
 import { readFileSync, mkdtempSync, rmSync, existsSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -51,7 +52,7 @@ function spawnWriter(memoHome, scope, w) {
 test('I8 跨进程并发：10 个 node 子进程同时写同一文本 → active=1、dupRatio=0、jsonl 无坏行', async () => {
   const memoHome = mkdtempSync(join(tmpdir(), 'memo-i8-'));
   const scope = 'repo:eval-i8';
-  const itemsPath = join(memoHome, 'items', `${scope}.jsonl`);
+  const itemsPath = join(memoHome, 'items', itemsFileName(scope));
   const { createMemoryService } = await import(SERVICE_URL);
   let verifier;
   try {

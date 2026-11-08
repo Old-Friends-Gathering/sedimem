@@ -4,6 +4,7 @@
 import path from 'node:path';
 import fsp from 'node:fs/promises';
 import { withLock } from './lock.js';
+import { itemsFileName, scopeFromItemsFileName } from '../config/paths.js';
 
 /**
  * scope → 文件名安全校验：只挡真正危险的东西（路径分隔符 / NUL / 前导点 / 超长），
@@ -48,7 +49,8 @@ export class JsonlStore {
   }
 
   _rawScopePath(scope) {
-    return path.join(this.itemsDir, `${scope}.jsonl`);
+    // 文件名规则收敛在 config/paths：Windows 上 `:` 会变成 NTFS 备用数据流（见该文件注释）
+    return path.join(this.itemsDir, itemsFileName(scope));
   }
 
   /** 追加一行完整记录快照到 items/<scope>.jsonl（带锁） */
@@ -173,7 +175,7 @@ export class JsonlStore {
       if (e.code === 'ENOENT') return [];
       throw e;
     }
-    return entries.filter((f) => f.endsWith('.jsonl')).map((f) => f.slice(0, -'.jsonl'.length)).sort();
+    return entries.map((f) => scopeFromItemsFileName(f)).filter((s) => s !== null).sort();
   }
 
   /**

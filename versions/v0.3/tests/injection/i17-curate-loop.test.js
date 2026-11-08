@@ -4,6 +4,7 @@
 //   → applied>0、active 收敛（≤3）、真相层行数 ≥6（原行全留）、幂等重放 applied=0/skipped>0、
 //   再 dedupeScan 无候选簇。
 import { test } from 'node:test';
+import { itemsFileName } from '../../src/config/paths.js';
 import assert from 'node:assert/strict';
 import { mkdtempSync, rmSync, readFileSync, writeFileSync, existsSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -71,7 +72,7 @@ test('I17 curate 闭环：prompt → 填 decisions → apply → 收敛 + 幂等
     assert.ok(stats.active <= GROUPS.length,
       `merge 后 active 应收敛到 ≤${GROUPS.length}，实际 ${stats.active}`);
     // store 侧文件名用原始 scope（含冒号），见 storage/jsonl-store.js _scopePath
-    const truthFile = join(memoHome, 'items', `${scope}.jsonl`);
+    const truthFile = join(memoHome, 'items', itemsFileName(scope));
     const lines = countLines(truthFile);
     assert.ok(lines >= 6, `真相层行数应 ≥6（原 6 行全留），实际 ${lines}`);
 

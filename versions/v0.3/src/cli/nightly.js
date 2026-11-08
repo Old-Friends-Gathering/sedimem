@@ -17,7 +17,7 @@ import process from 'node:process';
 import path from 'node:path';
 import os from 'node:os';
 import fsp from 'node:fs/promises';
-import { metricsFileName } from '../config/paths.js';
+import { metricsFileName, briefFileName } from '../config/paths.js';
 
 const USAGE = `nightly —— memo 确定性夜间整合
 
@@ -180,7 +180,7 @@ async function main() {
     // 4) brief 重建并落盘（契约布局声明 brief/<scope>.md；派生层，允许覆盖重写）
     const brief = await service.brief({});
     plan.briefLines = brief.split('\n').length;
-    const briefPath = path.join(memoHome, 'brief', `${scope}.md`);
+    const briefPath = path.join(memoHome, 'brief', briefFileName(scope));
     plan.briefPath = briefPath;
     if (!dryRun) {
       await fsp.mkdir(path.dirname(briefPath), { recursive: true });

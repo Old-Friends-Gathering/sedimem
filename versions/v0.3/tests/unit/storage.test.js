@@ -1,4 +1,5 @@
 import { test, describe } from 'node:test';
+import { itemsFileName } from '../../src/config/paths.js';
 import assert from 'node:assert/strict';
 import { mkdtempSync, rmSync, readFileSync, writeFileSync, appendFileSync, utimesSync, existsSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -115,7 +116,7 @@ describe('storage/jsonl-store', () => {
       const store = new JsonlStore({ memoHome: home });
       const r1 = { ...rec(null, 'first', 1770000000000), scope };
       await store.append(r1);
-      const p = join(home, 'items', `${scope}.jsonl`);
+      const p = join(home, 'items', itemsFileName(scope));
       const before = readFileSync(p, 'utf8');
       await store.append({ ...rec(null, 'second', 1770000002000), scope });
       const after = readFileSync(p, 'utf8');
@@ -199,7 +200,7 @@ describe('storage/jsonl-store 增量读与并发（裁决 13）', () => {
     try {
       const store = new JsonlStore({ memoHome: home });
       await store.append({ ...rec(null, 'full-line', 1770000000000), scope });
-      const p = join(home, 'items', `${scope}.jsonl`);
+      const p = join(home, 'items', itemsFileName(scope));
       const offset0 = await store.fileSize(scope);
 
       // 模拟另一进程写到一半（无换行、JSON 不完整）
@@ -236,7 +237,7 @@ describe('storage/jsonl-store 增量读与并发（裁决 13）', () => {
         Array.from({ length: N }, (_, i) =>
           store.append({ ...rec(null, `c-${i}`, 1770000000000 + i), scope })),
       );
-      const p = join(home, 'items', `${scope}.jsonl`);
+      const p = join(home, 'items', itemsFileName(scope));
       const lines = readFileSync(p, 'utf8').split('\n').filter((l) => l.trim());
       assert.equal(lines.length, N, `并发 append 后应有 ${N} 行，实际 ${lines.length}`);
       for (let i = 0; i < lines.length; i++) {

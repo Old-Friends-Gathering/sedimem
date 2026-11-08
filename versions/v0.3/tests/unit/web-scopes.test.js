@@ -3,6 +3,7 @@
 // 否则 `?scope=../../etc/passwd` 就是 path traversal。
 
 import { test, describe } from 'node:test';
+import { itemsFileName } from '../../src/config/paths.js';
 import assert from 'node:assert/strict';
 import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -26,7 +27,7 @@ function seedScope(memoHome, scope, texts) {
     contentHash: `hash-${i}`,
     source: { agent: 'test' },
   }));
-  writeFileSync(join(dir, `${scope}.jsonl`), `${lines.join('\n')}\n`, 'utf8');
+  writeFileSync(join(dir, itemsFileName(scope)), `${lines.join('\n')}\n`, 'utf8');
 }
 
 describe('web/scopes', () => {
