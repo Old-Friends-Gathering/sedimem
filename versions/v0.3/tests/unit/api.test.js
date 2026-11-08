@@ -1,4 +1,5 @@
 import { test, describe } from 'node:test';
+import { itemsFileName } from '../../src/config/paths.js';
 import assert from 'node:assert/strict';
 import { mkdtempSync, rmSync, statSync, readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -121,7 +122,7 @@ describe('api/service MemoryService', () => {
     const { svc, memoHome } = await fresh();
     try {
       await svc.write(W);
-      const p = join(memoHome, 'items', `${SCOPE}.jsonl`);
+      const p = join(memoHome, 'items', itemsFileName(SCOPE));
       const before = statSync(p).size;
       const out = await svc.reindex();
       assert.equal(statSync(p).size, before, 'reindex 不得写 items');
@@ -143,7 +144,7 @@ describe('api/service MemoryService', () => {
       assert.ok(out.record && out.record.id !== w.record.id);
       assert.equal(out.record.value, '6380');
       // 真相层旧 id 最后一行 validTo 非空
-      const lines = readFileSync(join(memoHome, 'items', `${SCOPE}.jsonl`), 'utf8').trim().split('\n').map((l) => JSON.parse(l));
+      const lines = readFileSync(join(memoHome, 'items', itemsFileName(SCOPE)), 'utf8').trim().split('\n').map((l) => JSON.parse(l));
       const old = lines.filter((r) => r.id === w.record.id).pop();
       assert.equal(old.validTo !== null, true, '旧记录必须写 validTo');
       const cur = await svc.search('端口');
@@ -229,7 +230,7 @@ describe('api/service 裁决补充（quota tag / asOf 非法 / hits 落盘）', 
       assert.ok(st.tombstoned >= 3, `应产生 >=3 个墓碑，实际 ${st.tombstoned}`);
 
       // 真相层：被淘汰记录的最后一行必须带 'quota' tag（doctor 的 quota 检测依赖它）
-      const lines = readFileSync(join(memoHome, 'items', `${SCOPE}.jsonl`), 'utf8')
+      const lines = readFileSync(join(memoHome, 'items', itemsFileName(SCOPE)), 'utf8')
         .trim().split('\n').map((l) => JSON.parse(l));
       const folded = new Map();
       for (const r of lines) folded.set(r.id, r);
@@ -287,7 +288,7 @@ describe('api/service 裁决补充（quota tag / asOf 非法 / hits 落盘）', 
       assert.ok(got, '重开后记录应存在');
       assert.ok((got.hits ?? 0) >= 2, `close 后 hits 应已落盘（>=2），实际 ${got.hits}`);
       // 且真相层确有 hits 落盘的快照版本（不是只在内存）
-      const lines = readFileSync(join(memoHome, 'items', `${SCOPE}.jsonl`), 'utf8')
+      const lines = readFileSync(join(memoHome, 'items', itemsFileName(SCOPE)), 'utf8')
         .trim().split('\n').map((l) => JSON.parse(l));
       const hitVersions = lines.filter((r) => r.id === id && (r.hits ?? 0) >= 2);
       assert.ok(hitVersions.length >= 1, '真相层应含 hits 已累加的记录快照');

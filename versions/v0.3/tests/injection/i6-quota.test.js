@@ -1,4 +1,5 @@
 import { test } from 'node:test';
+import { itemsFileName } from '../../src/config/paths.js';
 import assert from 'node:assert/strict';
 import { readFileSync, mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -35,7 +36,7 @@ test('I6 容量：maxActive=20 写 40 条 → 只产生墓碑，doctor 报 quota
     assert.ok(stats.tombstoned >= 1, '淘汰应产生墓碑（tombstoned >= 1）');
 
     // 真相层不物理删：40 条 id 全部仍在 jsonl 中（fold 后为 created/tombstoned 等状态）
-    const lines = readFileSync(join(memoHome, 'items', `${scope}.jsonl`), 'utf8')
+    const lines = readFileSync(join(memoHome, 'items', itemsFileName(scope)), 'utf8')
       .trim().split('\n').map((l) => JSON.parse(l));
     const ids = new Set(lines.map((r) => r.id));
     assert.equal(ids.size, CASE.writes.length, `真相层应保留全部 ${CASE.writes.length} 个 id，实际 ${ids.size}`);

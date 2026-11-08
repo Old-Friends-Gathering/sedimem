@@ -15,6 +15,45 @@ export function scopeKeyOf(scope) {
   return key === '' ? 'default' : key;
 }
 
+const IS_WINDOWS = process.platform === 'win32';
+
+/**
+ * scope → 文件名安全片段。
+ * POSIX 原样返回（`repo:x` → `repo:x`，契约不变）；
+ * Windows 把 `:` 换成 `+`：`:` 在 NTFS 上是**备用数据流**分隔符，`items/repo:x.jsonl`
+ * 会写成文件 `repo` 的一个数据流——按路径读写看似正常，但 readdir 看不见它，
+ * 于是分库列表/统计/图谱全失真，copyFile/rename（compact、备份轮转）直接 EINVAL，
+ * 且备份与拷贝会静默丢掉真相层。`+` 不在 SCOPE_PATTERN 的名字字符集内，反解无歧义。
+ * @param {string} scope
+ * @returns {string}
+ */
+function scopeFileNamePart(scope) {
+  const s = String(scope ?? '');
+  return IS_WINDOWS ? s.replace(/:/g, '+') : s;
+}
+
+/** 真相层文件名：`items/<此名>`（契约：docs/02 §3.11） */
+export function itemsFileName(scope) {
+  return `${scopeFileNamePart(scope)}.jsonl`;
+}
+
+/** brief 快照文件名：`brief/<此名>` */
+export function briefFileName(scope) {
+  return `${scopeFileNamePart(scope)}.md`;
+}
+
+/**
+ * 文件名 → scope（items 目录枚举用；不匹配则 null）。
+ * @param {string} name 目录项名字
+ * @returns {string|null}
+ */
+export function scopeFromItemsFileName(name) {
+  const n = String(name ?? '');
+  if (!n.endsWith('.jsonl')) return null;
+  const stem = n.slice(0, -'.jsonl'.length);
+  return IS_WINDOWS ? stem.replace(/\+/g, ':') : stem;
+}
+
 /**
  * metrics 快照文件名（写侧用；读侧用 readMetricsSnapshot 而不是自己拼）。
  * @param {string} date YYYY-MM-DD

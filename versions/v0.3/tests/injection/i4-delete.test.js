@@ -1,4 +1,5 @@
 import { test } from 'node:test';
+import { itemsFileName } from '../../src/config/paths.js';
 import assert from 'node:assert/strict';
 import { readFileSync, mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -37,7 +38,7 @@ test('I4 删除：forget 后两次查不到，真相层只追加墓碑，reindex
 
     // reindex 前后 items.jsonl 字节数不变（读一次取内容当快照：先 stat 再 read 会构成 TOCTOU，
     // CodeQL js/file-system-race 会报；这里用字节长度代替 stat 的 size）
-    const itemsPath = join(memoHome, 'items', `${scope}.jsonl`);
+    const itemsPath = join(memoHome, 'items', itemsFileName(scope));
     const beforeBytes = readFileSync(itemsPath);
     await svc.reindex();
     const afterBytes = readFileSync(itemsPath);

@@ -7,6 +7,7 @@
 //   5) 普通墓碑保留（as-of 可回查）。
 // purge 打标签不由本车道实现：用 withPatch 手工构造 tags:['purge'] 墓碑快照后 svc._commit 落盘。
 import { test } from 'node:test';
+import { itemsFileName } from '../../src/config/paths.js';
 import assert from 'node:assert/strict';
 import { readFileSync, mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -98,7 +99,7 @@ test('I19 compact：purge 超期物理删除，events 仍在，stats.total 降�
     assert.equal(st.tombstoned, 1, '普通墓碑保留（1 条）');
 
     // 7) 普通墓碑在真相层仍在（as-of 回查依赖）
-    const raw = readFileSync(join(memoHome, 'items', `${scope}.jsonl`), 'utf8');
+    const raw = readFileSync(join(memoHome, 'items', itemsFileName(scope)), 'utf8');
     for (const idx of CASE.purgeIndices) {
       assert.ok(!raw.includes(ids[idx]), `被删记录 ${ids[idx]} 不得残留在 items 文件`);
     }

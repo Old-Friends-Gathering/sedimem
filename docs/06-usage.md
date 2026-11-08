@@ -80,6 +80,36 @@ memory_scope({action:'use', path:'/abs/path/to/project'})  # 切到项目分库�
 3. 新增第四种客户端（grok/opencode/自研）：只要能跑 MCP stdio 就行；`source.agent` 是**自由标签**（`^[a-z0-9][a-z0-9._-]{0,31}$`，保留名 root/system/admin/sudo/superuser 拒绝），不需要改代码。
 4. 跑 `bash configs/verify-three-clients.sh` 出 PASS：写 → 新进程召回 → 用召回值回答。
 
+### 4.1 Windows（v0.3 起）
+
+零依赖不变，只需 Node ≥22；代码与 CLI 直接可用，`bash` 脚本换成等价的 MCP stdio 调用即可。
+落位时有三处与 macOS 不同：
+
+- **文件名**：真相层是 `items/repo+strata.jsonl`（scope 里的冒号换成 `+`），不是 `repo:strata.jsonl`。
+  按路径 grep/备份时别照搬 mac 上的写法，规则见 `docs/02` 裁决 58。
+- **观察台常驻**：没有 launchd，用「计划任务 + VBS 隐藏启动」。直接用 `node.exe` 当 action 会弹一个控制台窗口，
+  且 `StopOnIdleEnd` 默认 `true`——机器一空闲任务就被停掉（退出码 0，像是"自己挂了"）。两份都要显式改掉：
+
+  ```vbs
+  ' start-observer.vbs —— 由 wscript.exe 调起，窗口不出现
+  Set sh = CreateObject("WScript.Shell")
+  sh.Run """C:\Program Files\nodejs\node.exe"" ""<repo>\versions\v0.3\src\cli\memo.js"" serve --port 7788", 0, False
+  ```
+
+  ```powershell
+  $s = New-ScheduledTaskSettingsSet -DontStopOnIdleEnd -AllowStartIfOnBatteries `
+       -DontStopIfGoingOnBatteries -ExecutionTimeLimit ([TimeSpan]::Zero)
+  $a = New-ScheduledTaskAction -Execute wscript.exe -Argument '"<repo>\start-observer.vbs"'
+  Register-ScheduledTask -TaskName strata-observer -Action $a `
+       -Trigger (New-ScheduledTaskTrigger -AtLogOn) -Settings $s
+  ```
+
+  计划任务只对**非 0 退出**重启（`RestartOnFailure`），要覆盖"被干净地结束"这种情况，action 里跑一个
+  循环守护进程（子进程退出即拉起）比单跑 `memo serve` 稳。
+- **夜间整合**：`New-ScheduledTaskTrigger -Daily -At 03:30`，同样用 VBS 隐藏；
+  必须把输出重定向到日志文件——计划任务里没有控制台，不重定向等于整晚没留痕。
+
+
 ## 5. 排障
 
 | 现象 | 原因 / 处理 |

@@ -1,5 +1,23 @@
 # CHANGELOG · v0.2
 
+## [Unreleased]
+
+### Fixed
+
+- **Windows：真相层被写成 NTFS 备用数据流**（裁决 58）。`items/<scope>.jsonl` 的 scope 恒含 `:`，
+  Windows 把 `:` 当数据流分隔符，`items/repo:strata.jsonl` 实际是文件 `repo` 的一个数据流：
+  `readdir` 看不见它（分库列表 0 条、Web 下拉缺项）、`rewriteScope` 的 `copyFile` 直接 `EINVAL`
+  （`compact` 崩溃）、备份与压缩不保留数据流（真相层静默丢失）。
+  新增 `config/paths.js` 的 `itemsFileName` / `briefFileName` / `scopeFromItemsFileName`：Windows 上把
+  scope 的 `:` 换成 `+`（`repo+strata.jsonl`），POSIX 保持 `<scope>.jsonl` 字节不变。
+  `JsonlStore`、`web/scopes.js`、`cli/nightly.js` 与测试一律改为引用这一处。
+- 测试里 15 处硬编码的 `items/${scope}.jsonl` 改为 `itemsFileName(scope)`（POSIX 上路径等价）。
+
+### Docs
+
+- `docs/06` 增补 Windows 落位：计划任务 + VBS 隐藏启动，以及两个实测坑——action 直接写 `node.exe`
+  会弹控制台窗口、`StopOnIdleEnd` 默认为 `true` 会在空闲时把服务停掉（退出码 0，伪装成"自己挂了"）。
+
 ## [0.3.0]
 
 ### 目录调整（按版本规则纠正）

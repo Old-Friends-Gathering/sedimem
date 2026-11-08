@@ -665,3 +665,40 @@ nightly metrics 新增 `searchCount` / `noHitRate` / `staleHitRate` / `avgTopSco
 | `src/render/tier0.js` | `renderTier0` |
 | `src/cli/view.js` | `cmdView` `cmdBriefTier0` `L2_VIEW_FILE` |
 | `src/render/brief.js` | `renderBrief`（v0.3 起支持 `blocks` 分层，旧单对象签名兼容） |
+
+## §3.15 跨平台真相层文件名（裁决 58）
+
+### 裁决 58：Windows 上文件名不得含 `:`，映射必须收敛到 `config/paths.js`
+
+`scope` 恒含一个冒号（`repo:x` / `dir:x` / `user:x` / `global:x`）。POSIX 上 `items/<scope>.jsonl` 合法；
+Windows 上 `:` 是 NTFS **备用数据流（ADS）**分隔符，`items/repo:x.jsonl` 会被写成文件 `repo` 的一个数据流。
+
+实测后果（均为静默失败，不是崩溃）：
+
+| 症状 | 机制 |
+|---|---|
+| `listScopes` 报 0 条、Web 分库下拉缺项 | `readdir('items')` 只看到 `repo`，没有 `.jsonl` 后缀 |
+| `compact` 崩溃 `EINVAL` | `rewriteScope` 的 `copyFile('<file>.bak')` 目标落在数据流上，Windows 拒绝 |
+| 备份/压缩后真相层丢失 | 复制工具普遍不保留 ADS，数据流不在目录项里 |
+
+**规则**：`scope → 文件名` 只有一处实现，读写两侧都必须调用它。
+
+| 平台 | `itemsFileName(scope)` | `briefFileName(scope)` |
+|---|---|---|
+| POSIX | `<scope>.jsonl`（不变） | `<scope>.md` |
+| Windows | 把 scope 里的 `:` 换成 `+`，如 `repo+strata.jsonl` | 同规则，`repo+strata.md` |
+
+- 反解用 `scopeFromItemsFileName(name)`，供 `JsonlStore.listScopes` 与 `web/scopes.js` 枚举时还原 scope。
+- `+` 不在 `SCOPE_PATTERN` 的允许字符集（`[a-z0-9._-]`）里，因此映射无歧义、可逆。
+- 索引 / metrics / L2 视图本就走 `scopeKeyOf(scope)`，不在此裁决范围内（它们不带冒号）。
+- **跨平台迁移不在保证范围**（本项目不做多机同步）：把 Windows 的 `$MEMO_HOME` 拷到 POSIX 需要把
+  `items/*+*.jsonl` 的 `+` 改回 `:`；反之亦然。
+
+**禁止**：在任何模块里自己拼 `${scope}.jsonl`。这类代码在 POSIX 上正确、在 Windows 上静默丢数据，
+且不会让测试变红（`tests/` 一律通过 `itemsFileName()` 取路径）。
+
+### 第十二轮导出登记（裁决 58）
+
+| 模块 | 导出 |
+|---|---|
+| `src/config/paths.js` | `itemsFileName` `briefFileName` `scopeFromItemsFileName` |

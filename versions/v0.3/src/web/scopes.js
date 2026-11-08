@@ -5,6 +5,7 @@
 import fsp from 'node:fs/promises';
 import path from 'node:path';
 import { SCOPE_PATTERN } from '../mcp/scope-state.js';
+import { scopeFromItemsFileName } from '../config/paths.js';
 
 /**
  * 列出所有分库。
@@ -23,8 +24,8 @@ export async function listScopes(memoHome, currentScope) {
     names = [];
   }
   for (const name of names) {
-    if (!name.endsWith('.jsonl')) continue;
-    const scope = name.slice(0, -'.jsonl'.length);
+    const scope = scopeFromItemsFileName(name);
+    if (scope === null) continue;
     if (!SCOPE_PATTERN.test(scope)) continue; // 不是分库文件（或名字不合法）→ 不列
     const full = path.join(dir, name);
     let stat;
