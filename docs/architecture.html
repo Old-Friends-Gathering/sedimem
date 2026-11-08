@@ -1,0 +1,711 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>strata · 架构与介绍</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="description" content="strata —— 跨会话、跨客户端的本地记忆层：把「记忆」当数据库治理，而不是当 prompt 攒。">
+<style>
+  :root{
+    --bg:#ffffff; --panel:#ffffff; --panel-2:#f7f9fc; --line:#e2e8f0; --line-soft:#eef2f7;
+    --fg:#0f172a; --fg-dim:#4b5563; --fg-faint:#8592a6;
+    --blue:#2563eb; --green:#047857; --purple:#7c3aed; --amber:#b45309; --red:#dc2626; --gray:#64748b;
+    --mono:ui-monospace,SFMono-Regular,"SF Mono",Consolas,"Liberation Mono",monospace;
+    --sans:-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Hiragino Sans GB","Microsoft YaHei",sans-serif;
+    --maxw:1040px;
+  }
+  *{box-sizing:border-box}
+  html{scroll-behavior:smooth}
+  body{
+    margin:0;background:var(--bg);color:var(--fg);font:15px/1.75 var(--sans);
+    -webkit-font-smoothing:antialiased;
+    background-image:radial-gradient(900px 520px at 12% -12%,rgba(37,99,235,.07),transparent 70%),
+                     radial-gradient(700px 420px at 96% -6%,rgba(124,58,237,.06),transparent 70%);
+    background-repeat:no-repeat;
+  }
+  a{color:var(--blue);text-decoration:none}
+  a:hover{text-decoration:underline}
+  code{font-family:var(--mono);font-size:.88em;background:#eef2f7;color:#334155;padding:1px 5px;border-radius:4px;white-space:nowrap}
+  pre{font-family:var(--mono);font-size:12.5px;line-height:1.7;background:#f8fafc;border:1px solid var(--line);
+      border-radius:10px;padding:14px 16px;overflow:auto;color:#334155}
+  pre code{background:none;padding:0;white-space:pre}
+
+  /* ---------- 布局 ---------- */
+  .wrap{max-width:var(--maxw);margin:0 auto;padding:0 24px}
+  .shell{display:grid;grid-template-columns:1fr;gap:0;max-width:1320px;margin:0 auto}
+  @media (min-width:1080px){ .shell{grid-template-columns:250px minmax(0,1fr)} }
+  nav.toc{display:none}
+  @media (min-width:1080px){
+    nav.toc{display:block;position:sticky;top:0;align-self:start;max-height:100vh;overflow:auto;
+            padding:38px 18px 40px 24px;border-right:1px solid var(--line-soft)}
+    nav.toc .toc-title{font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:var(--fg-faint);margin:0 0 12px 10px}
+    nav.toc a{display:block;padding:5px 10px;border-radius:6px;color:var(--fg-dim);font-size:13.5px;border-left:2px solid transparent}
+    nav.toc a:hover{background:var(--panel);color:var(--fg);text-decoration:none}
+    nav.toc a.active{color:var(--fg);border-left-color:var(--blue);background:rgba(37,99,235,.06)}
+  }
+
+  /* ---------- 头部 ---------- */
+  header.hero{padding:64px 0 40px;border-bottom:1px solid var(--line-soft)}
+  .eyebrow{display:inline-flex;align-items:center;gap:8px;font-size:12px;letter-spacing:.1em;
+           color:var(--fg-dim);text-transform:uppercase;margin-bottom:16px}
+  .dot{width:7px;height:7px;border-radius:50%;background:var(--green);box-shadow:0 0 0 4px rgba(4,120,87,.12)}
+  h1{font-size:clamp(30px,4vw,44px);line-height:1.16;letter-spacing:-.02em;margin:0 0 16px;font-weight:650}
+  h1 .grad{background:linear-gradient(100deg,#1d4ed8,#7c3aed 55%,#047857);-webkit-background-clip:text;background-clip:text;color:transparent}
+  .lead{font-size:17px;color:var(--fg-dim);max-width:62ch;margin:0 0 26px}
+  .lead b{color:var(--fg);font-weight:600}
+  .badges{display:flex;flex-wrap:wrap;gap:8px}
+  .badge{display:inline-flex;align-items:center;gap:6px;font-size:12.5px;color:var(--fg-dim);
+         background:var(--panel);border:1px solid var(--line);padding:4px 10px;border-radius:999px}
+  .badge .k{color:var(--fg);font-weight:600}
+
+  /* ---------- 区块 ---------- */
+  section{padding:52px 0;border-bottom:1px solid var(--line-soft);scroll-margin-top:20px}
+  section:last-of-type{border-bottom:0}
+  h2{font-size:24px;letter-spacing:-.01em;margin:0 0 8px;font-weight:640;display:flex;align-items:baseline;gap:12px}
+  h2 .num{font-family:var(--mono);font-size:12px;color:var(--blue);opacity:.85;font-weight:500}
+  .sub{color:var(--fg-dim);margin:0 0 26px;max-width:74ch}
+  h3{font-size:16px;margin:32px 0 10px;font-weight:620}
+  p{margin:0 0 14px}
+  ul,ol{margin:0 0 14px;padding-left:22px}
+  li{margin:5px 0}
+  li::marker{color:var(--fg-faint)}
+
+  /* ---------- 卡片 ---------- */
+  .grid{display:grid;gap:14px}
+  .g2{grid-template-columns:repeat(auto-fit,minmax(260px,1fr))}
+  .g3{grid-template-columns:repeat(auto-fit,minmax(210px,1fr))}
+  /* 四张卡固定 2×2，避免自动排成 3+1 留一大片空 */
+  .g2x2{grid-template-columns:1fr}
+  @media (min-width:820px){ .g2x2{grid-template-columns:repeat(2,1fr)} }
+  .card{background:var(--panel);border:1px solid var(--line);box-shadow:0 1px 2px rgba(15,23,42,.04);
+        border-radius:12px;padding:18px 18px 16px;position:relative;overflow:hidden}
+  .card::before{content:"";position:absolute;inset:0 0 auto 0;height:2px;background:var(--blue);opacity:.55}
+  .card.g::before{background:var(--green)} .card.p::before{background:var(--purple)}
+  .card.a::before{background:var(--amber)} .card.n::before{background:var(--gray)}
+  .card h4{margin:0 0 6px;font-size:14.5px;font-weight:640;letter-spacing:.01em}
+  .card .tag{font-family:var(--mono);font-size:11px;color:var(--fg-faint);display:block;margin-bottom:10px}
+  .card p{margin:0;font-size:13.5px;color:var(--fg-dim);line-height:1.65}
+  .card .rule{margin-top:10px;padding-top:10px;border-top:1px dashed var(--line);font-size:12.5px;color:var(--fg-faint)}
+
+  /* ---------- 表格 ---------- */
+  .tbl{width:100%;border-collapse:collapse;font-size:13.5px;margin:0 0 16px;display:block;overflow-x:auto}
+  .tbl th,.tbl td{text-align:left;padding:10px 12px;border-bottom:1px solid var(--line-soft);vertical-align:top}
+  .tbl th{color:var(--fg-faint);font-weight:600;font-size:12px;letter-spacing:.06em;text-transform:uppercase;
+          border-bottom:1px solid var(--line);white-space:nowrap}
+  .tbl tr:hover td{background:#f8fafc}
+  .tbl td:first-child{color:var(--fg);font-weight:500}
+  .tbl code{font-size:12px}
+
+  /* ---------- 架构图（纯 CSS 盒子，中文不依赖 SVG 排版） ---------- */
+  .diagram{border:1px solid var(--line);border-radius:14px;padding:22px;margin:6px 0 18px;
+      background:linear-gradient(180deg,#fbfdff,#f5f8fc);box-shadow:0 1px 2px rgba(15,23,42,.04)}
+  .lane{display:grid;gap:12px}
+  .lane-title{font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:var(--fg-faint);margin:0 0 8px}
+  .row{display:grid;gap:12px;align-items:stretch}
+  .r3{grid-template-columns:repeat(3,1fr)} .r2{grid-template-columns:repeat(2,1fr)} .r4{grid-template-columns:repeat(4,1fr)}
+  @media (max-width:720px){ .r3,.r2,.r4{grid-template-columns:1fr} }
+  .node{background:#fff;border:1px solid var(--line);border-radius:9px;padding:11px 13px;font-size:13px;
+        box-shadow:0 1px 1px rgba(15,23,42,.03)}
+  .node .t{font-weight:600;color:var(--fg);display:block;font-size:13.5px}
+  .node .d{color:var(--fg-faint);font-size:11.5px;font-family:var(--mono);display:block;margin-top:3px}
+  .node.hi{border-color:rgba(37,99,235,.35);background:linear-gradient(180deg,rgba(37,99,235,.07),rgba(37,99,235,.02))}
+  .node.truth{border-color:rgba(4,120,87,.32);background:linear-gradient(180deg,rgba(4,120,87,.07),rgba(4,120,87,.02))}
+  .node.derived{border-color:rgba(124,58,237,.30);background:linear-gradient(180deg,rgba(124,58,237,.07),rgba(124,58,237,.02))}
+  .node.side{border-style:dashed;opacity:.92}
+  /* 竖向连接器：标签在上、竖线居中、箭头收尾（横向排会让箭头飘到最右，读着像“向右流”） */
+  .flow{display:flex;flex-direction:column;align-items:center;gap:3px;margin:12px 0;color:var(--fg-faint);font-size:11.5px;line-height:1.4}
+  .flow .line{width:1px;height:16px;background:linear-gradient(180deg,var(--line),rgba(37,99,235,.5))}
+  .flow .arrow{color:var(--blue);font-size:10px;line-height:1}
+  .legend{display:flex;flex-wrap:wrap;gap:16px;margin-top:16px;font-size:12px;color:var(--fg-faint)}
+  .legend i{display:inline-block;width:9px;height:9px;border-radius:3px;margin-right:6px;vertical-align:middle}
+
+  /* ---------- 门控流程 ---------- */
+  .steps{display:grid;gap:0;margin:8px 0 18px;counter-reset:s}
+  .step{display:grid;grid-template-columns:34px 1fr;gap:14px;padding:14px 0;border-bottom:1px solid var(--line-soft)}
+  .step:last-child{border-bottom:0}
+  .step .n{counter-increment:s;font-family:var(--mono);font-size:12px;color:var(--blue);
+           border:1px solid rgba(37,99,235,.35);border-radius:50%;width:26px;height:26px;
+           display:flex;align-items:center;justify-content:center;margin-top:2px}
+  .step .n::before{content:counter(s)}
+  .step h5{margin:0 0 4px;font-size:14px;font-weight:620}
+  .step p{margin:0;font-size:13.5px;color:var(--fg-dim)}
+  .out{display:inline-block;font-family:var(--mono);font-size:11.5px;padding:1px 7px;border-radius:5px;
+       border:1px solid var(--line);color:var(--fg-dim);margin-left:6px}
+  .out.ok{color:var(--green);border-color:rgba(4,120,87,.28);background:rgba(4,120,87,.06)}
+  .out.no{color:var(--amber);border-color:rgba(180,83,9,.28);background:rgba(180,83,9,.06)}
+  .out.bad{color:var(--red);border-color:rgba(220,38,38,.26);background:rgba(220,38,38,.05)}
+
+  /* ---------- 状态机 ---------- */
+  .states{display:flex;flex-wrap:wrap;gap:10px;align-items:center;margin:6px 0 16px}
+  .state{font-family:var(--mono);font-size:12.5px;padding:6px 12px;border-radius:8px;border:1px solid var(--line);background:#f8fafc}
+  .state.active{color:var(--green);border-color:rgba(4,120,87,.30)}
+  .state.superseded{color:var(--gray);border-color:rgba(100,116,139,.28)}
+  .state.tombstoned{color:var(--fg-faint);border-color:var(--line);text-decoration:line-through}
+  .state.disputed{color:var(--red);border-color:rgba(220,38,38,.30)}
+  .arrow-x{color:var(--fg-faint);font-size:12px}
+
+  /* ---------- 提示条 ---------- */
+  .note{border-left:3px solid var(--blue);background:rgba(37,99,235,.05);padding:12px 16px;border-radius:0 8px 8px 0;
+        font-size:13.5px;color:var(--fg-dim);margin:0 0 16px}
+  .note.warn{border-left-color:var(--amber);background:rgba(180,83,9,.05)}
+  .note.ok{border-left-color:var(--green);background:rgba(4,120,87,.05)}
+  .note b{color:var(--fg)}
+
+  /* ---------- 页脚 ---------- */
+  footer{padding:46px 0 70px;color:var(--fg-faint);font-size:13px}
+  footer .row2{display:flex;flex-wrap:wrap;gap:10px 26px;align-items:center;justify-content:space-between}
+  .kbd{font-family:var(--mono);font-size:11.5px;border:1px solid var(--line);border-bottom-width:2px;
+       border-radius:5px;padding:1px 6px;color:var(--fg-dim);background:#f8fafc}
+
+  @media (prefers-reduced-motion:reduce){ html{scroll-behavior:auto} }
+
+  @media print{
+    body{background:#fff;color:#111}
+    nav.toc{display:none}
+    .card,.node,.diagram,pre{break-inside:avoid}
+  }
+</style>
+</head>
+<body>
+<div class="shell">
+
+<nav class="toc" aria-label="目录">
+  <p class="toc-title">目录</p>
+  <a href="#why">为什么是 strata</a>
+  <a href="#layers">四个地层</a>
+  <a href="#arch">架构总览</a>
+  <a href="#write">写入路径</a>
+  <a href="#model">数据模型</a>
+  <a href="#read">读路径</a>
+  <a href="#views">分层视图</a>
+  <a href="#maint">维护三条路</a>
+  <a href="#modules">模块地图</a>
+  <a href="#deploy">部署拓扑</a>
+  <a href="#gates">门禁</a>
+  <a href="#versions">版本</a>
+</nav>
+
+<div>
+<header class="hero">
+  <div class="wrap">
+    <span class="eyebrow"><span class="dot"></span> 本地记忆层 · 只读观察台 · MCP 接入</span>
+    <h1>strata<br><span class="grad">把「记忆」当数据库治理，而不是当 prompt 攒</span></h1>
+    <p class="lead">
+      DSH / Codex CLI / Claude Code 三端共用一份本地记忆。重点不是「检索得准」，
+      而是<b>治理得住</b>：去重、冲突失效、过期不删只失效、投毒不进上下文、库自己会随使用收敛。
+    </p>
+    <div class="badges">
+      <span class="badge"><span class="k">v0.3.0</span> 当前版本</span>
+      <span class="badge"><span class="k">Node ≥ 22</span> 运行时</span>
+      <span class="badge"><span class="k">零依赖</span> 只用 <code>node:</code> 内置模块</span>
+      <span class="badge"><span class="k">MIT</span> 许可</span>
+      <span class="badge"><span class="k">271</span> 项测试</span>
+    </div>
+  </div>
+</header>
+
+<main>
+
+<!-- 1 -->
+<section id="why">
+  <div class="wrap">
+    <h2><span class="num">01</span> 为什么是 strata</h2>
+    <p class="sub">常见记忆方案的问题不在召回率，而在「库会越用越脏」。strata 把每一条脏化路径都变成了有裁决编号的规则。</p>
+
+    <table class="tbl">
+      <thead><tr><th style="width:38%">常见做法的问题</th><th>strata 的做法</th></tr></thead>
+      <tbody>
+        <tr><td>记忆越攒越多，重复/矛盾条目一起进上下文</td><td>写入门控：hash 短路 → 同 slot 判等 → 近重复 noop + 冲突 slot 失效</td></tr>
+        <tr><td>换措辞的同一条事实被判成「冲突」</td><td>在线只做<b>零误杀</b>去重；语义判断交给正在运行的 Agent（<code>dedupe_scan</code> → <code>curate_apply</code>），零 API 成本、可离线</td></tr>
+        <tr><td>只有「删掉」这一种清理手段</td><td>真相层不可变；过时 = 打 <code>validTo</code> 失效，删除 = 墓碑 + 延迟物理清理</td></tr>
+        <tr><td>记忆里被塞进指令型内容，悄悄影响后续会话</td><td>写入打标 + 读路径默认遮蔽（<code>[suspicious withheld]</code>）+ brief 逐行复检</td></tr>
+        <tr><td>换个客户端就「失忆」</td><td>MCP 是唯一缝；三端同读写一份真相层，<code>memory_scope</code> 解决常驻进程 cwd 固定导致的分库错位</td></tr>
+      </tbody>
+    </table>
+
+    <div class="grid g2">
+      <div class="card n">
+        <h4>刻意不做</h4>
+        <span class="tag">non-goals</span>
+        <p>embedding 语义检索（v0.2 的 <code>EmbedderPort</code> 再说）、多机同步、加密存储、多用户隔离（scope 是分类不是权限）。</p>
+      </div>
+      <div class="card n">
+        <h4>技术标识保持不变</h4>
+        <span class="tag">backward compatibility</span>
+        <p>产品名是 <code>strata</code>，但 CLI 仍是 <code>memo</code>、环境变量仍是 <code>MEMO_*</code>、MCP 工具名仍是 <code>memory_*</code>、<code>serverName</code> 仍是 <code>memo</code>——改这些要同步三端客户端配置与历史分库目录。</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- 2 -->
+<section id="layers">
+  <div class="wrap">
+    <h2><span class="num">02</span> 四个地层</h2>
+    <p class="sub">名字来自地质学：记忆像地层一样<b>沉积</b>，而不是被反复改写覆盖。四个地层分别承担真相、派生、失效标记与维护。</p>
+
+    <div class="grid g2x2">
+      <div class="card g">
+        <h4>沉积层 · 真相</h4>
+        <span class="tag">$MEMO_HOME/items/&lt;scope&gt;.jsonl</span>
+        <p>每次状态变更追加一条<b>完整记录快照</b>，同一 <code>id</code> 最后一行胜出。永不删物理行，「改过去」= 追加新版本。</p>
+        <div class="rule">只追加 · 可 as-of 回看任意时点</div>
+      </div>
+      <div class="card p">
+        <h4>派生层 · 索引与摘要</h4>
+        <span class="tag">index/ · views/ · brief/ · metrics/</span>
+        <p>倒排索引、SQLite FTS5、L2 场景块、L3 画像、brief 渲染、metrics 快照。随时可从真相层重建，坏了不丢数据。</p>
+        <div class="rule">可重算 · 删掉目录也能逐字节复原</div>
+      </div>
+      <div class="card a">
+        <h4>不整合 · 失效标记</h4>
+        <span class="tag">validTo / status</span>
+        <p>过时的事实<b>失效而非删除</b>：<code>superseded</code> / <code>tombstoned</code> / <code>disputed</code> 带 bi-temporal 时间戳，<code>asOf</code> 可回看任意时点。</p>
+        <div class="rule">宁并存，不静默删</div>
+      </div>
+      <div class="card n">
+        <h4>风化层 · 维护</h4>
+        <span class="tag">nightly · dedupe · compact</span>
+        <p>慢速、可离线、可重放：夜间整合做 TTL 过期与配额淘汰，去重扫描产候选簇由 Agent 当裁判，压实在三重条件都满足时才动手。</p>
+        <div class="rule">由 Agent 裁决，而不是纯算法</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- 3 -->
+<section id="arch">
+  <div class="wrap">
+    <h2><span class="num">03</span> 架构总览</h2>
+    <p class="sub">一条写入纵切面 + 三条旁路：只读观察台、分层视图、夜间整合。所有能力都在 Ports 后面（Storage / Index / Judge / Renderer / Clock），新增实现 = 新增适配器，不改 core。</p>
+
+    <div class="diagram" role="img" aria-label="strata 架构图">
+      <p class="lane-title">客户端</p>
+      <div class="row r3">
+        <div class="node"><span class="t">DSH</span><span class="d">MCP · memory_* 工具</span></div>
+        <div class="node"><span class="t">Codex CLI</span><span class="d">MCP · ~/.codex/config.toml</span></div>
+        <div class="node"><span class="t">Claude Code</span><span class="d">MCP · claude mcp add</span></div>
+      </div>
+
+      <div class="flow"><span>stdio · JSON-RPC</span><span class="line"></span><span class="arrow">▼</span></div>
+
+      <div class="row r2">
+        <div class="node hi"><span class="t">MCP server</span><span class="d">src/mcp/server.js</span><span class="d" style="margin-top:6px">工具注册 / 分库覆盖 / 参数校验</span></div>
+        <div class="node hi"><span class="t">CLI</span><span class="d">src/cli/memo.js</span><span class="d" style="margin-top:6px">write · search · brief · serve · curate</span></div>
+      </div>
+
+      <div class="flow"><span>进程内调用</span><span class="line"></span><span class="arrow">▼</span></div>
+
+      <div class="node hi" style="border-color:rgba(37,99,235,.4)">
+        <span class="t">MemoryService（API 层 · 唯一业务入口）</span>
+        <span class="d">src/api/service.js — 公开方法集合是契约，拆分不改签名</span>
+        <div class="row r4" style="margin-top:12px">
+          <div class="node"><span class="t">lifecycle</span><span class="d">init / reload / refreshView</span></div>
+          <div class="node"><span class="t">write-path</span><span class="d">write / supersede / forget / quota</span></div>
+          <div class="node"><span class="t">search-path</span><span class="d">search / brief / get / hits</span></div>
+          <div class="node"><span class="t">maintenance</span><span class="d">stats / doctor / dedupe / compact</span></div>
+        </div>
+      </div>
+
+      <div class="flow"><span>读写分离：真相层只追加，派生层随时重建</span><span class="line"></span><span class="arrow">▼</span></div>
+
+      <div class="row r2">
+        <div class="node truth">
+          <span class="t">真相层（不可变）</span>
+          <span class="d">$MEMO_HOME/items/&lt;scope&gt;.jsonl</span>
+          <span class="d">$MEMO_HOME/events.jsonl（审计面，永不删）</span>
+        </div>
+        <div class="node derived">
+          <span class="t">派生层（可重算）</span>
+          <span class="d">index/ · views/&lt;scopeKey&gt;/ · brief/ · metrics/</span>
+          <span class="d">L2 场景块 · L3 画像 · FTS5 · 趋势快照</span>
+        </div>
+      </div>
+
+      <div class="flow"><span>旁路（只读）</span><span class="line"></span><span class="arrow">▼</span></div>
+
+      <div class="row r2">
+        <div class="node side">
+          <span class="t">Web 观察台 · 只读</span>
+          <span class="d">src/web/server.js → 127.0.0.1:7788</span>
+          <span class="d">每个 /api/* 请求前 refreshView()，避免截面撕裂</span>
+        </div>
+        <div class="node side">
+          <span class="t">夜间整合 · 定时</span>
+          <span class="d">src/cli/nightly.js → 03:30</span>
+          <span class="d">TTL / 配额 / brief 重建 / metrics 快照</span>
+        </div>
+      </div>
+
+      <div class="legend">
+        <span><i style="background:#2563eb"></i>入口与业务层</span>
+        <span><i style="background:#047857"></i>真相层（追加）</span>
+        <span><i style="background:#7c3aed"></i>派生层（重建）</span>
+        <span><i style="background:#e2e8f0;border:1px dashed #94a3b8"></i>旁路</span>
+      </div>
+    </div>
+
+    <h3>三条明确不变式</h3>
+    <ul>
+      <li><b>真相层不可变</b>：只追加；「改过去」= 追加新版本，不得原地修改或删除行。</li>
+      <li><b>派生层可丢弃</b>：删掉 <code>views/</code> 后 <code>memo view rebuild</code> 必须逐字节复原（eval I21 守）。</li>
+      <li><b>能力在 Ports 后</b>：Storage / Index / Judge / Renderer / Clock 五个扩展点，换实现不改 core。</li>
+    </ul>
+  </div>
+</section>
+
+<!-- 4 -->
+<section id="write">
+  <div class="wrap">
+    <h2><span class="num">04</span> 写入路径</h2>
+    <p class="sub">写入不是「append 一条」，而是一次带四个出口的判定。<code>decideWrite()</code> 只吃 record + 候选集，不碰存储——它是策略的唯一落点。</p>
+
+    <div class="steps">
+      <div class="step">
+        <div class="n"></div>
+        <div>
+          <h5>contentHash 短路 <span class="out no">noop_duplicate</span></h5>
+          <p>同 scope 下已有 <code>active</code> / <code>disputed</code> 记录且 sha256 相同（归一化文本 + subject + predicate + value），直接判重，不新增行。</p>
+        </div>
+      </div>
+      <div class="step">
+        <div class="n"></div>
+        <div>
+          <h5>同 slot 判等 <span class="out no">noop_same_value</span></h5>
+          <p>slot = <code>scope + subject + predicate</code> 归一化。同 slot 且归一化 value 相等，说明是同一事实的重复表述。</p>
+        </div>
+      </div>
+      <div class="step">
+        <div class="n"></div>
+        <div>
+          <h5>近重复防线 <span class="out no">noop_same_value</span> <span class="out">reason=near_duplicate</span></h5>
+          <p>文本相似度 ≥ <code>policy.dedupe.nearDupThreshold</code>（默认 <b>0.85</b>）判为近重复，并给原记录打 <code>variant</code> 标签。<b>必须在冲突判定之前</b>——否则「同事实换措辞」会沦为 disputed 垃圾。</p>
+        </div>
+      </div>
+      <div class="step">
+        <div class="n"></div>
+        <div>
+          <h5>冲突判定 <span class="out bad">disputed</span> <span class="out ok">supersede</span> <span class="out ok">created</span></h5>
+          <p>同 slot 但值不同：合法状态推进（结构化 slot 且新值更晚）→ <code>supersede</code>；无法判定谁新 → 双方 <code>disputed</code>，等 Agent 裁决。都不是 → <code>created</code>。</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="note">
+      <b>为什么要「零误杀」：</b>在线判定一旦误判，就会把一个真实事实压掉，而且没有人工复核环节。
+      所以 semantic 判断被刻意移出写路径——交给正在运行的 Agent 做离线裁决（<code>dedupe_scan</code> 只出候选，<code>curate_apply</code> 才落判定）。
+    </div>
+  </div>
+</section>
+
+<!-- 5 -->
+<section id="model">
+  <div class="wrap">
+    <h2><span class="num">05</span> 数据模型</h2>
+    <p class="sub">一条记录是不可变的快照；状态的每一次变化都是新的一行。7 条不变式写在 <code>docs/02</code>，是实现的唯一权威。</p>
+
+    <table class="tbl">
+      <thead><tr><th>字段</th><th>含义</th></tr></thead>
+      <tbody>
+        <tr><td><code>id</code></td><td>ULID，时间有序、可排序</td></tr>
+        <tr><td><code>scope</code></td><td>分库，形如 <code>repo:strata</code> / <code>dir:desktop</code> / <code>user:x</code> / <code>global:x</code></td></tr>
+        <tr><td><code>kind</code></td><td>数据驱动：<code>fact</code> / <code>pref</code> / <code>decision</code> / <code>gotcha</code> / <code>state</code>，来自 <code>config/policy.json</code></td></tr>
+        <tr><td><code>text</code> · <code>subject</code> · <code>predicate</code> · <code>value</code></td><td>人类原句 + 结构化 slot（缺省时 slot 记为 <code>text/text</code>，即 unstructured）</td></tr>
+        <tr><td><code>status</code></td><td><code>active</code> / <code>superseded</code> / <code>tombstoned</code> / <code>disputed</code></td></tr>
+        <tr><td><code>validFrom</code> · <code>validTo</code></td><td>bi-temporal 生效区间；<code>asOf</code> 查询按它过滤</td></tr>
+        <tr><td><code>contentHash</code></td><td><code>sha256:</code> 前缀，写入门控的短路键</td></tr>
+        <tr><td><code>sourceRefs</code></td><td>可选溯源：非空 ULID 数组、无重复、不得自引；只在 L3 画像这类派生记录上出现</td></tr>
+        <tr><td><code>hits</code> · <code>tags</code> · <code>confidence</code></td><td>召回计数（批量落盘）、清理标签（<code>quota</code> / <code>purge</code> / <code>variant</code>）、置信度</td></tr>
+      </tbody>
+    </table>
+
+    <h3>状态迁移</h3>
+    <div class="states">
+      <span class="state active">active</span>
+      <span class="arrow-x">──supersede──▶</span>
+      <span class="state superseded">superseded</span>
+      <span class="arrow-x">──forget --purge──▶</span>
+      <span class="state tombstoned">tombstoned</span>
+      <span class="arrow-x">──compact（三重条件）──▶</span>
+      <span class="state" style="border-style:dashed">物理删除</span>
+    </div>
+    <div class="states">
+      <span class="state active">active</span>
+      <span class="arrow-x">──冲突且无法判新旧──▶</span>
+      <span class="state disputed">disputed</span>
+      <span class="arrow-x">──Agent 裁决──▶</span>
+      <span class="state active">active / superseded</span>
+    </div>
+
+    <div class="note warn">
+      <b>supersede 拒绝 tombstoned。</b>否则一次普通写入就能把 purge 语义打断——墓碑是删前的最后一道状态，不能被「改成别的值」复活。
+    </div>
+  </div>
+</section>
+
+<!-- 6 -->
+<section id="read">
+  <div class="wrap">
+    <h2><span class="num">06</span> 读路径</h2>
+    <p class="sub">三种读，三种预算。检索不是越宽越好，注入进上下文的每一个字符都要有配额。</p>
+
+    <div class="grid g3">
+      <div class="card">
+        <h4>search</h4>
+        <span class="tag">BM25 · kind 权重 · 半衰期衰减</span>
+        <p>tokenize 中文 2-gram / 英文词，BM25 打分后按 <code>kind.weight</code> 加权、按 <code>halfLifeMs</code> 做时间衰减。默认 <code>limit=10</code>。</p>
+        <div class="rule">每次检索追加一条 <code>search</code> 事件（只存 qHash，不存原文）</div>
+      </div>
+      <div class="card">
+        <h4>brief</h4>
+        <span class="tag">≤ 80 行 · ≤ 8000 字符</span>
+        <p>按 kind 分组 + 近期记录，超限先砍散条 → 再砍 L3 → 最后砍 L2。视图缺失时降级为扁平渲染（视图是加速层，不是依赖）。</p>
+        <div class="rule">配额：L2 25% / L3 15%</div>
+      </div>
+      <div class="card">
+        <h4>tier0</h4>
+        <span class="tag">≤ 800 字符 · 一条一行</span>
+        <p>极窄注入的目录视图：每行带<b>完整 ULID</b>，供 <code>memory_get</code> 反查原文。截断 id 等于让证据链失效。</p>
+        <div class="rule">排序：hits 降序 → createdAt 降序</div>
+      </div>
+    </div>
+
+    <h3>投毒防线</h3>
+    <p>写入时按 <code>policy.suspiciousPatterns</code> 打标；读路径<b>默认遮蔽</b> <code>text</code> / <code>value</code> / <code>subject</code> / <code>predicate</code> / <code>source.quote</code> 五个正文字段，
+    统一占位 <code>[suspicious withheld]</code>。只遮 <code>text/value</code> 是不够的——把 payload 挪进 <code>subject</code> 就能原样出网。</p>
+  </div>
+</section>
+
+<!-- 7 -->
+<section id="views">
+  <div class="wrap">
+    <h2><span class="num">07</span> 分层视图（L2 / L3）</h2>
+    <p class="sub">v0.3 的主题：结构层用确定性算法，LLM 只写「可重算的表述层」。同一份真相层两次构建，字节必须相同。</p>
+
+    <div class="grid g2">
+      <div class="card p">
+        <h4>L2 · 场景块</h4>
+        <span class="tag">views/&lt;scopeKey&gt;/L2.jsonl</span>
+        <p>按 slot 分组，对无结构记录做相似度聚类。<code>blockId = sha256(key).slice(0,12)</code>，<code>builtAt</code> 取记录里最晚的 <code>createdAt</code>——<b>不是</b> <code>Date.now()</code>，否则两次构建字节不同。</p>
+        <div class="rule">不变式：Σ block.recordIds.length === sourceCount</div>
+      </div>
+      <div class="card p">
+        <h4>L3 · 画像</h4>
+        <span class="tag">固定预算 · 强制溯源</span>
+        <p>由 Agent 写草稿：<code>sourceRefs</code> 必填且为 ULID、<code>text ≤ 2000</code> 字、<code>confidence ∈ (0,1]</code>。预算 <code>maxCallsPerRun=20</code> / <code>batchSize=10</code> / TTL 30 天。</p>
+        <div class="rule">成本有上界：调用次数是策略常量，不是感觉</div>
+      </div>
+    </div>
+
+    <div class="note ok">
+      <b>可重建性是被测试守住的，不是口号。</b>删掉整个 <code>views/</code> 目录后 <code>memo view rebuild</code> 必须逐字节复原，由 eval I21 验证。
+    </div>
+  </div>
+</section>
+
+<!-- 8 -->
+<section id="maint">
+  <div class="wrap">
+    <h2><span class="num">08</span> 维护的其中三条路</h2>
+    <p class="sub">「自我迭代」不是修辞：库的健康度由三条可离线、可重放的路径维持，每条都有明确的触发条件与不可逆边界。</p>
+
+    <table class="tbl">
+      <thead><tr><th style="width:20%">路径</th><th style="width:30%">做什么</th><th>边界</th></tr></thead>
+      <tbody>
+        <tr>
+          <td><code>nightly</code><br><span style="color:var(--fg-faint);font-size:12px">每天 03:30</span></td>
+          <td>TTL 过期、配额淘汰（墓碑打 <code>quota</code>）、hits 落盘、brief 重建、metrics 快照</td>
+          <td>只报告去重候选簇，<b>不自动裁决</b>（裁决归 Agent）</td>
+        </tr>
+        <tr>
+          <td><code>dedupe_scan</code> → <code>curate_apply</code></td>
+          <td>按 slot 分组 + 两两相似度并查集聚簇，产出 <code>pairs</code> 与 <code>strength</code>；Agent 逐对裁决</td>
+          <td>扫描只读；<code>merge</code> 是非破坏的（败者 superseded 且真相层保留），宁判勿漏</td>
+        </tr>
+        <tr>
+          <td><code>compact</code></td>
+          <td>物理清理：写 <code>.tmp</code> → fsync → <code>rename</code> 原子替换，替换前备份 <code>.bak.&lt;ts&gt;</code></td>
+          <td><b>三重条件</b>全满足才删：<code>status=tombstoned</code> ∧ <code>tags</code> 含 <code>purge</code> ∧ <code>validTo &lt; now − 7d</code></td>
+        </tr>
+      </tbody>
+    </table>
+
+    <div class="note">
+      <b>events.jsonl 永不被 compact 删。</b>它是审计面——「这条为什么被删」永远可查。这是「不可变」在删除语义上的延伸。
+    </div>
+  </div>
+</section>
+
+<!-- 9 -->
+<section id="modules">
+  <div class="wrap">
+    <h2><span class="num">09</span> 模块地图</h2>
+    <p class="sub"><code>versions/v0.3/src/</code> 的分层：core 不依赖任何上层，api 是唯一业务入口，web/mcp/cli 只做协议适配。</p>
+
+    <table class="tbl">
+      <thead><tr><th style="width:18%">目录</th><th style="width:26%">关键模块</th><th>职责</th></tr></thead>
+      <tbody>
+        <tr><td><code>core/</code></td><td>record · hash · ids · clock · scope</td><td>纯函数与数据结构：记录校验、内容哈希、ULID、时钟、scope 解析</td></tr>
+        <tr><td><code>storage/</code></td><td>jsonl-store · lock</td><td>真相层追加、增量读、scope 锁、原子重写（compact 的唯一通道）</td></tr>
+        <tr><td><code>hygiene/</code></td><td>write-gate · conflict · suspicious · quota · decay · curate · judge</td><td>写入判定、冲突发现、投毒标记、配额、衰减、裁决器</td></tr>
+        <tr><td><code>index/</code></td><td>inverted-index · sqlite-index · create-index</td><td>IndexPort 两种实现：内存倒排 / SQLite FTS5，按 <code>policy.index.backend</code> 切换</td></tr>
+        <tr><td><code>views/</code></td><td>l2 · l3</td><td>分层视图构建、溯源查询（trace）</td></tr>
+        <tr><td><code>render/</code></td><td>brief · tier0</td><td>注入预算内的文本渲染</td></tr>
+        <tr><td><code>api/</code></td><td>service · lifecycle · write-path · search-path · maintenance · mask · read-only</td><td><b>唯一业务入口</b>；公开方法集合是契约</td></tr>
+        <tr><td><code>web/</code></td><td>server · handlers · scopes · static</td><td>只读观察台：回环绑定、每个请求前 refreshView、静态白名单</td></tr>
+        <tr><td><code>mcp/</code></td><td>server · scope-state · validate</td><td>MCP stdio 协议适配、分库覆盖持久化、参数校验</td></tr>
+        <tr><td><code>cli/</code></td><td>memo · nightly · curate · compact · view · migrate-dsh-memory</td><td>命令行入口，与 MCP 共用同一 service</td></tr>
+        <tr><td><code>config/</code></td><td>paths · policy</td><td>路径与文件名的单一来源、策略加载</td></tr>
+      </tbody>
+    </table>
+
+    <p style="color:var(--fg-dim);font-size:13.5px">
+      <span style="color:var(--fg-faint)">依赖方向：</span>
+      <code>core</code> ← <code>storage / hygiene / index</code> ← <code>api</code> ← <code>web / mcp / cli</code>。
+      反向依赖即违规——这也是为什么 Web 进程永不写库：它拿到的只是读能力。
+    </p>
+  </div>
+</section>
+
+<!-- 10 -->
+<section id="deploy">
+  <div class="wrap">
+    <h2><span class="num">10</span> 部署拓扑</h2>
+    <p class="sub">零运行时依赖，只要 Node ≥ 22。三个落位互不干扰：MCP 给 Agent、CLI 给人、Web 给眼睛。</p>
+
+    <div class="diagram">
+      <div class="row r3">
+        <div class="node hi">
+          <span class="t">MCP 接入</span>
+          <span class="d">dsh / codex / claude</span>
+          <span class="d" style="margin-top:8px">stdio 子进程，工具名 <code>mcp__memo__memory_*</code></span>
+        </div>
+        <div class="node side">
+          <span class="t">Web 观察台</span>
+          <span class="d">127.0.0.1:7788</span>
+          <span class="d" style="margin-top:8px">只读三页：今日 / 图谱 / 卫生</span>
+        </div>
+        <div class="node side">
+          <span class="t">夜间整合</span>
+          <span class="d">每日 03:30</span>
+          <span class="d" style="margin-top:8px">写 brief/ 与 metrics/</span>
+        </div>
+      </div>
+      <div class="flow"><span>同一份 $MEMO_HOME</span><span class="line"></span><span class="arrow">▼</span></div>
+      <div class="row r2">
+        <div class="node truth"><span class="t">真相层</span><span class="d">items/*.jsonl · events.jsonl</span></div>
+        <div class="node derived"><span class="t">派生层</span><span class="d">index/ · views/ · brief/ · metrics/</span></div>
+      </div>
+    </div>
+
+    <h3>Windows 落位的两个坑</h3>
+    <ul>
+      <li><b>真相层文件名不能含冒号。</b>scope 恒含 <code>:</code>，而 Windows 把它当 NTFS 备用数据流分隔符——<code>items/repo:strata.jsonl</code> 会变成文件 <code>repo</code> 的一个数据流，<code>readdir</code> 看不见它、<code>copyFile</code> 直接 <code>EINVAL</code>。现在由 <code>config/paths.js</code> 统一映射成 <code>repo+strata.jsonl</code>（裁决 58），POSIX 行为不变。</li>
+      <li><b>计划任务默认会「空闲即停」。</b><code>StopOnIdleEnd</code> 默认为 true，机器一空闲任务就被结束且退出码为 0，看起来像服务自己挂了；直接用 <code>node.exe</code> 当 action 还会弹控制台窗口。正确姿势是 <code>-DontStopOnIdleEnd</code> + <code>wscript</code> 隐藏启动 + 一个循环守护进程兜住 <code>exit 0</code>。</li>
+    </ul>
+
+    <pre><code>NODE=${MEMO_NODE:-node}          # 任意 Node ≥ 22，零依赖
+cd versions/v0.3
+
+node --test 'tests/**/*.test.js'  # 271 项：单元 + 注入式回归
+node eval/run.js                  # I1–I23 注入式评测
+node src/cli/memo.js --help       # CLI
+node src/cli/memo.js serve        # 观察台 → http://127.0.0.1:7788
+node src/mcp/server.js            # MCP server（stdio）</code></pre>
+  </div>
+</section>
+
+<!-- 11 -->
+<section id="gates">
+  <div class="wrap">
+    <h2><span class="num">11</span> 门禁</h2>
+    <p class="sub">四个 workflow，本地脚本与 CI 同源。阈值集中在 <code>tools/</code>，<b>调阈值 = 改行为契约</b>，必须写进 issue 与 <code>docs/07</code>。</p>
+
+    <table class="tbl">
+      <thead><tr><th style="width:16%">门禁</th><th>内容</th><th style="width:32%">阈值 / 判定</th></tr></thead>
+      <tbody>
+        <tr><td><code>ci</code></td><td>单元 + 注入式回归（Node 22 / 24）、I1–I23 评测、覆盖率</td><td>0 失败；lines ≥ 85% / branches ≥ 70% / functions ≥ 90%</td></tr>
+        <tr><td><code>quality</code></td><td>零依赖、源码规模、测试清单、评测对齐、契约覆盖、文档链接、版本自包含、编码卫生</td><td>8/8</td></tr>
+        <tr><td><code>security</code></td><td>个人路径、凭据、内部域名 / 内网 IP、配置可移植、<code>.gitignore</code>、许可证、大文件、历史面 + CodeQL</td><td>8/8</td></tr>
+        <tr><td><code>issue-link</code></td><td>PR 必须关联一条 open 的 issue</td><td><code>Closes #N</code> / <code>Refs #N</code> / <code>no-issue</code> 标签（须说明理由）</td></tr>
+      </tbody>
+    </table>
+
+    <div class="note warn">
+      <b>main 是受保护分支，对管理员同样生效。</b>直推与 force push 会被拒绝（<code>GH006 ... 7 of 7 required status checks are expected</code>），
+      任何改动都必须走 <b>issue → 分支 → PR → 七项检查全绿 → squash 合并</b>。
+    </div>
+  </div>
+</section>
+
+<!-- 12 -->
+<section id="versions">
+  <div class="wrap">
+    <h2><span class="num">12</span> 版本演进</h2>
+    <p class="sub">规则：<b>X.Y 换目录</b>（v0.2 → v0.3 新建目录），<b>X.Y.Z 补丁同目录递增</b>；老目录冻结并保留 <code>FROZEN.md</code>，指针在 <code>versions/CURRENT</code>。</p>
+
+    <table class="tbl">
+      <thead><tr><th style="width:16%">版本</th><th style="width:30%">主题</th><th>状态</th></tr></thead>
+      <tbody>
+        <tr><td>v0.1.x</td><td>核心记忆层：append-only 真相层 + 派生索引 + brief、四条卫生路径、MCP/CLI、注入式评测 I1–I12</td><td style="color:var(--fg-faint)">🔒 冻结在 0.1.2</td></tr>
+        <tr><td>v0.2.x</td><td>只读 Web 观察台（今日/图谱/卫生）+ SQLite FTS5 + curate 裁决任务包 + 多分库浏览；0.2.1 起拆 service、kind 数据化、JudgePort、<code>compact</code>、检索健康指标</td><td style="color:var(--fg-faint)">🔒 冻结在 0.2.1</td></tr>
+        <tr><td><b>v0.3.0</b></td><td>分层视图：L2 场景块（确定性、可字节重建）+ 注入分级 tier0（≤800 字符、带完整 id）+ L3 画像（固定预算 + 强制溯源）</td><td style="color:var(--green)">✅ 当前</td></tr>
+        <tr><td>候选</td><td>EmbeddingIndex、hybrid 检索</td><td style="color:var(--fg-faint)">未开始</td></tr>
+      </tbody>
+    </table>
+
+    <div class="grid g3">
+      <div class="card"><h4>文档先行</h4><span class="tag">rule 1</span><p>接口 / 数据模型 / 工具语义变更，先改 <code>docs/02</code> 并写裁决编号，再改代码。</p></div>
+      <div class="card g"><h4>TDD</h4><span class="tag">rule 2</span><p>新行为先加失败测试；注入式回归是发布门禁，不允许改断言来变绿。</p></div>
+      <div class="card p"><h4>可替换</h4><span class="tag">rule 3</span><p>能力都在 Ports 后面。新增实现 = 新增适配器，不改 core。</p></div>
+    </div>
+  </div>
+</section>
+
+</main>
+
+<footer>
+  <div class="wrap row2">
+    <div>
+      <b style="color:var(--fg)">strata</b> · 本地优先的记忆层 ·
+      <a href="https://github.com/Old-Friends-Gathering/strata">github.com/Old-Friends-Gathering/strata</a>
+    </div>
+    <div>
+      MIT © 2026 Old Friends Gathering · 文档版本 v0.3.0 · <span class="kbd">Ctrl</span>+<span class="kbd">F</span> 搜索
+    </div>
+  </div>
+</footer>
+</div>
+</div>
+
+<script>
+// 目录高亮：按滚动位置选「最后一个已越过分界线的章节」，比 IntersectionObserver 稳
+// （IO 在首屏会把多个章节同时判为可见，容易高亮到中间那一个）
+(function () {
+  var links = Array.prototype.slice.call(document.querySelectorAll('nav.toc a'));
+  if (!links.length) return;
+  var targets = links.map(function (a) { return document.getElementById(a.getAttribute('href').slice(1)); });
+  var ticking = false;
+
+  function update() {
+    ticking = false;
+    var line = window.scrollY + 150;
+    var idx = 0;
+    for (var i = 0; i < targets.length; i++) {
+      var el = targets[i];
+      if (el && el.getBoundingClientRect().top + window.scrollY <= line) idx = i;
+    }
+    links.forEach(function (a, i) { a.classList.toggle('active', i === idx); });
+  }
+  function onScroll() {
+    if (ticking) return;
+    ticking = true;
+    requestAnimationFrame(update);
+  }
+  window.addEventListener('scroll', onScroll, { passive: true });
+  window.addEventListener('resize', onScroll);
+  update();
+})();
+</script>
+</body>
+</html>
