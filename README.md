@@ -17,7 +17,7 @@
 ![tests](https://img.shields.io/badge/tests-288-brightgreen)
 ![eval](https://img.shields.io/badge/injection%20eval-I1%E2%80%93I24-blueviolet)
 
-[快速开始](#快速开始) · [架构](#架构) · [三端接入](#三端接入dsh--codex--claude) · [部署](#部署常驻观察台与-nightly) · [设计决策](#设计决策为什么这么做) · [文档](#文档地图)
+**[🌐 图文版项目站](https://old-friends-gathering.github.io/strata/)** · [快速开始](#快速开始) · [架构](#架构) · [三端接入](#三端接入dsh--codex--claude) · [部署](#部署常驻观察台与-nightly) · [设计决策](#设计决策为什么这么做) · [文档](#文档地图)
 
 </div>
 
