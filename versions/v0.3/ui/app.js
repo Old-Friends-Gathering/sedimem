@@ -77,6 +77,8 @@ const OP_LABEL = {
   supersede: ['被取代', 'b-superseded'],
   curate_apply: ['裁决', 'b-merged'],
   merged: ['合并', 'b-merged'],
+  retitle: ['改标题', 'b-merged'],
+  retitle_apply: ['回填标题', 'b-merged'],
   merge: ['合并', 'b-merged'],
   hit: ['命中', 'b-hit'],
 };
