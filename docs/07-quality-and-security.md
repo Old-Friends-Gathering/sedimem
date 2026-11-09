@@ -20,10 +20,29 @@ cd versions/v0.3 && node eval/run.js   # 行为（I1–I12）
 |---|---|---|---|
 | `test (22)` / `test (24)` | `node --test 'tests/**/*.test.js'` | **0 失败**（2026-11-06 实测 214 用例） | 行为回归，或测试自身有竞态（历史上 I8 就因此偶发红，已修根因） |
 | `eval (I1–I12)` | `eval/run.js` 退出码 | **全 PASS** | 注入式行为契约破了：重复/冲突/过时/删除/投毒/配额/改写/并发/时区/遮蔽/裁决回路/中文改写 |
+| `windows-smoke` | `node tools/windows-smoke.mjs`（`windows-latest`） | **全部 PASS** | Windows 真相层文件名 / 分库枚举 / `compact` / `nightly` 之一回归（见 §一.1） |
 | 关键指标 | `dupRatio` / `conflictRate` | `dupRatio = 0`；`conflictRate` 只允许由**真冲突用例**产生 | 冗余或冲突治理失效 |
 | 性能 | `bench n5000` search p95 | **< 50ms**（实测 1.9–2.4ms） | 索引退化（例如误改成 O(n) 扫描） |
 
 **反作弊**：注入式用例的断言是行为契约，禁止为变绿而放宽。发现放宽按 bug 处理（CONTRIBUTING §四）。
+
+### 一.1 第四道防线：windows-smoke（issue #62 第 1 步）
+
+`ci.yml` 里与 `test` / `eval` / `ci-gate` 并列的**第四道防线**，专治 2026-11 的 Windows 回归：
+`scope` 恒含 `:`，在 NTFS 上被当成备用数据流（ADS）分隔符，`items/repo:x.jsonl` 实际写成文件
+`repo` 的数据流——`readdir` 看不见（分库列表 0 条）、`compact` 的 `copyFile` 报 `EINVAL`、
+备份不保留数据流导致真相层静默丢失（裁决 58）。
+
+`tools/windows-smoke.mjs` 在临时 `MEMO_HOME` 里只钉四件事：
+
+1. **真相层文件名**：`items/<itemsFileName(scope)>` 是普通文件且非空（Windows 上是 `repo+smoke.jsonl`，POSIX 上是 `repo:smoke.jsonl`）；
+2. **分库枚举**：`listScopes()` 能从文件名反解出 `repo:smoke`，且 `records === 2`；
+3. **compact**：`memo compact --dry-run` 与 `memo compact`（真压，走 `copyFile` 备份 + `rename`）退出码均为 0（曾因备份目标落 ADS 直接崩）；
+4. **nightly**：退出码 0，且写出 `brief/<briefFileName>` 与 `metrics/<date>.<scopeKey>.json`。
+
+**它只钉冒烟，不替代全量测试**：全量套件里还有 13 条「POSIX 假设」用例在 Windows 上红
+（清单与修复进度见登记该批用例的独立 issue）。在那批用例修完、并接入 Windows 之前，
+`windows-latest` 只跑本脚本——全量红等于没人看。
 
 ## 二、覆盖率门禁（coverage-gate.mjs）
 
@@ -86,13 +105,16 @@ cd versions/v0.3 && node eval/run.js   # 行为（I1–I12）
   指标发生漂移就更新本文件（指标漂移本身就是信号，不要静默改阈值让数字好看）。
 - **禁止**：删除检查项、加 `// q-check-ignore` 式逃逸、把失败改成 warning 了事。
 
-## 七、当前基线（2026-11-06 实测，v0.2）
+## 七、当前基线（2026-11-09 实测，v0.3.1）
 
 | 门禁 | 结果 |
 |---|---|
-| 单元 + 注入式 | 214 tests / 214 pass（`node --test 'tests/**/*.test.js'`） |
-| 质量 | 9/9；Q5 契约覆盖 **100.0%**（75/75 导出，下限 90%）；Q2 源码 33 文件 / **6503 行**（上限 8000） |
-| 覆盖率 | 见 `quality-report.json` / coverage-gate 输出（阈值不变：lines ≥ 85% / branches ≥ 70% / functions ≥ 90%） |
+| 单元 + 注入式 | **288 tests / 288 pass**（`node --test 'tests/**/*.test.js'`） |
+| 评测 | **eval I1–I24 全 PASS**（`node eval/run.js`） |
+| 质量 | 9/9；Q5 契约覆盖 **100.0%**（144/144 导出，下限 90%） |
+| 安全 | 9/9（含 S9：src/web 无写接口、只绑回环） |
+| 覆盖率 | lines 92.06% / branches **77.64%** / functions 92.31%（阈值 lines ≥ 85% / branches ≥ 70% / functions ≥ 90%） |
+| Windows | `tools/windows-smoke.mjs` 6 项全 PASS（`windows-latest` job 见 §一.1） |
 | 平台侧 | secret scanning ✅ / push protection ✅ / dependabot security updates ✅（见 §八） |
 
 > Q2 单文件上限仍是 900 行；v0.2.1 拆分后 `src/api/service.js` 只剩 130 行，当前最大文件是 `src/api/maintenance.js`（约 470 行），仍有充足余量。
@@ -104,7 +126,7 @@ cd versions/v0.3 && node eval/run.js   # 行为（I1–I12）
 ```json
 {
   "required_status_checks": {"strict": true,
-    "contexts": ["test (22)", "test (24)", "eval (I1–I12)", "quality", "security", "codeql", "issue-link"]},
+    "contexts": ["test (22)", "test (24)", "eval (I1–I23)", "quality", "security", "codeql", "issue-link", "windows-smoke"]},
   "enforce_admins": true,
   "required_pull_request_reviews": null,
   "required_linear_history": true,

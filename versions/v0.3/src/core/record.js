@@ -14,6 +14,20 @@ export const KNOWN_AGENTS = new Set(['dsh', 'codex', 'claude', 'cli', 'test', 'u
 export const RESERVED_AGENTS = new Set(['root', 'system', 'admin', 'sudo', 'superuser']);
 export const AGENT_PATTERN = /^[a-z0-9][a-z0-9._-]{0,31}$/;
 const MAX_TEXT = 4000;
+// 标题长度（issue #61 / 裁决 59）：图谱与 brief 都要靠它，太长等于没标题。
+export const MAX_TITLE = 40;
+
+/**
+ * 标题归一化：折成单行、去首尾空白、超长截断（39 字符 + `…`）。
+ * 空串表示「没有标题」，调用方不得写入空 title 字段（那会让 label 回落到 subject 时看不出差别）。
+ * @param {unknown} raw
+ * @returns {string}
+ */
+export function normalizeTitle(raw) {
+  const oneLine = String(raw ?? '').replace(/\s+/g, ' ').trim();
+  if (oneLine === '') return '';
+  return oneLine.length > MAX_TITLE ? `${oneLine.slice(0, MAX_TITLE - 1)}…` : oneLine;
+}
 
 /**
  * 创建 MemoryRecord（version=1）。非法输入抛 err.code='E_INVALID_RECORD'。
@@ -44,6 +58,7 @@ export function createRecord(input, deps = {}) {
   }
   const source = { ...rawSource, agent };
 
+  const title = normalizeTitle(input.title);
   const record = {
     id: input.id ?? newId(clock.nowMs()),
     v: 1,
@@ -67,6 +82,8 @@ export function createRecord(input, deps = {}) {
     // L3 溯源（issue #52 / 裁决 54）：只有「派生于其它记录」的记录才带；
     // 普通记录保持不含该字段（不是 null 空数组），避免真相层被无意义的键撑大。
     ...(input.sourceRefs !== undefined ? { sourceRefs: input.sourceRefs } : {}),
+    // 标题（裁决 59）：没有就不写这个键——空字符串会让「没有标题」和「标题是空」分不开
+    ...(title !== '' ? { title } : {}),
     tags,
   };
 
@@ -105,6 +122,14 @@ export function validateRecord(r, kinds = kindNames(defaultPolicy)) {
   if (!STATUSES.has(r.status)) errors.push(`status: must be one of ${[...STATUSES].join('|')}, got ${r.status}`);
   if (typeof r.hits !== 'number' || r.hits < 0) errors.push(`hits: must be >= 0, got ${r.hits}`);
   if (r.privacy !== 'private' && r.privacy !== 'shared') errors.push(`privacy: must be private|shared, got ${r.privacy}`);
+  // 标题（裁决 59）：出现就必须是单行、非空、≤MAX_TITLE，且已归一化（首尾无空白）
+  if (r.title !== undefined) {
+    if (typeof r.title !== 'string') errors.push(`title: must be a string, got ${typeof r.title}`);
+    else if (r.title === '') errors.push('title: must not be empty when present');
+    else if (/[\r\n]/.test(r.title)) errors.push('title: must be single-line');
+    else if (r.title !== r.title.trim()) errors.push('title: must not have leading/trailing whitespace');
+    else if (r.title.length > MAX_TITLE) errors.push(`title: length ${r.title.length} exceeds ${MAX_TITLE}`);
+  }
   // 溯源字段（裁决 54）：出现就必须是非空 ULID 数组且去重；空数组等于「假装有出处」，直接拒
   if (r.sourceRefs !== undefined) {
     if (!Array.isArray(r.sourceRefs) || r.sourceRefs.length === 0) {

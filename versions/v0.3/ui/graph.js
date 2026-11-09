@@ -169,6 +169,9 @@ export async function initGraph({ canvas, detailEl, toolbarEl, apiBase = '/api',
     }
     const lines = [
       `标签：${nd.label ?? nd.id}`,
+      ...(nd.count > 1 ? [`同主题记录：${nd.count} 条（图上合并为一个点）`] : []),
+      ...(Array.isArray(nd.predicates) && nd.predicates.length
+        ? [`维度（predicate）：${nd.predicates.join(' · ')}`] : []),
       `类型：${nd.kind ?? '-'}　状态：${nd.status ?? '-'}`,
       `主体：${nd.subject ?? '-'}`,
       `创建时间：${nd.createdAt ?? '-'}`,
@@ -289,7 +292,10 @@ export async function initGraph({ canvas, detailEl, toolbarEl, apiBase = '/api',
 
     // 标签（裁决 33：label 由服务端生成，这里只负责绘制；够放才画）
       if (state.view.scale >= 0.45 && nd.label) {
-        const text = nd.label.length > 16 ? `${nd.label.slice(0, 16)}…` : nd.label;
+        const badge = nd.count > 1 ? ` ×${nd.count}` : '';
+        const room = 18 - badge.length;
+        const raw = nd.label.length > room ? `${nd.label.slice(0, Math.max(4, room - 1))}…` : nd.label;
+        const text = `${raw}${badge}`;
         ctx.font = '11px -apple-system, "PingFang SC", sans-serif';
         ctx.textAlign = 'center';
         ctx.textBaseline = 'top';

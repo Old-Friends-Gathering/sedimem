@@ -302,12 +302,6 @@ function codePartOfLine(line) {
   return i === -1 ? line : line.slice(0, i);
 }
 
-async function versionDirs() {
-  const base = path.join(ROOT, 'versions');
-  return (await fsp.readdir(base, { withFileTypes: true }))
-    .filter((d) => d.isDirectory()).map((d) => path.join(base, d.name));
-}
-
 async function q9WebUiBoundary() {
   const problems = [];
   const versions = [currentVersionDir()];

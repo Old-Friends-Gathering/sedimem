@@ -32,22 +32,31 @@ async function writeRec(service, { subject, predicate, value, text, kind = 'fact
   return rec.id;
 }
 
-test('makeLabel：结构化 / withValue 截断 / unstructured 前 60 字', () => {
-  const r = { subject: 'svc', predicate: 'port', value: '8080', text: '服务端口 8080' };
-  assert.equal(makeLabel(r), 'svc/port');
-  assert.equal(makeLabel(r, { withValue: true }), 'svc/port：8080');
+test('makeLabel：title 优先 / 结构化退回 subject / 非结构化取首句（裁决 59）', () => {
+  // 有 title 就用 title，predicate 不再进 label
+  const withTitle = { title: '服务端口', subject: 'svc', predicate: 'port', value: '8080', text: '服务端口 8080' };
+  assert.equal(makeLabel(withTitle), '服务端口');
+  assert.equal(makeLabel(withTitle, { withValue: true }), '服务端口：8080');
 
-  // 值 ≤ 40 字原样；> 40 字截断加省略号
-  const short = { subject: 'a', predicate: 'b', value: 'x'.repeat(40) };
-  assert.equal(makeLabel(short, { withValue: true }), `a/b：${'x'.repeat(40)}`);
-  const long = { subject: 'a', predicate: 'b', value: 'y'.repeat(41) };
-  assert.equal(makeLabel(long, { withValue: true }), `a/b：${'y'.repeat(40)}…`);
+  // 没有 title → 结构化退回 subject（下划线折成空格），不再带 predicate
+  const r = { subject: 'svc_name', predicate: 'port', value: '8080', text: '服务端口 8080' };
+  assert.equal(makeLabel(r), 'svc name');
+  assert.equal(makeLabel(r, { withValue: true }), 'svc name：8080');
 
-  // unstructured（subject/predicate 都是 text）→ text 前 60 字
-  const u = { subject: 'text', predicate: 'text', text: '部署脚本位于 tools/deploy.sh' };
+  // withValue 的值 > 40 字截断加省略号
+  const long = { title: 'a', subject: 'a', predicate: 'b', value: 'y'.repeat(41) };
+  assert.equal(makeLabel(long, { withValue: true }), `a：${'y'.repeat(40)}…`);
+
+  // 非结构化（subject/predicate 都是 text）→ 正文首句，且去掉口语前缀
+  const u = { subject: 'text', predicate: 'text', text: '我刚刚看到，部署脚本位于 tools/deploy.sh' };
   assert.equal(makeLabel(u), '部署脚本位于 tools/deploy.sh');
-  const uLong = { subject: 'text', predicate: 'text', text: 'z'.repeat(61) };
-  assert.equal(makeLabel(uLong), `${'z'.repeat(60)}…`);
+
+  // 首句按句读切；label 上限 24 字符（超长加 …）
+  const u2 = { subject: 'text', predicate: 'text', text: '第一条结论。第二条结论' };
+  assert.equal(makeLabel(u2), '第一条结论');
+  const longText = { subject: 'text', predicate: 'text', text: '甲乙丙丁戊己庚辛壬癸'.repeat(4) };
+  assert.equal(makeLabel(longText).length, 24);
+  assert.ok(makeLabel(longText).endsWith('…'));
 });
 
 test('api/today：时间线 label 非空且不是裸 op 名', async (t) => {

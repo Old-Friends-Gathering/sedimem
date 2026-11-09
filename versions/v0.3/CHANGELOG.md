@@ -1,4 +1,27 @@
-# CHANGELOG · v0.2
+# CHANGELOG · v0.3
+
+## [0.3.1]
+
+### Added
+
+- **记录新增 `title` 字段**（裁决 59）：1–40 字符、单行，写入方给的「人能读懂的一句话」。
+  `memo write --title`、MCP `memory_write.title`、`normalizeTitle()` 归一化（折单行 → 截 39+`…`）。
+  没有标题就不落这个键——空串与缺失必须能区分。
+- **`memo retitle` 回填**（issue #61）：按 subject 人性化生成标题（`_`/`-`→空格、剥离尾部日期 slug），
+  以追加补丁行方式写回真相层（不原地改），`--dry-run` 只报告。已有库据此一次性补齐标题。
+
+### Changed
+
+- **label 规则 v2**（裁决 59）：`title` → 结构化退回 `subject`（下划线折空格）→ 非结构化退回正文首句
+  （去「我刚刚/你看/就是」口语前缀）。`predicate` 不再进 label；label 上限 24 字符。
+- **brief 行首改用 title**：更短更好扫，正文靠 `memory_search` 下钻；无 title 的旧记录行为不变。
+- **图谱按 subject 聚合**（裁决 60）：同主题多条记录合并成一个点，显示 `×N`，详情面板列 `predicates`。
+  `Σcount === sampled.records` 是不变式；`same-entity` 边随之消失，其它三类边做 recordId→nodeId 映射并丢弃自环。
+
+### Fixed
+
+- 图谱 51% 节点重名（实测 118 条库里 60 个节点同名，最狠 `×7`）：根因是 `subject/predicate` 拼串被截到 16 字符，
+  且记录里根本没有「标题」这个概念。
 
 ## [Unreleased]
 

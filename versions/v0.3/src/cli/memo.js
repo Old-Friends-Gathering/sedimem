@@ -17,7 +17,7 @@ function resolveMemoHome() {
 const USAGE = `memo —— 本地跨会话记忆系统 v0.1
 
 用法:
-  memo write --text "..." [--kind fact] [--subject s] [--predicate p] [--agent dsh] [--value v] [--confidence 0.8] [--tags a,b] [--privacy private|shared] [--json]
+  memo write --text "..." [--title "一句话标题"] [--kind fact] [--subject s] [--predicate p] [--agent dsh] [--value v] [--confidence 0.8] [--tags a,b] [--privacy private|shared] [--json]
   memo search "..." [--limit 10] [--kind fact] [--as-of ISO] [--json]
   memo brief [--lines 80] [--tier0]              # --tier0：一条一行的目录（≤800 字符，v0.3）
   memo view build|rebuild                        # 重建 L2 场景块视图（纯派生，可删可重建）
@@ -115,8 +115,10 @@ function printJson(value) {
 }
 
 function printRecord(r) {
+  // 有 title 就先打 title（裁决 59）：它是「人扫一眼认得出是哪条」的那句话
+  const head = typeof r.title === 'string' && r.title !== '' ? `  「${r.title}」\n` : '';
   process.stdout.write(
-    `${r.id}  [${r.kind}] ${r.status}\n  ${r.text}\n  ${r.subject}.${r.predicate} = ${r.value}  (from ${r.validFrom}${r.validTo ? ` to ${r.validTo}` : ''}, conf ${r.confidence}, agent ${r.source.agent})\n`
+    `${r.id}  [${r.kind}] ${r.status}\n${head}  ${r.text}\n  ${r.subject}.${r.predicate} = ${r.value}  (from ${r.validFrom}${r.validTo ? ` to ${r.validTo}` : ''}, conf ${r.confidence}, agent ${r.source.agent})\n`
   );
 }
 
@@ -144,6 +146,8 @@ async function cmdWrite(opts, asJson) {
     const text = requireOpt(opts, 'text', 'memo write --text "..."');
     const result = await service.write({
       text,
+      // 标题（裁决 59）：一行 ≤40 字，图谱/brief 显示的就是它
+      title: opts.title === true || opts.title === undefined ? undefined : String(opts.title),
       kind: opts.kind === true || opts.kind === undefined ? undefined : String(opts.kind),
       subject: opts.subject === true ? undefined : opts.subject,
       predicate: opts.predicate === true ? undefined : opts.predicate,
@@ -635,6 +639,36 @@ async function main() {
       try {
         // grace 不写死 7d：交给 policy.quota.purgeGraceMs（契约裁决 51），CLI 只透传用户显式值
         await compactCli(service, { dryRun: opts['dry-run'] === true, grace: opts.grace, json: asJson });
+      } finally {
+        await service.close();
+      }
+      return 0;
+    }
+    case 'retitle': {
+      const { retitleRecords } = await import('../api/retitle.js');
+      const service = await loadService();
+      try {
+        const dryRun = opts['dry-run'] === true;
+        const limit = opts.limit === undefined || opts.limit === true ? 0 : Number(opts.limit);
+        // --from-file：Agent 批量产出 [{id,title}] 后一次性写入（LLM 给的标题比纯规则更像人话）
+        if (opts['from-file'] !== undefined && opts['from-file'] !== true) {
+          const fsp = await import('node:fs/promises');
+          const raw = await fsp.readFile(String(opts['from-file']), 'utf8');
+          const list = JSON.parse(raw);
+          if (!Array.isArray(list)) throw new UsageError('--from-file 需要 JSON 数组：[{id,title}]');
+          const { applyTitles } = await import('../api/retitle.js');
+          const r = await applyTitles(service, list, { dryRun });
+          if (asJson) printJson(r);
+          else process.stdout.write(`retitle(from-file): changed=${r.changed} skipped=${r.skipped} failed=${r.failed.length}${dryRun ? ' (dry-run)' : ''}\n`);
+          return 0;
+        }
+        const r = await retitleRecords(service, { dryRun, limit });
+        if (asJson) printJson(r);
+        else {
+          const tag = dryRun ? ' (dry-run)' : '';
+          process.stdout.write(`retitle: 候选 ${r.total} 条，已补 ${r.changed} 条${r.failed?.length ? `，失败 ${r.failed.length}` : ''}${tag}\n`);
+          for (const s of r.samples ?? []) process.stdout.write(`  · ${s.title}\n`);
+        }
       } finally {
         await service.close();
       }

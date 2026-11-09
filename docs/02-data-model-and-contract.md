@@ -702,3 +702,51 @@ Windows 上 `:` 是 NTFS **备用数据流（ADS）**分隔符，`items/repo:x.j
 | 模块 | 导出 |
 |---|---|
 | `src/config/paths.js` | `itemsFileName` `briefFileName` `scopeFromItemsFileName` |
+
+## §3.16 记忆标题与可读标签（裁决 59–60）
+
+### 背景：标签退化不是「不好看」，是信息丢失
+
+实测同一个知识库（`repo:fae-knowledge-base`，118 条记录）：
+
+| 指标 | 实测值 |
+|---|---|
+| 服务端 `label` 平均长度 | **48 字符**（最长 81） |
+| `ui/graph.js` 实际绘制宽度 | **16 字符** |
+| 截断后与他人重名的节点 | **60 / 118 = 51%** |
+| 撞车最狠 | `scheme-lead-revi…` ×7、`Mac mini A4x Bus…` ×5、`Mac mini A4x Lea…` ×5 |
+
+原因是 `makeLabel()` 直接拼 `subject/predicate`，而截止字符正好落在 subject 中间 —— `predicate`
+（真正区分这几条的那个词）一个像素都没露出来。非结构化记录更直接：`text` 前 60 字。
+
+### 裁决 59：`title` 是记录的一等字段，label 必须标题优先
+
+- `MemoryRecord` 新增可选 `title`：**1–40 字符、单行、首尾无空白**，由 `normalizeTitle()` 归一化
+  （折单行 → trim → 超长截 39 字符 + `…`）。
+- **没有标题就不写这个键**（不是空串）：空串会让「没有标题」与「标题是空」无法区分。
+- `validateRecord` 对出现的 `title` 强校验：非字符串 / 空 / 含换行 / 首尾空白 / 超长 → 报错。
+- `makeLabel(r, { withValue })` 的优先级：**`title` → 结构化退回 `subject`（`_` 折空格）→ 非结构化退回正文首句**
+  （去掉「我刚刚/你看/就是」这类口语前缀，取到第一个句读）；label 上限 **24 字符**。
+- `predicate` **不再进 label**，改由图谱节点 payload 的 `predicates` 字段带进详情面板。
+- brief 行首也用 `title`（更短、更好扫，正文靠 `memory_search` 下钻）；无 title 的旧记录行为不变。
+- 写入侧：MCP `memory_write` 的 schema 增 `title`，`INSTRUCTIONS` 与 `~/.codex/AGENTS.md` 都写明
+  「写记忆必须给 title」；CLI `memo write --title`、`memo retitle`（回填）配套。
+
+### 裁决 60：图谱按 subject 聚合，用 `×N` 表达「一个主题的多条记录」
+
+- 同一 `subject` 的多条记录合并成**一个节点**：`count`（条数）、`predicates`（去重后最多 8 个维度）。
+- 节点 `label` 取组内任一记录的 `title`（没有则 subject）；代表记录的 `status` 以「组内有 active 即 active」为准。
+- `same-entity` 边因此不再产生（组内已合并）；`supersedes` / `duplicate-of` / `disputed-with`
+  三类边按 `recordId → nodeId` 映射，**自环一律丢弃**。
+- `sampled` 增加 `records`（采样到的记录数），与 `shown`（节点数）区分：`Σcount === records` 是不变式。
+- 理由：这是信息密度问题，不是绘图问题。7 条同主题记录画成 7 个同名点，读者只会得出「重复沉淀」的错误结论。
+
+### 第十三轮导出登记（裁决 59）
+
+| 模块 | 导出 |
+|---|---|
+| `src/core/record.js` | `MAX_TITLE` `normalizeTitle` |
+| `src/api/retitle.js` | `TITLE_MAX` `deriveTitle` `retitleRecords` `applyTitles` |
+| `src/cli/compact.js` | `UsageError` `parseGraceMs` |
+| `src/cli/curate.js` | `curateAutoCli` |
+| `src/views/l3.js` | `UNSOURCED_ASSERTION_RULES` |

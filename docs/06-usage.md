@@ -366,3 +366,26 @@ memo view trace <L3 的 id>               # 核出处：哪些已 superseded / �
 | `quota` | `{L2:0.25, L3:0.15}` | 分层行数份额；视图不存在时自动降级为扁平渲染 |
 
 > 为什么要有硬配额：调研里 dsh-auto-memory 的实测——纯按优先级排序，单层会把预算吃光（77 chunks 全占）。
+
+## 14. 记忆标题（v0.3.1，`title` 与 `memo retitle`）
+
+图谱和 brief 上显示的是记录的 `title`——**写记忆时请给它**（≤40 字、单行、说人话）：
+
+```bash
+memo write --text "观察台默认跑在 127.0.0.1:7788，只读、无写端点" \
+  --title "观察台端口 7788" --kind fact --subject strata/observer --predicate port --value 7788 --agent dsh
+```
+
+MCP 侧就是 `memory_write({text, title, kind})`；`~/.codex/AGENTS.md` 已把它写成硬要求。
+
+### 14.1 回填旧记录（标题是后加的字段，老库都没有）
+
+```bash
+memo retitle --dry-run            # 只看会改成什么，不落盘
+memo retitle                      # 按 subject 规则推导标题（去日期后缀、下划线折空格、24 字上限）
+memo retitle --from-file titles.json   # 用 Agent 产出的标题：[{"id":"01M6…","title":"…"}]
+```
+
+- 回填是**追加补丁行**（`v+1` + `op:'retitle'` 事件），真相层只增不减，原行仍在，可 as-of 回查。
+- 幂等：已有 title 的记录永不覆盖（`--from-file` 给出相同 title 也只算 skipped）。
+- 规则推导只能做到「把 subject 弄成人话」；要真正概括内容，用 `--from-file` 让正在跑的 Agent 读完正文自己写。
