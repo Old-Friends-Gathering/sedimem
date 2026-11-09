@@ -267,10 +267,21 @@ export async function initGraph({ canvas, detailEl, toolbarEl, apiBase = '/api',
   function drawLabels() {
     if (state.view.scale < 0.2) return;
     const boxes = [];
+    // v0.3.3 标签降噪：83 个全画必然叠。只画「聚合点（count>1）」与
+    // 「度数 top 30」的节点；单条孤立记录选中时才在详情里看全名。
+    const deg = new Map();
+    for (const e of state.edges) {
+      deg.set(e.from, (deg.get(e.from) ?? 0) + 1);
+      deg.set(e.to, (deg.get(e.to) ?? 0) + 1);
+    }
+    const topByDeg = new Set(
+      state.nodes.slice().sort((a, b) => (deg.get(b.id) ?? 0) - (deg.get(a.id) ?? 0)).slice(0, 30).map((n) => n.id)
+    );
     const cand = state.nodes
       .filter((nd) => typeof nd.label === 'string' && nd.label !== '')
+      .filter((nd) => (nd.count ?? 1) > 1 || topByDeg.has(nd.id) || nd.id === state.selectedId)
       .slice()
-      .sort((a, b) => (b.count ?? 1) - (a.count ?? 1) || (b.hits ?? 0) - (a.hits ?? 0));
+      .sort((a, b) => (b.count ?? 1) - (a.count ?? 1) || (deg.get(b.id) ?? 0) - (deg.get(a.id) ?? 0));
     ctx.font = '11px -apple-system, "PingFang SC", sans-serif';
     ctx.textAlign = 'center';
     ctx.textBaseline = 'top';
@@ -317,8 +328,20 @@ export async function initGraph({ canvas, detailEl, toolbarEl, apiBase = '/api',
       return;
     }
     const types = activeEdgeTypes();
-    // 边
-    for (const e of state.edges) {
+    // 边（v0.3.3 降噪：>60 条时只画度数最高的 60 条，其余隐藏 —— 毛球感的主要来源是 hub）
+    let drawEdges = state.edges;
+    if (state.edges.length > 60) {
+      const deg = new Map();
+      for (const e of state.edges) {
+        deg.set(e.from, (deg.get(e.from) ?? 0) + 1);
+        deg.set(e.to, (deg.get(e.to) ?? 0) + 1);
+      }
+      drawEdges = state.edges
+        .slice()
+        .sort((x, y) => (deg.get(y.from) ?? 0) + (deg.get(y.to) ?? 0) - ((deg.get(x.from) ?? 0) + (deg.get(x.to) ?? 0)))
+        .slice(0, 60);
+    }
+    for (const e of drawEdges) {
       if (!types.has(e.type)) continue;
       const a = nodeById.get(e.from);
       const b = nodeById.get(e.to);
@@ -402,9 +425,11 @@ export async function initGraph({ canvas, detailEl, toolbarEl, apiBase = '/api',
     const n = state.nodes.length;
     const crowd = n > 40 ? Math.sqrt(n / 40) : 1;
     return {
-      springLength: base * Math.min(1.35, crowd),
-      repulsion: 4200 * (base / 120) ** 2 * crowd ** 1.5,
-      centering: 0.012 / Math.max(1, crowd * 0.5),
+      // v0.3.3 布局降噪：弹簧加长、斥力加倍、向心减半 —— 拉开间距。
+      // 杂乱感主要来自「挤」（83 点缩在半个画布），不是「多」。
+      springLength: base * Math.min(1.55, crowd) * 1.15,
+      repulsion: 4200 * (base / 120) ** 2 * crowd ** 1.5 * 2.0,
+      centering: 0.012 / Math.max(1, crowd * 0.5) * 0.5,
     };
   }
 
