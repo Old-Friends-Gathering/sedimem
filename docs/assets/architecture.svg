@@ -68,16 +68,17 @@
   <text class="mono" x="794" y="630">events.jsonl · metrics/</text>
 
   <!-- 箭头 -->
-  <path class="arrow" d="M210 108 L210 196"/>
-  <path class="arrow" d="M556 108 L556 196"/>
-  <path class="arrow" d="M980 108 L980 196"/>
-  <path class="arrow" d="M180 246 L180 320"/>
-  <path class="arrow" d="M550 246 L550 320"/>
-  <path class="arrow" d="M912 246 L912 320"/>
-  <path class="arrow" d="M580 392 L580 468"/>
-  <path class="arrow" d="M950 524 L950 542"/>
-  <path class="arrowD" d="M340 542 L340 526"/>
-  <path class="arrowD" d="M600 542 L600 526"/>
+  <!-- 箭头只画在层间空隙里：避免穿过下一层的标题文字 -->
+  <path class="arrow" d="M210 122 L210 136"/>
+  <path class="arrow" d="M556 122 L556 136"/>
+  <path class="arrow" d="M980 122 L980 136"/>
+  <path class="arrow" d="M180 246 L180 260"/>
+  <path class="arrow" d="M550 246 L550 260"/>
+  <path class="arrow" d="M912 246 L912 260"/>
+  <path class="arrow" d="M580 394 L580 408"/>
+  <path class="arrow" d="M950 526 L950 540"/>
+  <path class="arrowD" d="M340 540 L340 528"/>
+  <path class="arrowD" d="M600 540 L600 528"/>
 
   <!-- 注脚 -->
   <text class="sub" x="54" y="690">读路径 · 任何读操作前先 refreshView()，把真相层的增量并进来（跨进程写入不会被读到陈旧快照）。</text>
