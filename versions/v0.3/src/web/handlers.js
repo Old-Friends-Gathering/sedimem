@@ -415,6 +415,45 @@ async function apiGraph(service, query) {
     }
   } catch { /* dedupeScan 失败不拖垮整个图谱 */ }
 
+  // 3.5) shared-entity（裁决 61）：跨主题的实体共现——工单号、MR 号、commit SHA、
+  //    设备/工具名等在两条记录里同时出现，就画一条细线。这是聚合后仍然可见的
+  //    「跨主题关联」载体；组内共现（同 AGG 点）没有意义，跳过。
+  //    提取规则刻意保守：只认强锚点（#1234、MR299、9 位 hex、白名单名词），
+  //    单条记录命中的实体数封顶 4，避免一个 hub 拖出毛球。
+  {
+    const ENTITY_RE = /(#\d{3,6}|\bMR\s?\d{2,6}\b|\b[0-9a-f]{9,10}\b|Mac mini|Terra|Sol me\d*|Kibana|Codex|Claude|Pages|grafana|launchd|FTS5)/g;
+    const byEntity = new Map();
+    for (const r of picked) {
+      const hay = `${r.title ?? ''} ${r.subject} ${r.predicate} ${r.text ?? ''}`;
+      const hits = new Set();
+      for (const m of hay.matchAll(ENTITY_RE)) {
+        const t = m[0].replace(/\s+/g, '').toLowerCase();
+        hits.add(t);
+        if (hits.size >= 5) break; // 单条封顶：防 hub
+      }
+      for (const t of hits) {
+        if (!byEntity.has(t)) byEntity.set(t, []);
+        byEntity.get(t).push(r.id);
+      }
+    }
+    const pairSeen = new Set();
+    for (const [ent, ids] of byEntity) {
+      if (ids.length < 2 || ids.length > 12) continue; // 太冷的词不连，太热的词是毛球
+      for (let i = 0; i < ids.length; i++) {
+        for (let j = i + 1; j < ids.length; j++) {
+          const a = nodeId(ids[i]);
+          const b = nodeId(ids[j]);
+          if (!a || !b || a === b) continue; // 同一聚合点内的共现不画
+          const key = `${a}\u0001${b}`;
+          if (pairSeen.has(key)) continue;
+          pairSeen.add(key);
+          edges.push({ from: a, to: b, type: 'same-entity', weight: 0.75, entity: ent });
+          bump(a); bump(b);
+        }
+      }
+    }
+  }
+
   // 4) disputed-with：disputed 记录与同 slot 的 active 记录
   for (const [, full] of fullById) {
     if (full.status !== 'disputed') continue;
