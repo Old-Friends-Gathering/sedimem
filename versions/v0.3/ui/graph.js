@@ -40,6 +40,7 @@ export async function initGraph({ canvas, detailEl, toolbarEl, apiBase = '/api',
     frames: 0,
     userAdjusted: false,
     running: true,
+    rotateMode: false,
     destroyed: false,
     rafId: 0,
   };
@@ -135,6 +136,19 @@ export async function initGraph({ canvas, detailEl, toolbarEl, apiBase = '/api',
   /* ---------- 工具栏 ---------- */
   const checks = {};
   function buildToolbar() {
+    // 旋转模式：勾上后整块画布都是旋转手势（节点密集时也拖得动）
+    const rotWrap = document.createElement('label');
+    rotWrap.style.marginRight = '12px';
+    const rotInput = document.createElement('input');
+    rotInput.type = 'checkbox';
+    rotInput.checked = false;
+    rotInput.addEventListener('change', () => {
+      state.rotateMode = rotInput.checked;
+    });
+    const rotSpan = document.createElement('span');
+    rotSpan.textContent = ' 旋转视角';
+    rotWrap.append(rotInput, rotSpan);
+    toolbarEl.append(rotWrap);
     toolbarEl.replaceChildren();
     const all = mkCheck('all', '全开', (v) => {
       pref.all = v;
@@ -415,7 +429,7 @@ export async function initGraph({ canvas, detailEl, toolbarEl, apiBase = '/api',
   }
   const onPointerDown = (ev) => {
     const [sx, sy] = localPos(ev);
-    const nd = hitNode(sx, sy);
+    const nd = state.rotateMode ? null : hitNode(sx, sy); // 旋转模式：全画布拖拽都旋转
     if (nd) {
       nd.fx = nd.x;
       nd.fy = nd.y;
