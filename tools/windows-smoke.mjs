@@ -195,18 +195,17 @@ async function main() {
       assert(r.status === 0, `nightly 失败：${exitDetail(r)}`);
 
       const briefPath = path.join(memoHome, 'brief', briefName);
-      const bst = await fsp.stat(briefPath);
-      assert(bst.isFile(), `brief 不是普通文件：${briefPath}`);
-      assert(bst.size > 0, `brief 为空：${briefPath}`);
+      const bbuf = await fsp.readFile(briefPath); // 单次读，避免 stat→read 竞态
+      assert(bbuf.length > 0, `brief 为空：${briefPath}`);
 
       const metricsPath = await resolveMetricsFile(memoHome, metricsName);
-      const mst = await fsp.stat(metricsPath);
-      assert(mst.isFile(), `metrics 不是普通文件：${metricsPath}`);
-      assert(mst.size > 0, `metrics 为空：${metricsPath}`);
-      const snapshot = JSON.parse(await fsp.readFile(metricsPath, 'utf8'));
+      // 只 readFile 一次：stat 之后再读是 TOCTOU（CodeQL js/file-system-race）
+      const mbuf = await fsp.readFile(metricsPath);
+      assert(mbuf.length > 0, `metrics 为空：${metricsPath}`);
+      const snapshot = JSON.parse(mbuf.toString('utf8'));
       assert(snapshot.scope === SCOPE, `metrics.scope 期望 ${SCOPE}，实际 ${snapshot.scope}`);
       assert(snapshot.total === 2, `metrics.total 期望 2，实际 ${snapshot.total}`);
-      return `brief=${briefName}（${bst.size} bytes） metrics=${path.basename(metricsPath)}`;
+      return `brief=${briefName}（${bbuf.length} bytes） metrics=${path.basename(metricsPath)}`;
     });
   } finally {
     if (service) {
