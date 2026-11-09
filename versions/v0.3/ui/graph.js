@@ -217,6 +217,52 @@ export async function initGraph({ canvas, detailEl, toolbarEl, apiBase = '/api',
     state.view.ty = rect.height / 2 - cyWorld * scale;
   }
 
+  /**
+   * 标签绘制（裁决 33：label 由服务端生成，这里只负责画）。
+   *
+   * 密度大时必须做取舍：83 个节点全画标签会糊成一片，所以按「同主题条数 → 命中次数」
+   * 排序后逐个放，**与已画标签重叠就跳过**——宁可少画几个，也不要叠字。
+   * 字号固定 11px（屏幕空间），缩得太小（<0.2）才完全关掉。
+   */
+  function drawLabels() {
+    if (state.view.scale < 0.2) return;
+    const boxes = [];
+    const cand = state.nodes
+      .filter((nd) => typeof nd.label === 'string' && nd.label !== '')
+      .slice()
+      .sort((a, b) => (b.count ?? 1) - (a.count ?? 1) || (b.hits ?? 0) - (a.hits ?? 0));
+    ctx.font = '11px -apple-system, "PingFang SC", sans-serif';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'top';
+    const MAX_W = 132; // ≈12 个汉字；再宽会和邻居叠上
+    for (const nd of cand) {
+      const [px, py] = toScreen(nd.x, nd.y);
+      const r = Math.max(2.2, radiusOf(nd) * state.view.scale ** 0.6);
+      const badge = nd.count > 1 ? ` ×${nd.count}` : '';
+      let text = `${nd.label}${badge}`;
+      if (ctx.measureText(text).width > MAX_W) {
+        let s = nd.label;
+        while (s.length > 2 && ctx.measureText(`${s}…${badge}`).width > MAX_W) s = s.slice(0, -1);
+        text = `${s}…${badge}`;
+      }
+      const w = ctx.measureText(text).width;
+      const x = px - w / 2;
+      const y = py + r + 3;
+      const box = { x: x - 2, y: y - 1, w: w + 4, h: 14 };
+      const hit = boxes.some(
+        (b) => !(box.x + box.w < b.x || b.x + b.w < box.x || box.y + box.h < b.y || b.y + b.h < box.y)
+      );
+      if (hit) continue;
+      boxes.push(box);
+      ctx.lineWidth = 3;
+      ctx.strokeStyle = 'rgba(11,13,18,0.85)';
+      ctx.strokeText(text, x, y);
+      ctx.fillStyle = nd.status === 'superseded' ? '#8b93a3' : '#cfd6e4';
+      ctx.fillText(text, x, y);
+      if (boxes.length >= 240) break; // 上限：再多也没人看得清
+    }
+  }
+
   function render() {
     state.frames++;
     // 自动适配：用户未手动缩放/平移前，每 20 帧把布局缩放回画布内，
@@ -253,7 +299,8 @@ export async function initGraph({ canvas, detailEl, toolbarEl, apiBase = '/api',
     // 节点
     for (const nd of state.nodes) {
       const [px, py] = toScreen(nd.x, nd.y);
-      const r = radiusOf(nd) * state.view.scale;
+      // 缩小时圆点不能跟着消失：半径按 scale^0.6 缩，留 2.2px 下限
+      const r = Math.max(2.2, radiusOf(nd) * state.view.scale ** 0.6);
       const color = kindColors[nd.kind] || KIND_COLORS.state;
       const superseded = nd.status === 'superseded';
       ctx.beginPath();
@@ -290,22 +337,8 @@ export async function initGraph({ canvas, detailEl, toolbarEl, apiBase = '/api',
       ctx.globalAlpha = 1;
       if (state.alpha < 0.02 && !state.fitted) { state.fitted = true; if (!state.userAdjusted) fitView(); }
 
-    // 标签（裁决 33：label 由服务端生成，这里只负责绘制；够放才画）
-      if (state.view.scale >= 0.45 && nd.label) {
-        const badge = nd.count > 1 ? ` ×${nd.count}` : '';
-        const room = 18 - badge.length;
-        const raw = nd.label.length > room ? `${nd.label.slice(0, Math.max(4, room - 1))}…` : nd.label;
-        const text = `${raw}${badge}`;
-        ctx.font = '11px -apple-system, "PingFang SC", sans-serif';
-        ctx.textAlign = 'center';
-        ctx.textBaseline = 'top';
-        ctx.lineWidth = 3;
-        ctx.strokeStyle = 'rgba(11,13,18,0.85)';
-        ctx.strokeText(text, px, py + r + 4);
-        ctx.fillStyle = superseded ? '#8b93a3' : '#cfd6e4';
-        ctx.fillText(text, px, py + r + 4);
-      }
     }
+    drawLabels();
     // 采样提示（右上角常驻）
     if (state.sampled.shown < state.sampled.total) {
       const text = `已采样 ${state.sampled.shown} / ${state.sampled.total} 条`;
@@ -318,13 +351,20 @@ export async function initGraph({ canvas, detailEl, toolbarEl, apiBase = '/api',
     }
   }
 
-  /** 按画布尺寸给布局参数：节点少时弹簧更长，图形自然铺开；大屏不缩在中间一小团 */
+  /**
+   * 按画布尺寸与节点数给布局参数。
+   *
+   * - 节点少：弹簧更长，图形铺开，不缩在中间一小团
+   * - 节点多（>40）：按 sqrt(n/40) 放大斥力，否则 80+ 个点会挤成一坨
+   */
   function layoutOpts(width, height) {
     const base = Math.max(120, Math.min(320, Math.min(width, height) / 2.6));
+    const n = state.nodes.length;
+    const crowd = n > 40 ? Math.sqrt(n / 40) : 1;
     return {
-      springLength: base,
-      repulsion: 4200 * (base / 120) ** 2,
-      centering: 0.012,
+      springLength: base * Math.min(1.35, crowd),
+      repulsion: 4200 * (base / 120) ** 2 * crowd ** 1.5,
+      centering: 0.012 / Math.max(1, crowd * 0.5),
     };
   }
 
