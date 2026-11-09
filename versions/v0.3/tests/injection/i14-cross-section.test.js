@@ -102,11 +102,24 @@ test('I14 截面一致性：快照数 / suspicious 遮蔽 / 事件可回查 / �
     assert.equal(graph.ok, true);
     assert.ok(graph.nodes.length <= 5, `nodes 数必须 <= limit，实际 ${graph.nodes.length}`);
     for (const n of graph.nodes) {
-      assert.ok(allIds.has(n.id), `图谱节点 ${n.id} 必须存在于 status:"all" 快照`);
+      // 裁决 60 终版：聚合节点的 id 是 `AGG:<subject>` 派生 id，不再直接等于 recordId；
+      // 它与快照的对应关系由 count（组内条数 ≤ 快照中该 subject 条数）与 repr（代表记录）保证。
+      const isAgg = typeof n.id === 'string' && n.id.startsWith('AGG:');
+      assert.ok(
+        isAgg || allIds.has(n.id),
+        `图谱节点 ${n.id} 既不是聚合节点也不在 status:"all" 快照`,
+      );
+      if (isAgg) {
+        assert.ok(allIds.has(n.repr), `聚合节点 ${n.id} 的 repr ${n.repr} 必须可回查`);
+        assert.ok(n.count >= 1, `聚合节点 ${n.id} 的 count 必须 ≥ 1`);
+      }
     }
     for (const e of graph.edges) {
       assert.ok(EDGE_TYPES.has(e.type), `边类型非法：${e.type}`);
-      assert.ok(allIds.has(e.from) || graph.nodes.some((n) => n.id === e.from), `边端点 ${e.from} 必须可回查`);
+      assert.ok(
+        allIds.has(e.from) || graph.nodes.some((n) => n.id === e.from) || String(e.from).startsWith('AGG:'),
+        `边端点 ${e.from} 必须可回查（记录 id 或聚合节点）`,
+      );
     }
 
     // ================= 5) same-entity 时间链（裁决 35）=================

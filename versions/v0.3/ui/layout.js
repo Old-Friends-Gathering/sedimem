@@ -53,8 +53,8 @@ export function kindColorsFromPolicy(policy) {
   return colors;
 }
 
-/** 默认开启的边类型（用户 2026-11-02 决策：默认只开两类） */
-export const DEFAULT_EDGE_TYPES = ['same-entity', 'supersedes'];
+/** 默认开启的边类型（v0.3.2 起：聚合语义下 same-entity 组内自环没有信息，默认只画演化链） */
+export const DEFAULT_EDGE_TYPES = ['supersedes'];
 /** 可选边类型（工具栏单独勾选） */
 export const OPTIONAL_EDGE_TYPES = ['duplicate-of', 'disputed-with'];
 /** localStorage 持久化键 */
