@@ -167,9 +167,18 @@ export async function initGraph({ canvas, detailEl, toolbarEl, apiBase = '/api',
         : '点击节点查看详情';
       return;
     }
+    // 组内演化时间线（裁决 60 终版：聚合图上组内自环没有信息，关联在这里表达）
+    const chainLines = Array.isArray(nd.chain) && nd.chain.length > 1
+      ? [
+        '演化时间线（旧 → 新）：',
+        ...nd.chain.map((c) => `  · ${(c.createdAt ?? '').slice(0, 10)}  ${c.title ?? c.id.slice(0, 12)}${c.status !== 'active' ? `（${c.status}）` : ''}`),
+        '',
+      ]
+      : [];
     const lines = [
       `标签：${nd.label ?? nd.id}`,
       ...(nd.count > 1 ? [`同主题记录：${nd.count} 条（图上合并为一个点）`] : []),
+      ...chainLines,
       ...(Array.isArray(nd.predicates) && nd.predicates.length
         ? [`维度（predicate）：${nd.predicates.join(' · ')}`] : []),
       `类型：${nd.kind ?? '-'}　状态：${nd.status ?? '-'}`,

@@ -309,7 +309,10 @@ async function apiGraph(service, query) {
     let node = groupOf.get(key);
     if (!node) {
       node = {
-        id: r.id,
+        // 聚合节点 id 不能借首条记录的 id：同组内「旧→新」时间链的两端会解析成
+        // 同一个点（a === b），全部被 continue，图谱一条边都不剩。用组 key 派生，
+        // 保证与任何 recordId 都不同源。
+        id: key.startsWith('S:') ? `AGG:${r.subject}` : `AGG:${r.id}`,
         label: makeLabel(r),
         kind: r.kind,
         status: r.status,
@@ -319,6 +322,7 @@ async function apiGraph(service, query) {
         degree: 0,
         count: 0,
         predicates: [],
+        chain: [],
       };
       groupOf.set(key, node);
     }
@@ -333,13 +337,20 @@ async function apiGraph(service, query) {
       node.predicates.push(pred);
     }
     // 代表记录取最老的（版本链起点），status/kind 用它；只要组内有 active 就显示 active
-    if (String(r.createdAt) < String(node.createdAt)) {
+    if (!node.reprId || String(r.createdAt) < String(node.createdAt)) {
+      node.reprId = r.id;
       node.createdAt = r.createdAt;
       node.kind = r.kind;
       node.subject = r.subject;
+      node.text = r.text;
+      node.value = r.value;
     }
     if (r.status === 'active') node.status = 'active';
     else if (node.status !== 'active' && r.status === 'superseded') node.status = 'superseded';
+    // 组内演化时间线（详情面板展示；聚合图上组内自环没有信息，这里是关联性的正确载体）
+    if (node.chain.length < 6) {
+      node.chain.push({ id: r.id, title: r.title ?? null, createdAt: r.createdAt, status: r.status });
+    }
   }
   const nodes = [...groupOf.values()];
   for (const n of nodes) {
@@ -352,8 +363,10 @@ async function apiGraph(service, query) {
   const degree = new Map();
   const bump = (id) => degree.set(id, (degree.get(id) ?? 0) + 1);
 
-  // 1) same-entity：同 subject 已合并为单节点（裁决 60），链路自然消失，无需再连边。
-  //    `count`/`predicates` 把「同主题多条」的信息带到详情面板，比一堆重叠边更可读。
+  // 1) same-entity（裁决 60 终版）：同 subject 已聚合为一个点，「组内连线」在聚合语义下
+  //    是自环（首尾都是同一个 AGG 点），画出来只会是一圈圈没有信息的环。
+  //    组的时间深度由 count + 详情面板表达；版本演化由 supersedes 边表达（跨组或组内，
+  //    只要首尾 id 不同就会画）。这是「聚合不造假边」的取舍。
 
   // 2) supersedes：旧 id → 新 id 有向边。两个来源：
   //    a) 记录自身 supersedes 字段（人工 supersede 路径会写入）；
@@ -417,7 +430,12 @@ async function apiGraph(service, query) {
     }
   }
 
-  for (const n of nodes) n.degree = degree.get(n.id) ?? 0;
+  for (const n of nodes) {
+    n.degree = degree.get(n.id) ?? 0;
+    if (n.reprId) n.repr = n.reprId; // 代表记录 id（前端可拿去 /api/records 深挖）
+    delete n.reprId;
+    n.chain.sort((a, b) => String(a.createdAt).localeCompare(String(b.createdAt)));
+  }
   return { nodes, edges, sampled: { shown: nodes.length, total: eligible.length, records: picked.length } };
 }
 

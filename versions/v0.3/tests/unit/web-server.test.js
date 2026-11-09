@@ -124,7 +124,7 @@ test('web-server：绑定地址、7 端点形状、错误形状、遮蔽与穿�
     assert.ok(Array.isArray(r.nodes) && r.nodes.length >= 2);
     for (const n of r.nodes) {
       assert.deepEqual(Object.keys(n).sort(),
-        ['count', 'createdAt', 'degree', 'hits', 'id', 'kind', 'label', 'predicates', 'status', 'subject'].sort());
+        ['chain', 'count', 'createdAt', 'degree', 'hits', 'id', 'kind', 'label', 'predicates', 'repr', 'status', 'subject', 'text', 'value'].sort());
       assert.ok(Number.isInteger(n.count) && n.count >= 1, '裁决 60：count 是聚合条数');
       assert.ok(Array.isArray(n.predicates), '裁决 60：predicates 带到详情面板');
       assert.ok(['active', 'superseded', 'disputed'].includes(n.status), '裁决 40：节点集含 disputed');
