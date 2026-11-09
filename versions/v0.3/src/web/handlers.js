@@ -201,11 +201,13 @@ function toTimelineRows(events, index) {
       seenDecision.add(key);
     }
     const rec = ev.id ? index.get(ev.id) : null;
+    // retitle/retitle_apply 是「改标题」动作：label 只给标题本身，再拼正文会把一行撑成两句
+    const titleOnly = ev.op === 'retitle' || ev.op === 'retitle_apply';
     rows.push({
       ts: ev.ts,
       op: ev.op,
       id: ev.id ?? null,
-      label: rec ? makeLabel(rec, { withValue: true }) : String(ev.op),
+      label: rec ? makeLabel(rec, { withValue: !titleOnly }) : String(ev.op),
       action: d.action ?? d.decision ?? null,
       reason: d.reason ?? null,
     });
