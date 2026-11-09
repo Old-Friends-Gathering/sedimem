@@ -53,8 +53,8 @@ export function kindColorsFromPolicy(policy) {
   return colors;
 }
 
-/** 默认开启的边类型（v0.3.2 起：聚合语义下 same-entity 组内自环没有信息，默认只画演化链） */
-export const DEFAULT_EDGE_TYPES = ['supersedes'];
+/** 默认开启的边类型（v0.3.3：same-entity 复活为「跨主题实体共现」，默认画） */
+export const DEFAULT_EDGE_TYPES = ['supersedes', 'same-entity'];
 /** 可选边类型（工具栏单独勾选） */
 export const OPTIONAL_EDGE_TYPES = ['duplicate-of', 'disputed-with'];
 /** localStorage 持久化键 */
@@ -108,17 +108,23 @@ export function layoutTick(nodes, edges, opts = {}) {
   const cx = width / 2;
   const cy = height / 2;
 
-  // 确定性初始化缺失坐标（黄金角圆环，避免 Math.random）
+  // 确定性初始化缺失坐标（黄金角球面分布，避免 Math.random）。
+  // z 轴也参与布局（3D 力导向）：斥力/弹簧/向心都在三维里算，投影时按 z 缩放。
   for (let i = 0; i < n; i++) {
     const nd = nodes[i];
     if (!Number.isFinite(nd.x) || !Number.isFinite(nd.y)) {
-      const a = i * 2.399963229728653; // 黄金角（弧度）
-      const r = 40 + 14 * Math.sqrt(i + 1);
-      nd.x = cx + r * Math.cos(a);
-      nd.y = cy + r * Math.sin(a);
+      // 斐波那契球面：均匀铺在半径 R 的球上，z 用 sinθ
+      const R = 150;
+      const phi = i * 2.399963229728653; // 黄金角
+      const zz = 1 - (2 * i + 1) / n; // cosθ ∈ (-1,1)
+      const rr = Math.sqrt(Math.max(0, 1 - zz * zz));
+      nd.x = cx + R * rr * Math.cos(phi);
+      nd.y = cy + R * zz * 0.72; // 压扁成椭球，适配宽屏
+      nd.z = R * rr * Math.sin(phi) * 0.6;
     }
     if (!Number.isFinite(nd.vx)) nd.vx = 0;
     if (!Number.isFinite(nd.vy)) nd.vy = 0;
+    if (!Number.isFinite(nd.vz)) nd.vz = 0;
   }
 
   const free = [];
@@ -133,50 +139,54 @@ export function layoutTick(nodes, edges, opts = {}) {
     }
   }
 
-  // 斥力（O(n²)，n≤300 可接受）：累积加速度
+  // 斥力（O(n²)，n≤300 可接受）：三维累积加速度
   const ax = new Float64Array(n);
   const ay = new Float64Array(n);
+  const az = new Float64Array(n);
   const idx = new Map();
   for (let i = 0; i < n; i++) idx.set(nodes[i].id, i);
 
   for (let i = 0; i < n; i++) {
     for (let j = i + 1; j < n; j++) {
-      let dx = nodes[j].x - nodes[i].x;
-      let dy = nodes[j].y - nodes[i].y;
-      let d2 = dx * dx + dy * dy;
+      const a = nodes[i]; const b = nodes[j];
+      let dx = b.x - a.x;
+      let dy = b.y - a.y;
+      let dz = (b.z ?? 0) - (a.z ?? 0);
+      let d2 = dx * dx + dy * dy + dz * dz;
       if (d2 < 1e-6) {
-        // 完全重合时按索引确定性微偏移，保证两两距离 > 0
         dx = (j - i) * 0.5 + 0.25;
         dy = (i - j) * 0.35 - 0.2;
-        d2 = dx * dx + dy * dy;
+        dz = ((i * 7 + j * 3) % 11 - 5) * 0.1;
+        d2 = dx * dx + dy * dy + dz * dz;
       }
       const d = Math.sqrt(d2);
-      const f = repulsion / d2; // ~ k²/d 方向力
-      const fxk = (dx / d) * f;
-      const fyk = (dy / d) * f;
-      ax[i] -= fxk; ay[i] -= fyk;
-      ax[j] += fxk; ay[j] += fyk;
+      const f = repulsion / d2;
+      const ux = dx / d, uy = dy / d, uz = dz / d;
+      ax[i] -= ux * f; ay[i] -= uy * f; az[i] -= uz * f;
+      ax[j] += ux * f; ay[j] += uy * f; az[j] += uz * f;
     }
   }
 
-  // 弹簧 + 向心
+  // 弹簧（三维）+ 向心
   for (const e of edges || []) {
     const i = idx.get(e.from);
     const j = idx.get(e.to);
     if (i === undefined || j === undefined || i === j) continue;
-    const dx = nodes[j].x - nodes[i].x;
-    const dy = nodes[j].y - nodes[i].y;
-    const d = Math.max(Math.sqrt(dx * dx + dy * dy), 1e-6);
+    const a = nodes[i]; const b = nodes[j];
+    const dx = b.x - a.x;
+    const dy = b.y - a.y;
+    const dz = (b.z ?? 0) - (a.z ?? 0);
+    const d = Math.max(Math.sqrt(dx * dx + dy * dy + dz * dz), 1e-6);
     const w = Number.isFinite(e.weight) ? e.weight : 1;
     const f = spring * w * (d - springLength);
-    const fxk = (dx / d) * f;
-    const fyk = (dy / d) * f;
-    ax[i] += fxk; ay[i] += fyk;
-    ax[j] -= fxk; ay[j] -= fyk;
+    const ux = dx / d, uy = dy / d, uz = dz / d;
+    ax[i] += ux * f; ay[i] += uy * f; az[i] += uz * f;
+    ax[j] -= ux * f; ay[j] -= uy * f; az[j] -= uz * f;
   }
   for (let i = 0; i < n; i++) {
     ax[i] += (cx - nodes[i].x) * centering;
     ay[i] += (cy - nodes[i].y) * centering;
+    az[i] += (0 - (nodes[i].z ?? 0)) * centering * 0.8; // z 向心：收向球心平面
   }
 
   // 积分：仅自由节点；限步防炸；阻尼
@@ -185,14 +195,17 @@ export function layoutTick(nodes, edges, opts = {}) {
     const i = idx.get(nd.id);
     nd.vx = (nd.vx + ax[i] * alpha) * damping;
     nd.vy = (nd.vy + ay[i] * alpha) * damping;
-    const sp = Math.hypot(nd.vx, nd.vy);
+    nd.vz = ((nd.vz ?? 0) + az[i] * alpha) * damping;
+    const sp = Math.hypot(nd.vx, nd.vy, nd.vz ?? 0);
     if (sp > maxStep) {
       nd.vx = (nd.vx / sp) * maxStep;
       nd.vy = (nd.vy / sp) * maxStep;
+      nd.vz = ((nd.vz ?? 0) / sp) * maxStep;
     }
     nd.x += nd.vx;
     nd.y += nd.vy;
-    energy += nd.vx * nd.vx + nd.vy * nd.vy;
+    nd.z = (nd.z ?? 0) + (nd.vz ?? 0);
+    energy += nd.vx * nd.vx + nd.vy * nd.vy + (nd.vz ?? 0) ** 2;
   }
 
   return { alpha: alpha * alphaDecay, energy };

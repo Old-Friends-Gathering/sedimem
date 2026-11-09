@@ -48,8 +48,11 @@
     <h2>记忆图谱</h2>
     <div class="sub">节点 = 记录；边 = 同实体 / 版本链 / 近重复候选 / 冲突。颜色按 kind，透明度按状态。</div>
     <div id="graph-toolbar"></div>
-    <canvas id="graph-canvas"></canvas>
-    <aside id="graph-detail"><p class="dim" id="graph-hint">点击节点查看详情。</p></aside>
+    <div class="graph-stage">
+      <canvas id="graph-canvas"></canvas>
+      <aside id="graph-detail"><p class="dim" id="graph-hint">点击节点查看详情。</p></aside>
+    </div>
+    <p class="dim" id="graph-mode-note" style="margin-top:6px">3D 力导向（实验）：滚轮缩放、空白拖拽旋转、双击节点聚焦。</p>
   </section>
 
   <!-- ============ 卫生 ============ -->

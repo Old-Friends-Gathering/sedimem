@@ -63,7 +63,11 @@ td.b{width:78px}
 #graph-toolbar{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px}
 #graph-canvas{display:block;width:100%;height:clamp(420px,62vh,680px);background:radial-gradient(600px 360px at 50% 40%,#191d27,#11141b);
               border:1px solid var(--line);border-radius:10px}
-#graph-detail{background:var(--panel2);border:1px solid var(--line);border-radius:10px;padding:14px;margin-top:12px}
+.graph-stage{position:relative}
+#graph-detail{background:var(--panel2);border:1px solid var(--line);border-radius:10px;padding:14px;
+  position:absolute;top:12px;right:12px;width:300px;max-height:70%;overflow:auto;
+  box-shadow:0 8px 24px rgba(0,0,0,.45);z-index:5;backdrop-filter:blur(4px)}
+#graph-detail:has(.dim:only-child){display:none} /* 未选中节点时隐藏空面板 */
 #graph-detail h4{margin:0 0 8px;font-size:13px;color:var(--dim);font-weight:600}
 #graph-detail .kv{display:grid;grid-template-columns:76px 1fr;gap:6px 8px;font-size:12px;margin-bottom:12px}
 #graph-detail dt{color:var(--faint)} #graph-detail dd{margin:0;color:var(--fg)}

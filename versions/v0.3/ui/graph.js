@@ -34,7 +34,7 @@ export async function initGraph({ canvas, detailEl, toolbarEl, apiBase = '/api',
     edges: [],
     sampled: { shown: 0, total: 0 },
     alpha: 1,
-    view: { scale: 1, tx: 0, ty: 0 },
+    view: { rotY: 0, scale: 1, tx: 0, ty: 0 },
     selectedId: null,
     fitted: false,
     frames: 0,
@@ -46,7 +46,21 @@ export async function initGraph({ canvas, detailEl, toolbarEl, apiBase = '/api',
   const pref = loadEdgePref();
 
   /* ---------- 坐标变换 ---------- */
-  const toScreen = (x, y) => [x * state.view.scale + state.view.tx, y * state.view.scale + state.view.ty];
+  // 3D 投影：绕 Y 轴旋转 rotY 后做弱透视（camera 在 z=+600）。
+  // 返回 [sx, sy, scale因子]——scale因子 = 近大远小，画点/标签时用。
+  const project = (x, y, z = 0) => {
+    const cos = Math.cos(state.view.rotY);
+    const sin = Math.sin(state.view.rotY);
+    const rx = x * cos - (z ?? 0) * sin;
+    const rz = x * sin + (z ?? 0) * cos;
+    const persp = 600 / (600 + rz * state.view.scale); // 0.6 ~ 1.4 之间
+    return [
+      rx * state.view.scale * persp + state.view.tx,
+      y * state.view.scale * persp + state.view.ty,
+      persp,
+    ];
+  };
+  const toScreen = (x, y, z) => project(x, y, z);
   const toWorld = (sx, sy) => [(sx - state.view.tx) / state.view.scale, (sy - state.view.ty) / state.view.scale];
 
   function resizeCanvas() {
@@ -194,13 +208,16 @@ export async function initGraph({ canvas, detailEl, toolbarEl, apiBase = '/api',
 
   /* ---------- 命中检测 ---------- */
   function hitNode(sx, sy) {
-    for (let i = state.nodes.length - 1; i >= 0; i--) {
-      const nd = state.nodes[i];
-      const [px, py] = toScreen(nd.x, nd.y);
-      const r = radiusOf(nd) * state.view.scale + 4;
-      if ((sx - px) ** 2 + (sy - py) ** 2 <= r * r) return nd;
+    // 深度优先：先命中「离相机近」的节点（persp 大者优先）
+    let best = null; let bestPersp = -1;
+    for (const nd of state.nodes) {
+      const [px, py, persp] = toScreen(nd.x, nd.y, nd.z ?? 0);
+      const r = Math.max(6, radiusOf(nd) * state.view.scale ** 0.6 * persp + 4);
+      if ((sx - px) ** 2 + (sy - py) ** 2 <= r * r && persp > bestPersp) {
+        best = nd; bestPersp = persp;
+      }
     }
-    return null;
+    return best;
   }
 
   /* ---------- 渲染 ---------- */
@@ -293,8 +310,8 @@ export async function initGraph({ canvas, detailEl, toolbarEl, apiBase = '/api',
       const b = nodeById.get(e.to);
       if (!a || !b) continue;
       const st = EDGE_STYLE[e.type] || EDGE_STYLE['same-entity'];
-      const [x1, y1] = toScreen(a.x, a.y);
-      const [x2, y2] = toScreen(b.x, b.y);
+      const [x1, y1] = toScreen(a.x, a.y, a.z ?? 0);
+      const [x2, y2] = toScreen(b.x, b.y, b.z ?? 0);
       ctx.beginPath();
       ctx.setLineDash(st.dash);
       const w = Number.isFinite(e.weight) ? Math.max(0.75, Math.min(3, e.weight)) : 1;
@@ -307,9 +324,9 @@ export async function initGraph({ canvas, detailEl, toolbarEl, apiBase = '/api',
     }
     // 节点
     for (const nd of state.nodes) {
-      const [px, py] = toScreen(nd.x, nd.y);
-      // 缩小时圆点不能跟着消失：半径按 scale^0.6 缩，留 2.2px 下限
-      const r = Math.max(2.2, radiusOf(nd) * state.view.scale ** 0.6);
+      const [px, py, persp] = toScreen(nd.x, nd.y, nd.z ?? 0);
+      // 缩小时圆点不能跟着消失：半径按 scale^0.6 缩，留 2.2px 下限；再乘近大远小
+      const r = Math.max(2.2, radiusOf(nd) * state.view.scale ** 0.6 * persp);
       const color = kindColors[nd.kind] || KIND_COLORS.state;
       const superseded = nd.status === 'superseded';
       ctx.beginPath();
@@ -417,6 +434,12 @@ export async function initGraph({ canvas, detailEl, toolbarEl, apiBase = '/api',
       drag.node.fy = wy;
       drag.moved += Math.abs(ev.movementX || 0) + Math.abs(ev.movementY || 0);
       state.alpha = Math.max(state.alpha, 0.3); // 拖拽唤醒
+    } else if (drag.kind === 'rotate') {
+      // 空白拖拽 = 绕 Y 轴旋转（3D 环视）；每像素 0.01 弧度
+      state.view.rotY += (ev.clientX - drag.lastX) * 0.01;
+      drag.moved += Math.abs(ev.clientX - drag.lastX);
+      drag.lastX = ev.clientX;
+      state.alpha = Math.max(state.alpha, ALPHA_MIN); // 旋转不需要重新模拟
     } else {
       state.userAdjusted = true;
       state.view.tx += ev.clientX - drag.lastX;
