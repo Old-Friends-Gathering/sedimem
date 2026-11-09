@@ -1,0 +1,513 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>strata · 跨会话、跨客户端的本地记忆层</title>
+<meta name="description" content="strata 是一个把记忆当数据库治理的本地记忆层：append-only 真相层、四条卫生路径、MCP 三端共用。">
+<style>
+  :root{
+    --bg:#080b12; --bg2:#0c111b; --panel:#111827; --panel2:#151d2b;
+    --line:rgba(148,163,184,.14); --line2:rgba(148,163,184,.24);
+    --fg:#e8edf7; --fg2:#a5b0c2; --fg3:#6f7c91;
+    --accent:#5b9cf5; --accent2:#22d3ee; --warn:#f0b45f; --ok:#4ade80; --violet:#a78bfa;
+    --mono:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+    --sans:-apple-system,BlinkMacSystemFont,"SF Pro SC","PingFang SC","Microsoft YaHei",system-ui,sans-serif;
+  }
+  *{box-sizing:border-box}
+  html{scroll-behavior:smooth;scroll-padding-top:78px}
+  body{margin:0;background:var(--bg);color:var(--fg);font-family:var(--sans);
+       font-size:15px;line-height:1.75;-webkit-font-smoothing:antialiased}
+  a{color:var(--accent);text-decoration:none}
+  a:hover{text-decoration:underline}
+  code{font-family:var(--mono);font-size:.88em;background:rgba(148,163,184,.12);
+       padding:.14em .42em;border-radius:5px;color:#cfe0ff}
+  h1,h2,h3{line-height:1.3;margin:0}
+  .wrap{max-width:1120px;margin:0 auto;padding:0 24px}
+
+  /* ---------- 顶栏 ---------- */
+  header{position:sticky;top:0;z-index:50;backdrop-filter:blur(14px);
+         background:rgba(8,11,18,.82);border-bottom:1px solid var(--line)}
+  .nav{display:flex;align-items:center;gap:22px;height:60px}
+  .brand{display:flex;align-items:center;gap:10px;font-weight:700;letter-spacing:.2px}
+  .brand .dot{width:9px;height:9px;border-radius:50%;background:linear-gradient(135deg,var(--accent),var(--accent2));
+              box-shadow:0 0 14px rgba(91,156,245,.9)}
+  .nav a.lnk{color:var(--fg2);font-size:13.5px}
+  .nav a.lnk:hover{color:var(--fg);text-decoration:none}
+  .nav .spacer{flex:1}
+  .btn{display:inline-flex;align-items:center;gap:7px;padding:8px 15px;border-radius:9px;
+       font-size:13.5px;font-weight:600;border:1px solid var(--line2);color:var(--fg);
+       background:var(--panel);transition:.18s}
+  .btn:hover{text-decoration:none;border-color:rgba(91,156,245,.6);background:var(--panel2);transform:translateY(-1px)}
+  .btn.primary{background:linear-gradient(135deg,#2563eb,#0ea5e9);border-color:transparent;
+               box-shadow:0 6px 22px -8px rgba(37,99,235,.85)}
+
+  /* ---------- Hero ---------- */
+  .hero{position:relative;padding:88px 0 64px;overflow:hidden}
+  .hero:before{content:"";position:absolute;inset:-40% 30% 40% -10%;
+               background:radial-gradient(closest-side,rgba(37,99,235,.28),transparent 70%);filter:blur(30px)}
+  .hero:after{content:"";position:absolute;inset:20% -20% -40% 45%;
+              background:radial-gradient(closest-side,rgba(34,211,238,.16),transparent 70%);filter:blur(40px)}
+  .hero .wrap{position:relative}
+  .eyebrow{display:inline-flex;align-items:center;gap:8px;font-size:12.5px;color:var(--accent2);
+           border:1px solid rgba(34,211,238,.28);background:rgba(34,211,238,.07);
+           padding:5px 12px;border-radius:999px;letter-spacing:.4px}
+  h1.title{font-size:clamp(34px,5.4vw,58px);margin:22px 0 0;letter-spacing:-1.2px;font-weight:800}
+  h1.title em{font-style:normal;background:linear-gradient(120deg,#7dd3fc,#a78bfa 60%,#f0b45f);
+              -webkit-background-clip:text;background-clip:text;color:transparent}
+  .lede{margin:20px 0 0;font-size:17.5px;color:var(--fg2);max-width:760px;text-wrap:pretty}
+  .lede b{color:var(--fg)}
+  .cta{display:flex;gap:12px;flex-wrap:wrap;margin-top:32px}
+  .stats{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin-top:52px}
+  .stat{background:linear-gradient(180deg,var(--panel),rgba(17,24,39,.55));
+        border:1px solid var(--line);border-radius:14px;padding:16px 18px}
+  .stat .n{font-size:24px;font-weight:800;letter-spacing:-.5px}
+  .stat .l{font-size:12.5px;color:var(--fg3);margin-top:2px}
+
+  /* ---------- 通用 section ---------- */
+  section{padding:76px 0;border-top:1px solid var(--line)}
+  .sec-head{max-width:760px;margin-bottom:34px}
+  .kicker{font-size:12.5px;letter-spacing:2px;text-transform:uppercase;color:var(--accent);font-weight:700}
+  h2{font-size:clamp(24px,3.2vw,34px);margin:10px 0 0;letter-spacing:-.6px;text-wrap:pretty}
+  .sec-head p{color:var(--fg2);margin:12px 0 0}
+  .grid{display:grid;gap:16px}
+  .g2{grid-template-columns:repeat(2,1fr)}
+  .g3{grid-template-columns:repeat(3,1fr)}
+  .g4{grid-template-columns:repeat(4,1fr)}
+  .card{background:linear-gradient(180deg,var(--panel),rgba(17,24,39,.5));
+        border:1px solid var(--line);border-radius:14px;padding:20px 22px;transition:.2s}
+  .card:hover{border-color:rgba(91,156,245,.4);transform:translateY(-2px)}
+  .card h3{font-size:15.5px;margin:0 0 8px;display:flex;align-items:center;gap:9px}
+  .card p{margin:0;color:var(--fg2);font-size:13.8px}
+  .card .ico{width:26px;height:26px;border-radius:8px;display:grid;place-items:center;
+             font-size:13px;background:rgba(91,156,245,.14);color:#9dc0ff;border:1px solid rgba(91,156,245,.25)}
+  .bad{color:#ff9a9a}
+  .tag{display:inline-block;font-size:11.5px;padding:2px 8px;border-radius:999px;
+       border:1px solid var(--line2);color:var(--fg2);margin-left:6px}
+
+  /* 图 */
+  .figure{background:#fbfcfe;border:1px solid var(--line);border-radius:16px;padding:12px;
+          box-shadow:0 24px 60px -30px rgba(0,0,0,.9)}
+  .figure img{display:block;width:100%;border-radius:10px}
+  .figcap{color:var(--fg3);font-size:12.8px;text-align:center;margin-top:12px}
+
+  /* 表格 */
+  table{width:100%;border-collapse:collapse;font-size:13.8px}
+  th,td{text-align:left;padding:11px 14px;border-bottom:1px solid var(--line);vertical-align:top}
+  th{color:var(--fg3);font-weight:600;font-size:12.5px;letter-spacing:.3px}
+  tbody tr:hover{background:rgba(148,163,184,.04)}
+  td.c{color:var(--fg2)}
+
+  /* 代码块 */
+  .code{position:relative;background:#0a0f18;border:1px solid var(--line);border-radius:12px;
+        margin:14px 0;overflow:hidden}
+  .code .bar{display:flex;align-items:center;gap:8px;padding:9px 14px;border-bottom:1px solid var(--line);
+             background:rgba(148,163,184,.05);font-size:12px;color:var(--fg3);font-family:var(--mono)}
+  .code .bar i{width:9px;height:9px;border-radius:50%;background:#2c3a52;display:inline-block}
+  .code pre{margin:0;padding:16px 18px;overflow-x:auto;font-family:var(--mono);font-size:13px;line-height:1.7;color:#cfe0ff}
+  .code .cp{margin-left:auto;background:transparent;border:1px solid var(--line2);color:var(--fg3);
+            font-size:11.5px;padding:3px 9px;border-radius:6px;cursor:pointer;font-family:var(--sans)}
+  .code .cp:hover{color:var(--fg);border-color:var(--accent)}
+  .cmt{color:#5b6a82}
+  .hl{color:#8ee7c0}
+
+  /* 步骤 */
+  .steps{counter-reset:step;display:grid;gap:14px}
+  .step{position:relative;padding-left:52px}
+  .step:before{counter-increment:step;content:counter(step);position:absolute;left:0;top:2px;
+               width:32px;height:32px;border-radius:10px;display:grid;place-items:center;
+               background:rgba(91,156,245,.14);border:1px solid rgba(91,156,245,.3);color:#9dc0ff;
+               font-weight:700;font-size:13px}
+  .step h3{font-size:15.5px;margin:4px 0 6px}
+  .step p{margin:0;color:var(--fg2);font-size:13.8px}
+
+  /* 截图 */
+  .shots{display:grid;gap:22px}
+  .shot{border:1px solid var(--line);border-radius:16px;overflow:hidden;background:var(--panel)}
+  .shot img{display:block;width:100%}
+  .shot .cap{padding:12px 16px;font-size:13px;color:var(--fg2);border-top:1px solid var(--line)}
+  .shot .cap b{color:var(--fg)}
+
+  /* 版本 */
+  .timeline{position:relative;padding-left:26px}
+  .timeline:before{content:"";position:absolute;left:7px;top:6px;bottom:6px;width:2px;
+                   background:linear-gradient(180deg,var(--accent),rgba(148,163,184,.15))}
+  .tl{position:relative;padding:0 0 20px}
+  .tl:before{content:"";position:absolute;left:-24px;top:6px;width:12px;height:12px;border-radius:50%;
+             background:var(--bg);border:2px solid var(--accent)}
+  .tl.done:before{background:var(--accent);box-shadow:0 0 12px rgba(91,156,245,.8)}
+  .tl .v{font-family:var(--mono);font-size:13px;color:var(--accent2)}
+  .tl p{margin:2px 0 0;color:var(--fg2);font-size:13.8px}
+
+  footer{border-top:1px solid var(--line);padding:34px 0 48px;color:var(--fg3);font-size:13px}
+  .foot{display:flex;justify-content:space-between;gap:16px;flex-wrap:wrap}
+  .reveal{transition:opacity .6s ease,transform .6s ease}
+  .js .reveal{opacity:0;transform:translateY(14px)}
+  .js .reveal.in{opacity:1;transform:none}
+  @media (prefers-reduced-motion:reduce){
+    .js .reveal{opacity:1;transform:none;transition:none}
+  }
+  @media (max-width:900px){
+    .g4,.g3{grid-template-columns:repeat(2,1fr)}
+    .stats{grid-template-columns:repeat(2,1fr)}
+    .nav a.lnk{display:none}
+  }
+  @media (max-width:600px){
+    .g2,.g3,.g4{grid-template-columns:1fr}
+    .hero{padding-top:56px}
+  }
+</style>
+<script>document.documentElement.classList.add('js');</script>
+</head>
+<body>
+
+<header>
+  <div class="wrap nav">
+    <div class="brand"><span class="dot"></span>strata</div>
+    <a class="lnk" href="#problem">为什么</a>
+    <a class="lnk" href="#arch">架构</a>
+    <a class="lnk" href="#hygiene">卫生闭环</a>
+    <a class="lnk" href="#ui">界面</a>
+    <a class="lnk" href="#deploy">部署</a>
+    <a class="lnk" href="#gates">门禁</a>
+    <span class="spacer"></span>
+    <a class="btn" href="https://github.com/Old-Friends-Gathering/strata">GitHub ↗</a>
+  </div>
+</header>
+
+<!-- ================= HERO ================= -->
+<div class="hero">
+  <div class="wrap">
+    <span class="eyebrow">LOCAL-FIRST · MCP · ZERO DEPENDENCY</span>
+    <h1 class="title">记忆不是攒得越多越好，<br>它该像<em>地层</em>一样沉积。</h1>
+    <p class="lede">strata 是一个<b>跨会话、跨客户端的本地记忆层</b>：DSH / Codex CLI / Claude Code 共读一份<b>只追加的真相层</b>，把记忆当数据库治理 —— 写入时去重、冲突时失效而不删除、过期后仍可回看、脏数据不进上下文。</p>
+    <div class="cta">
+      <a class="btn primary" href="#deploy">三分钟接上你的客户端</a>
+      <a class="btn" href="#arch">先看架构</a>
+    </div>
+    <div class="stats">
+      <div class="stat"><div class="n">288</div><div class="l">测试用例（单元 + 注入式回归）</div></div>
+      <div class="stat"><div class="n">I1–I24</div><div class="l">注入式评测场景</div></div>
+      <div class="stat"><div class="n">3</div><div class="l">客户端共读一份记忆</div></div>
+      <div class="stat"><div class="n">0</div><div class="l">运行时依赖（只要 Node ≥ 22）</div></div>
+    </div>
+  </div>
+</div>
+
+<!-- ================= 问题 ================= -->
+<section id="problem">
+  <div class="wrap">
+    <div class="sec-head reveal">
+      <div class="kicker">Why</div>
+      <h2>几乎所有 agent 记忆都烂在同一个地方：没人管</h2>
+      <p>不是"检索得不够准"，而是<strong>根本没人治理</strong>。半年后你的记忆库通常长这样 ——</p>
+    </div>
+    <div class="grid g2">
+      <div class="card reveal"><h3><span class="ico">✕</span>同一条事实存了 7 份</h3>
+        <p>措辞略有不同，全都被检索出来一起塞进上下文 → 上下文被稀释，模型反而更容易抓错重点。</p></div>
+      <div class="card reveal"><h3><span class="ico">✕</span>旧版本与新版本同时有效</h3>
+        <p>"明明记得是这个，它偏说是那个" —— 因为没人知道哪条还有效。</p></div>
+      <div class="card reveal"><h3><span class="ico">✕</span>只增不删，直到吃满配额</h3>
+        <p>检索变慢、token 成本线性上涨，最后只能整体清空 —— 顺便把有用的也扔了。</p></div>
+      <div class="card reveal"><h3><span class="ico">✕</span>记忆里被塞进一句指令</h3>
+        <p>"忽略之前所有指令" 一旦入库，之后每个会话都被悄悄影响，而且看不出是哪来的。</p></div>
+    </div>
+    <div class="grid g3" style="margin-top:16px">
+      <div class="card reveal"><h3><span class="ico">✓</span>写入门控</h3>
+        <p>hash 短路 → 同 slot 判等 → 近重复判定；重复的直接 <code>noop</code>，不进真相层。</p></div>
+      <div class="card reveal"><h3><span class="ico">✓</span>失效而非删除</h3>
+        <p>过时的事实打上 <code>validTo</code>，<code>asOf</code> 能把任意时点的库状态还原出来。</p></div>
+      <div class="card reveal"><h3><span class="ico">✓</span>Agent 当裁判</h3>
+        <p>语义去重交给<b>正在跑的那个 Agent</b>（复用当前会话，零 API 成本、可离线）。</p></div>
+    </div>
+  </div>
+</section>
+
+<!-- ================= 架构 ================= -->
+<section id="arch">
+  <div class="wrap">
+    <div class="sec-head reveal">
+      <div class="kicker">Architecture</div>
+      <h2>四层结构，依赖单向</h2>
+      <p>客户端 → 接口 → 核心服务 → 治理 → 派生 / 真相。<b>真相层是唯一不可重建的东西</b>，
+         其余全部可以从它重算出来。</p>
+    </div>
+    <div class="figure reveal">
+      <img src="assets/architecture.svg" alt="strata 架构分层图">
+    </div>
+    <div class="figcap reveal">客户端三端共读 → MCP/CLI/Web 三入口 → 一个 MemoryService → 治理层 → 派生层 + 真相层</div>
+
+    <div class="grid g2" style="margin-top:28px">
+      <div class="card reveal"><h3><span class="ico">1</span>客户端层：没有"同步"</h3>
+        <p>三端连的是同一个 stdio server、同一个 <code>MEMO_HOME</code>，所以不存在第二份副本，
+           也就没有同步问题 —— <b>同步的复杂度被结构消掉了</b>。</p></div>
+      <div class="card reveal"><h3><span class="ico">2</span>接口层：MCP 是唯一的缝</h3>
+        <p>10 个 <code>memory_*</code> 工具，读写比刻意偏向读（写只有 write/supersede/forget/curate）。
+           Web 只读，没有写端点，所以观察台不可能改坏数据。</p></div>
+      <div class="card reveal"><h3><span class="ico">3</span>核心服务：语义只在一处</h3>
+        <p>拆成 lifecycle / write-path / search-path / maintenance 四模块，
+           门禁用 <code>service-facade.test.js</code> 保证对外方法集合不漂移。</p></div>
+      <div class="card reveal"><h3><span class="ico">4</span>真相层：只追加</h3>
+        <p><code>items/&lt;scope&gt;.jsonl</code> 永不 UPDATE、永不 DELETE；
+           "改过去"= 追加新版本 + 旧版本打 <code>validTo</code>。</p></div>
+    </div>
+  </div>
+</section>
+
+<!-- ================= 写入路径 ================= -->
+<section id="write">
+  <div class="wrap">
+    <div class="sec-head reveal">
+      <div class="kicker">Write path</div>
+      <h2>写入四道门：越往后越贵</h2>
+      <p>在线只做零成本判断，把"要花钱才能判断"的事情推到近线和离线。</p>
+    </div>
+    <div class="figure reveal"><img src="assets/write-path.svg" alt="写入路径四道门"></div>
+    <div class="figcap reveal">① 身份与形状 ② hash 短路（O(1)） ③ 同 slot 判等 ④ 近重复 + 冲突</div>
+    <div class="code reveal">
+      <div class="bar"><i></i><i></i><i></i><span>同一事实第二次写入</span>
+        <button class="cp" data-copy="memo write --kind fact --title 'Node 版本要求' --text 'CI 要求 Node 22+'">复制</button></div>
+      <pre><span class="cmt"># 第一次</span>
+$ memo write --kind fact --title <span class="hl">'Node 版本要求'</span> --text 'CI 要求 Node 22+'
+created: 01M6…  <span class="cmt"># 进入真相层</span>
+
+<span class="cmt"># 第二次，同一个值</span>
+$ memo write --kind fact --title <span class="hl">'Node 版本要求'</span> --text 'CI 要求 Node 22+'
+noop_same_value: 01M6…  <span class="cmt"># 不落盘，线上零浪费</span>
+
+<span class="cmt"># 换个说法（真人改写）</span>
+$ memo write --text '部署流水线需要 Node 22 或更新的版本'
+created: 01M7…  <span class="cmt"># 词法抓不住 → 交给 Agent 裁决（见下）</span></pre>
+    </div>
+  </div>
+</section>
+
+<!-- ================= 卫生闭环 ================= -->
+<section id="hygiene">
+  <div class="wrap">
+    <div class="sec-head reveal">
+      <div class="kicker">Hygiene loop</div>
+      <h2>四条卫生路径，LLM 只裁决、不扫描</h2>
+      <p>成本随<b>记忆规模</b>线性增，不随<b>对话轮次</b>增 —— 这是能长期跑下去的前提。</p>
+    </div>
+    <div class="figure reveal"><img src="assets/hygiene-loop.svg" alt="四条卫生路径与 Agent 裁决闭环"></div>
+    <div class="grid g4" style="margin-top:24px">
+      <div class="card reveal"><h3>① 在线</h3><p>hash 短路 / 同 slot 判等 / 近重复判定。成本 O(1) 哈希 + 少量相似度。<b>宁可漏，不可误杀</b>。</p></div>
+      <div class="card reveal"><h3>② 近线</h3><p><code>dedupe_scan</code> 只报候选簇，Agent 判 merge/a_wins/b_wins/keep_both。<b>0 API</b>。</p></div>
+      <div class="card reveal"><h3>③ 离线</h3><p>nightly 重算 brief/metrics、配额淘汰、<code>compact</code> 清墓碑。可重放、可审计。</p></div>
+      <div class="card reveal"><h3>④ 读时</h3><p><code>validTo</code> 过滤、<code>asOf</code> 还原、suspicious 遮蔽。查询期零额外调用。</p></div>
+    </div>
+    <div class="card reveal" style="margin-top:16px;border-color:rgba(167,139,250,.3)">
+      <h3><span class="ico" style="background:rgba(167,139,250,.14);color:#c4b5fd;border-color:rgba(167,139,250,.3)">∞</span>闭环：它挂在两个你本来就会做的动作上</h3>
+      <p style="margin-top:8px">brief 末尾常驻一行「待裁决去重候选 N 条」→ Agent 调 <code>memory_dedupe_scan</code> 看候选 →
+         判完 <code>memory_curate</code> 落盘（败者 <code>superseded</code>，真相层全留）→ 再扫清零。<br>
+         不需要你额外记得清理 —— <b>会话开始读 brief</b>、<b>会话收尾写记忆</b>，这两个动作已经存在。</p>
+    </div>
+  </div>
+</section>
+
+<!-- ================= 界面 ================= -->
+<section id="ui">
+  <div class="wrap">
+    <div class="sec-head reveal">
+      <div class="kicker">Observer</div>
+      <h2>只看不改：三页把"库的现状"摊开</h2>
+      <p>严格绑定 <code>127.0.0.1</code>、没有任何写端点。想看它到底积了什么、有没有变脏，看这里。</p>
+    </div>
+    <div class="shots">
+      <div class="shot reveal"><img src="assets/today.png" alt="今日变化">
+        <div class="cap"><b>今日变化</b> —— 这一天库里发生了什么：新增 / 被取代 / 删除 / 合并，每条带「为什么」。</div></div>
+      <div class="shot reveal"><img src="assets/graph.png" alt="记忆图谱">
+        <div class="cap"><b>记忆图谱</b> —— 3D 球体，拖拽手动旋转（水平环视 / 垂直俯仰）；点节点看演化时间线。</div></div>
+      <div class="shot reveal"><img src="assets/hygiene.png" alt="卫生洞察">
+        <div class="cap"><b>卫生洞察</b> —— 待裁决候选、30 天清理史、冗余率/冲突率/检索健康趋势、<code>doctor</code> 体检。</div></div>
+    </div>
+  </div>
+</section>
+
+<!-- ================= 部署 ================= -->
+<section id="deploy">
+  <div class="wrap">
+    <div class="sec-head reveal">
+      <div class="kicker">Deploy</div>
+      <h2>三分钟接上你的客户端</h2>
+      <p>零依赖、零构建。只需要一个 Node ≥ 22 和一个数据目录。</p>
+    </div>
+    <div class="steps">
+      <div class="step reveal"><h3>拿到代码</h3>
+        <div class="code"><div class="bar"><i></i><i></i><i></i><span>shell</span>
+          <button class="cp" data-copy="git clone https://github.com/Old-Friends-Gathering/strata && cd strata">复制</button></div>
+          <pre>git clone https://github.com/Old-Friends-Gathering/strata && cd strata
+export MEMO_HOME="$HOME/.memo"        <span class="cmt"># 真相层放哪</span>
+export V="versions/$(cat versions/CURRENT)"</pre></div>
+      </div>
+      <div class="step reveal"><h3>先确认它自己能跑</h3>
+        <div class="code"><div class="bar"><i></i><i></i><i></i><span>shell</span>
+          <button class="cp" data-copy="node --test &quot;$V/tests/**/*.test.js&quot; &amp;&amp; node $V/eval/run.js">复制</button></div>
+          <pre>node --test "$V/tests/**/*.test.js"   <span class="cmt"># 288 个用例</span>
+node $V/eval/run.js                  <span class="cmt"># I1–I24 注入式评测</span></pre></div>
+      </div>
+      <div class="step reveal"><h3>接客户端（三选一，或都接）</h3>
+        <div class="code"><div class="bar"><i></i><i></i><i></i><span>Claude Code</span>
+          <button class="cp" data-copy="claude mcp add --scope user memo -e MEMO_HOME=$HOME/.memo -- $(command -v node) $PWD/$V/src/mcp/server.js">复制</button></div>
+          <pre>claude mcp add --scope user memo \
+  -e MEMO_HOME=$HOME/.memo -- \
+  $(command -v node) $PWD/$V/src/mcp/server.js</pre></div>
+        <div class="code"><div class="bar"><i></i><i></i><i></i><span>Codex CLI · ~/.codex/config.toml</span>
+          <button class="cp" data-copy="[mcp_servers.memo]">复制</button></div>
+          <pre>[mcp_servers.memo]
+command = "/usr/local/bin/node"      <span class="cmt"># which node</span>
+args = ["/path/to/strata/versions/v0.3/src/mcp/server.js"]
+enabled = true
+[mcp_servers.memo.env]
+MEMO_HOME = "/Users/you/.memo"</pre></div>
+      </div>
+      <div class="step reveal"><h3>验证三端真的是同一份记忆</h3>
+        <div class="code"><div class="bar"><i></i><i></i><i></i><span>shell</span>
+          <button class="cp" data-copy="bash $V/configs/verify-three-clients.sh">复制</button></div>
+          <pre>bash $V/configs/verify-three-clients.sh
+<span class="cmt"># dsh 写一个盐值 → 另一个进程召回 → 用召回值作答</span>
+PASS</pre></div>
+      </div>
+      <div class="step reveal"><h3>常驻（可选，macOS launchd）</h3>
+        <p>观察台与 nightly 都由 <code>scripts/strata-run.sh</code> 启动，它读 <code>versions/CURRENT</code> ——
+          <b>换大版本只改指针，plist 不用碰</b>。</p>
+        <div class="code"><div class="bar"><i></i><i></i><i></i><span>shell</span>
+          <button class="cp" data-copy="launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/live.strata.observer.plist">复制</button></div>
+          <pre>launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/live.strata.observer.plist
+launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/live.strata.nightly.plist
+launchctl kickstart -k gui/$(id -u)/live.strata.observer   <span class="cmt"># 热加载新代码</span>
+open http://127.0.0.1:7788</pre></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ================= 命令 ================= -->
+<section id="cli">
+  <div class="wrap">
+    <div class="sec-head reveal">
+      <div class="kicker">Interface</div>
+      <h2>命令与工具</h2>
+      <p>CLI 给人用，MCP 给 Agent 用 —— 同一套语义、同一份数据。</p>
+    </div>
+    <div class="grid g2">
+      <div class="reveal">
+        <table>
+          <thead><tr><th>CLI</th><th>作用</th></tr></thead>
+          <tbody>
+            <tr><td><code>memo write</code></td><td class="c">写一条（建议带 <code>--title</code>）</td></tr>
+            <tr><td><code>memo search</code></td><td class="c">检索，<code>--as-of</code> 回看历史时点</td></tr>
+            <tr><td><code>memo brief</code></td><td class="c">给 Agent 的摘要，<code>--tier0</code> 只出目录层</td></tr>
+            <tr><td><code>memo dedupe scan</code></td><td class="c">近重复候选簇（<code>--json</code> 带 pairs/strength）</td></tr>
+            <tr><td><code>memo curate …</code></td><td class="c">裁决任务包：prompt / apply / status / auto</td></tr>
+            <tr><td><code>memo compact</code></td><td class="c">唯一物理删入口（墓碑 + 宽限期）</td></tr>
+            <tr><td><code>memo view …</code></td><td class="c">L2 场景块 / L3 画像 / 溯源</td></tr>
+            <tr><td><code>memo serve</code></td><td class="c">只读观察台</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="reveal">
+        <div class="card" style="height:100%">
+          <h3><span class="ico">MCP</span>10 个工具，三端共用</h3>
+          <p style="line-height:2.1">
+            <code>memory_write</code> <code>memory_search</code> <code>memory_brief</code>
+            <code>memory_get</code> <code>memory_supersede</code> <code>memory_forget</code>
+            <code>memory_curate</code> <code>memory_dedupe_scan</code> <code>memory_stats</code>
+            <code>memory_scope</code>
+          </p>
+          <p style="margin-top:12px">设计取向：<b>读比写多</b>。写只有四个；
+             <code>forget</code> 默认只写墓碑，物理删除另有唯一入口，保证 <code>asOf</code> 永远可回溯。</p>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ================= 门禁 ================= -->
+<section id="gates">
+  <div class="wrap">
+    <div class="sec-head reveal">
+      <div class="kicker">Gates</div>
+      <h2>自己也会腐化，所以上了九道闸</h2>
+      <p><code>main</code> 受保护且<b>对管理员同样生效</b>：直推与 force push 会被拒绝，
+         任何改动都必须 <code>issue → 分支 → PR → 九项全绿 → squash</code>。</p>
+    </div>
+    <div class="grid g3">
+      <div class="card reveal"><h3>test (22) / (24)</h3><p>Node 22 与 24 上跑全部测试，0 失败。</p></div>
+      <div class="card reveal"><h3>eval (I1–I23)</h3><p>注入式回归：重复 / 冲突 / 过时 / 删除 / 投毒 / 并发 / 分库 / 拒绝服务…</p></div>
+      <div class="card reveal"><h3>quality</h3><p>零依赖、源码规模、测试清单、评测对齐、<b>契约覆盖 100%</b>、文档链接、版本自包含。</p></div>
+      <div class="card reveal"><h3>security</h3><p>个人路径、凭据、内部域名、配置可移植、许可证、大文件、历史面。</p></div>
+      <div class="card reveal"><h3>CodeQL</h3><p>静态分析，含 <code>security-and-quality</code> 查询集；发现过真实堆栈泄露。</p></div>
+      <div class="card reveal"><h3>windows-smoke</h3><p>真 <code>windows-latest</code> 上验跨平台文件名与 CLI 路径。</p></div>
+      <div class="card reveal"><h3>issue-link</h3><p><b>MR 必须关联一条 open 的 issue</b>，否则合不进去。</p></div>
+      <div class="card reveal"><h3>ci-gate</h3><p>聚合门：任一子项红即整体红，避免"看起来绿了"。</p></div>
+      <div class="card reveal"><h3>本地同源</h3><p><code>node tools/quality-check.mjs</code> 等三个脚本与 CI 完全同一份。</p></div>
+    </div>
+  </div>
+</section>
+
+<!-- ================= 版本 ================= -->
+<section id="versions">
+  <div class="wrap">
+    <div class="sec-head reveal">
+      <div class="kicker">Versions</div>
+      <h2>每个大版本换一个目录</h2>
+      <p><b>X.Y 换目录</b>（v0.2 → v0.3 新建 <code>versions/v0.3/</code>），
+        <b>X.Y.Z 补丁同目录递增</b>；老目录冻结并留 <code>FROZEN.md</code>；指针在 <code>versions/CURRENT</code>。</p>
+    </div>
+    <div class="timeline">
+      <div class="tl done reveal"><div class="v">v0.1.x · 冻结 0.1.2</div><p>核心层：append-only 真相层 + 派生索引 + brief + 四条卫生路径 + MCP/CLI</p></div>
+      <div class="tl done reveal"><div class="v">v0.2.x · 冻结 0.2.1</div><p>只读观察台、SQLite FTS5、curate 任务包；0.2.1 拆 service、kind 数据化、JudgePort、compact、检索指标</p></div>
+      <div class="tl done reveal"><div class="v">v0.3.0</div><p>分层视图：L2 场景块（可字节重建）+ tier0 注入分级 + L3 画像（固定预算 + 强制溯源）</p></div>
+      <div class="tl done reveal"><div class="v">v0.3.1 – 0.3.3</div><p><code>title</code> 一等字段与批量回填 · 密集图谱可读性 · 跨主题连线 + 3D 球体手动旋转 + 布局降噪</p></div>
+      <div class="tl reveal"><div class="v">next</div><p>EmbeddingIndex / hybrid 检索（等检索健康指标给出实测痛点）、跨机器同步</p></div>
+    </div>
+  </div>
+</section>
+
+<footer>
+  <div class="wrap foot">
+    <div>© 2026 Old Friends Gathering · MIT</div>
+    <div>
+      <a href="https://github.com/Old-Friends-Gathering/strata">GitHub</a> ·
+      <a href="https://github.com/Old-Friends-Gathering/strata/blob/main/docs/02-data-model-and-contract.md">数据契约</a> ·
+      <a href="https://github.com/Old-Friends-Gathering/strata/blob/main/SECURITY.md">安全</a>
+    </div>
+  </div>
+</footer>
+
+<script>
+  // 复制按钮
+  document.querySelectorAll('.cp').forEach(function (b) {
+    b.addEventListener('click', function () {
+      var text = b.dataset.copy || '';
+      navigator.clipboard.writeText(text).then(function () {
+        var old = b.textContent; b.textContent = '已复制'; 
+        setTimeout(function () { b.textContent = old; }, 1200);
+      });
+    });
+  });
+  // 滚动淡入
+  var io = new IntersectionObserver(function (entries) {
+    entries.forEach(function (e) { if (e.isIntersecting) e.target.classList.add('in'); });
+  }, { threshold: 0.08 });
+  document.querySelectorAll('.reveal').forEach(function (el) { io.observe(el); });
+  // 兜底：无论如何 1.2s 后全部可见（IntersectionObserver 不触发不该让内容消失）
+  setTimeout(function () {
+    document.querySelectorAll('.reveal').forEach(function (el) { el.classList.add('in'); });
+  }, 1200);
+  // 导航高亮
+  var secs = [].slice.call(document.querySelectorAll('section[id]'));
+  var links = [].slice.call(document.querySelectorAll('.nav a.lnk'));
+  window.addEventListener('scroll', function () {
+    var y = window.scrollY + 120, cur = '';
+    secs.forEach(function (s) { if (s.offsetTop <= y) cur = s.id; });
+    links.forEach(function (a) {
+      var on = a.getAttribute('href') === '#' + cur;
+      a.style.color = on ? 'var(--fg)' : '';
+    });
+  }, { passive: true });
+</script>
+</body>
+</html>

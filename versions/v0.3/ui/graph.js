@@ -14,6 +14,7 @@
  * - sampled.shown < sampled.total 时画布右上角常驻「已采样 shown / total 条」。
  */
 
+import { renderToolbar } from './graph-toolbar.js';
 import {
   KIND_COLORS, kindColorsFromPolicy, DEFAULT_EDGE_TYPES, OPTIONAL_EDGE_TYPES, EDGE_PREF_KEY, layoutTick,
   MIN_SCALE, MAX_SCALE, ALPHA_MIN,
@@ -145,55 +146,15 @@ export async function initGraph({ canvas, detailEl, toolbarEl, apiBase = '/api',
   /* ---------- 工具栏 ---------- */
   const checks = {};
   function buildToolbar() {
-    // 旋转模式：勾上后整块画布都是旋转手势（节点密集时也拖得动）
-    const rotWrap = document.createElement('label');
-    rotWrap.style.marginRight = '12px';
-    const rotInput = document.createElement('input');
-    rotInput.type = 'checkbox';
-    rotInput.checked = false;
-    rotInput.addEventListener('change', () => {
-      state.rotateMode = rotInput.checked;
+    renderToolbar({
+      toolbarEl,
+      state,
+      pref,
+      optionalEdgeTypes: OPTIONAL_EDGE_TYPES,
+      checks,
+      saveEdgePref,
+      render,
     });
-    const rotSpan = document.createElement('span');
-    rotSpan.textContent = ' 旋转视角';
-    rotWrap.append(rotInput, rotSpan);
-    toolbarEl.append(rotWrap);
-    toolbarEl.replaceChildren();
-    const all = mkCheck('all', '全开', (v) => {
-      pref.all = v;
-      pref['duplicate-of'] = v;
-      pref['disputed-with'] = v;
-      checks['duplicate-of'].checked = v;
-      checks['disputed-with'].checked = v;
-      saveEdgePref();
-      render();
-    });
-    toolbarEl.append(all.wrap);
-    for (const t of OPTIONAL_EDGE_TYPES) {
-      const c = mkCheck(t, t, (v) => {
-        pref[t] = v;
-        if (!v) pref.all = false;
-        checks.all.checked = pref.all || (pref['duplicate-of'] && pref['disputed-with']);
-        saveEdgePref();
-        render();
-      });
-      toolbarEl.append(c.wrap);
-    }
-    checks.all.checked = pref.all || (pref['duplicate-of'] && pref['disputed-with']);
-    checks['duplicate-of'].checked = !!pref['duplicate-of'];
-    checks['disputed-with'].checked = !!pref['disputed-with'];
-  }
-  function mkCheck(key, label, onChange) {
-    const labelEl = document.createElement('label');
-    labelEl.style.marginRight = '12px';
-    const input = document.createElement('input');
-    input.type = 'checkbox';
-    input.addEventListener('change', () => onChange(input.checked));
-    const span = document.createElement('span');
-    span.textContent = ` ${label}`;
-    labelEl.append(input, span);
-    checks[key] = input;
-    return { wrap: labelEl, input };
   }
 
   /* ---------- 详情 ---------- */
