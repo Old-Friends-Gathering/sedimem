@@ -1,0 +1,71 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1120 420" role="img" aria-label="写入路径四道门">
+  <defs>
+    <style>
+      .card{fill:#fff;stroke:#dfe3ea;stroke-width:1.2;rx:10}
+      .t{font:600 12.5px ui-sans-serif,-apple-system,"PingFang SC",sans-serif;fill:#1f2a37}
+      .s{font:400 10.5px ui-sans-serif,-apple-system,"PingFang SC",sans-serif;fill:#6b7684}
+      .ok{fill:#eefaf2;stroke:#9ed8b4}
+      .noop{fill:#f5f6f8;stroke:#cdd4de}
+      .warn{fill:#fff7ec;stroke:#f0cf9a}
+      .arrow{stroke:#9aa6b6;stroke-width:1.4;fill:none;marker-end:url(#b)}
+      .tag{font:600 10px ui-sans-serif,-apple-system,"PingFang SC",sans-serif}
+    </style>
+    <marker id="b" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto"><path d="M0 0 L10 5 L0 10 z" fill="#9aa6b6"/></marker>
+  </defs>
+  <rect width="1120" height="420" fill="#fbfcfe" rx="16"/>
+  <text class="t" x="48" y="44">写入路径：四道门，越往后越贵（在线只做零成本判断）</text>
+  <text class="s" x="48" y="64">目标不是"存下来"，而是"存得干净"——每一条进入真相层之前都要回答四个问题</text>
+
+  <!-- 输入 -->
+  <rect class="card" x="40" y="96" width="150" height="70" rx="10"/>
+  <text class="t" x="58" y="124">memory_write</text>
+  <text class="s" x="58" y="142">{text, kind, title,</text>
+  <text class="s" x="58" y="156"> subject, predicate}</text>
+
+  <!-- 门 1 -->
+  <rect class="card" x="230" y="96" width="190" height="70" rx="10"/>
+  <text class="t" x="248" y="120">① 身份 + 形状</text>
+  <text class="s" x="248" y="138">agent 合法 / 必填齐全</text>
+  <text class="s" x="248" y="152">超长正文截断并打标</text>
+  <!-- 门 2 -->
+  <rect class="card" x="452" y="96" width="190" height="70" rx="10"/>
+  <text class="t" x="470" y="120">② hash 短路</text>
+  <text class="s" x="470" y="138">contentHash 相同 →</text>
+  <text class="s" x="470" y="152">noop_same_value（O(1)）</text>
+  <!-- 门 3 -->
+  <rect class="card" x="674" y="96" width="190" height="70" rx="10"/>
+  <text class="t" x="692" y="120">③ 同 slot 判等</text>
+  <text class="s" x="692" y="138">subject+predicate 相同且</text>
+  <text class="s" x="692" y="152">值相同 → noop</text>
+  <!-- 门 4 -->
+  <rect class="card" x="896" y="96" width="184" height="70" rx="10"/>
+  <text class="t" x="914" y="120">④ 近重复 + 冲突</text>
+  <text class="s" x="914" y="138">containment/dice → 变体</text>
+  <text class="s" x="914" y="152">不同值 → 旧条失效</text>
+
+  <path class="arrow" d="M190 131 L228 131"/>
+  <path class="arrow" d="M420 131 L450 131"/>
+  <path class="arrow" d="M642 131 L672 131"/>
+  <path class="arrow" d="M864 131 L894 131"/>
+
+  <!-- 结果分支 -->
+  <rect class="noop" x="230" y="210" width="190" height="52" rx="9"/>
+  <text class="t" x="248" y="232">拒收</text><text class="s" x="248" y="250">E_INVALID_RECORD，不落盘</text>
+  <rect class="noop" x="452" y="210" width="190" height="52" rx="9"/>
+  <text class="t" x="470" y="232">noop_dedup</text><text class="s" x="470" y="250">同一个值不重复记</text>
+  <rect class="warn" x="674" y="210" width="190" height="52" rx="9"/>
+  <text class="t" x="692" y="232">noop + variant</text><text class="s" x="692" y="250">近重复只留一条，旧条打标</text>
+  <rect class="ok" x="896" y="210" width="184" height="52" rx="9"/>
+  <text class="t" x="914" y="232">created / supersede</text><text class="s" x="914" y="250">追加新行，旧行打 validTo</text>
+
+  <path class="arrow" d="M325 166 L325 208"/>
+  <path class="arrow" d="M547 166 L547 208"/>
+  <path class="arrow" d="M769 166 L769 208"/>
+  <path class="arrow" d="M988 166 L988 208"/>
+
+  <!-- 最后一层：落盘 -->
+  <rect class="card" x="40" y="300" width="1040" height="86" rx="12"/>
+  <text class="t" x="60" y="326">唯一的写操作：`items/&lt;scope&gt;.jsonl` 追加一行（在 scope 锁内完成「重读 → 判定 → 追加」→ 跨进程也不会写重）</text>
+  <text class="s" x="60" y="348">真相层永不 UPDATE、永不 DELETE；"改过去" = 追加新版本 + 旧版本 `validTo=now`；`asOf` 能把任意时点的库状态还原出来</text>
+  <text class="s" x="60" y="368">物理删除只有一个入口：`memo compact`（要求 tombstoned + purge 标签 + 过宽限期，默认 7 天）</text>
+</svg>

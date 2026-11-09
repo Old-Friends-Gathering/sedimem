@@ -1,0 +1,87 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1160 800" role="img" aria-label="strata 架构分层">
+  <defs>
+    <style>
+      .lt{font:600 13.5px ui-sans-serif,-apple-system,"PingFang SC",sans-serif;fill:#16202e}
+      .sub{font:400 10.5px ui-sans-serif,-apple-system,"PingFang SC",sans-serif;fill:#6b7684}
+      .bt{font:600 12px ui-sans-serif,-apple-system,"PingFang SC",sans-serif;fill:#1f2a37}
+      .bs{font:400 10px ui-sans-serif,-apple-system,"PingFang SC",sans-serif;fill:#6b7684}
+      .mono{font:500 10.5px ui-monospace,SFMono-Regular,Menlo,monospace;fill:#2f3c4f}
+      .box{fill:#ffffff;stroke:#d8dee8;stroke-width:1}
+      .arrow{stroke:#9aa6b6;stroke-width:1.5;fill:none;marker-end:url(#a)}
+      .arrowD{stroke:#9d92d8;stroke-width:1.5;fill:none;stroke-dasharray:5 4;marker-end:url(#ad)}
+    </style>
+    <marker id="a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto"><path d="M0 0 L10 5 L0 10 z" fill="#9aa6b6"/></marker>
+    <marker id="ad" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto"><path d="M0 0 L10 5 L0 10 z" fill="#9d92d8"/></marker>
+  </defs>
+  <rect width="1160" height="800" fill="#fbfcfe" rx="16"/>
+
+  <!-- L1 客户端 -->
+  <rect x="32" y="24" width="1096" height="96" rx="12" fill="#ffffff" stroke="#dfe3ea" stroke-width="1.2"/>
+  <text class="lt" x="54" y="52">客户端层 · 同一份记忆，三端共读</text>
+  <text class="sub" x="54" y="70">没有"同步"，因为根本没有第二份副本</text>
+  <rect class="box" x="54" y="80" width="196" height="28" rx="7"/><text class="bt" x="68" y="99">DSH · MCP</text>
+  <rect class="box" x="262" y="80" width="196" height="28" rx="7"/><text class="bt" x="276" y="99">Codex CLI · MCP</text>
+  <rect class="box" x="470" y="80" width="196" height="28" rx="7"/><text class="bt" x="484" y="99">Claude Code · MCP</text>
+  <rect class="box" x="678" y="80" width="196" height="28" rx="7"/><text class="bt" x="692" y="99">人类 · memo CLI</text>
+  <rect class="box" x="886" y="80" width="220" height="28" rx="7"/><text class="bt" x="900" y="99">浏览器 · 观察台（只读）</text>
+
+  <!-- L2 接口 -->
+  <rect x="32" y="140" width="1096" height="104" rx="12" fill="#ffffff" stroke="#dfe3ea" stroke-width="1.2"/>
+  <text class="lt" x="54" y="168">接口层 · 三个入口，一套语义</text>
+  <text class="sub" x="54" y="186">MCP 是跨客户端唯一的缝；CLI 给人用；Web 只读、没有写端点</text>
+  <rect class="box" x="54" y="198" width="320" height="30" rx="7"/><text class="bt" x="68" y="218">MCP server · memory_*（10 个工具）</text>
+  <rect class="box" x="388" y="198" width="320" height="30" rx="7"/><text class="bt" x="402" y="218">CLI · write / search / brief / curate …</text>
+  <rect class="box" x="722" y="198" width="384" height="30" rx="7"/><text class="bt" x="736" y="218">Web server · /api/* 只读 + ?scope=</text>
+
+  <!-- L3 核心 -->
+  <rect x="32" y="264" width="1096" height="128" rx="12" fill="#ffffff" stroke="#dfe3ea" stroke-width="1.2"/>
+  <text class="lt" x="54" y="292">核心服务 · MemoryService（四模块拆分，语义只在一处）</text>
+  <text class="sub" x="54" y="310">lifecycle（锁 / 增量读 / 关闭收尾）· write-path · search-path · maintenance</text>
+  <rect class="box" x="54" y="322" width="250" height="52" rx="8"/><text class="bt" x="68" y="344">写入路径</text><text class="bs" x="68" y="362">门控 → 判定 → 追加 → 打标</text>
+  <rect class="box" x="318" y="322" width="250" height="52" rx="8"/><text class="bt" x="332" y="344">检索路径</text><text class="bs" x="332" y="362">BM25 / FTS5 · asOf · 遮蔽</text>
+  <rect class="box" x="582" y="322" width="250" height="52" rx="8"/><text class="bt" x="596" y="344">维护路径</text><text class="bs" x="596" y="362">nightly · 配额 · compact</text>
+  <rect class="box" x="846" y="322" width="260" height="52" rx="8"/><text class="bt" x="860" y="344">生命周期</text><text class="bs" x="860" y="362">跨进程一致 · 增量刷新</text>
+
+  <!-- L4 治理 -->
+  <rect x="32" y="412" width="1096" height="112" rx="12" fill="#fffaf1" stroke="#f0cf9a" stroke-width="1.2"/>
+  <text class="lt" x="54" y="440">治理层 · 记忆的卫生学（这才是重点）</text>
+  <text class="sub" x="54" y="458">写入门控（在线、零 LLM）→ 近线裁决（只对候选问 Agent）→ 离线整合 → 检索期过滤</text>
+  <rect class="box" x="54" y="470" width="204" height="38" rx="8"/><text class="bt" x="66" y="494">写入门控 · hash 短路</text>
+  <rect class="box" x="270" y="470" width="204" height="38" rx="8"/><text class="bt" x="282" y="494">近重复扫描 + Agent 裁决</text>
+  <rect class="box" x="486" y="470" width="204" height="38" rx="8"/><text class="bt" x="498" y="494">冲突失效 · bi-temporal</text>
+  <rect class="box" x="702" y="470" width="204" height="38" rx="8"/><text class="bt" x="714" y="494">投毒打标 + 读路径遮蔽</text>
+  <rect class="box" x="918" y="470" width="188" height="38" rx="8"/><text class="bt" x="930" y="494">配额 · 压实（唯一物理删）</text>
+
+  <!-- L5 派生 + 真相 -->
+  <rect x="32" y="544" width="720" height="104" rx="12" fill="#f7f5ff" stroke="#c3b6f2" stroke-width="1.2"/>
+  <text class="lt" x="54" y="572">派生层 · 随时可从真相层重建</text>
+  <text class="sub" x="54" y="590">坏了不丢数据；删掉 index/views 必须能重建出字节相同结果</text>
+  <rect class="box" x="54" y="602" width="160" height="28" rx="7"/><text class="bt" x="66" y="621">倒排索引</text>
+  <rect class="box" x="226" y="602" width="160" height="28" rx="7"/><text class="bt" x="238" y="621">SQLite FTS5</text>
+  <rect class="box" x="398" y="602" width="160" height="28" rx="7"/><text class="bt" x="410" y="621">brief / tier0</text>
+  <rect class="box" x="570" y="602" width="168" height="28" rx="7"/><text class="bt" x="582" y="621">L2 场景块 · L3 画像</text>
+
+  <rect x="772" y="544" width="356" height="104" rx="12" fill="#f2f7ff" stroke="#9fc4f5" stroke-width="1.2"/>
+  <text class="lt" x="794" y="572">真相层 · append-only</text>
+  <text class="sub" x="794" y="590">唯一不可重建的东西</text>
+  <text class="mono" x="794" y="612">items/&lt;scope&gt;.jsonl</text>
+  <text class="mono" x="794" y="630">events.jsonl · metrics/</text>
+
+  <!-- 箭头 -->
+  <path class="arrow" d="M210 108 L210 196"/>
+  <path class="arrow" d="M556 108 L556 196"/>
+  <path class="arrow" d="M980 108 L980 196"/>
+  <path class="arrow" d="M180 246 L180 320"/>
+  <path class="arrow" d="M550 246 L550 320"/>
+  <path class="arrow" d="M912 246 L912 320"/>
+  <path class="arrow" d="M580 392 L580 468"/>
+  <path class="arrow" d="M950 524 L950 542"/>
+  <path class="arrowD" d="M340 542 L340 526"/>
+  <path class="arrowD" d="M600 542 L600 526"/>
+
+  <!-- 注脚 -->
+  <text class="sub" x="54" y="690">读路径 · 任何读操作前先 refreshView()，把真相层的增量并进来（跨进程写入不会被读到陈旧快照）。</text>
+  <text class="sub" x="54" y="712">写路径 · withLock(scope) 内完成「重读 → 判定 → 追加」，所以两个进程同时写同一事实，只会留下一条 active。</text>
+  <text class="sub" x="54" y="734">第一性原理 · 记忆不是"攒得越多越好"：没有门控与失效，记忆越多只会越糟。治理是主体，检索只是出口。</text>
+  <text class="sub" x="54" y="764">三个数字 · 288 个测试 / I1–I24 注入式回归 / 零运行时依赖（只有 Node ≥ 22）</text>
+</svg>

@@ -1,0 +1,65 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1160 520" role="img" aria-label="四条卫生路径与 Agent 裁决回路">
+  <defs>
+    <style>
+      .t{font:600 13.5px ui-sans-serif,-apple-system,"PingFang SC",sans-serif;fill:#16202e}
+      .s{font:400 10.5px ui-sans-serif,-apple-system,"PingFang SC",sans-serif;fill:#6b7684}
+      .k{font:600 11.5px ui-sans-serif,-apple-system,"PingFang SC",sans-serif;fill:#1f2a37}
+      .l{font:400 10.5px ui-sans-serif,-apple-system,"PingFang SC",sans-serif;fill:#48566b}
+      .arrow{stroke:#9aa6b6;stroke-width:1.5;fill:none;marker-end:url(#c)}
+      .loop{stroke:#7c8cf8;stroke-width:1.6;fill:none;stroke-dasharray:6 5;marker-end:url(#cd)}
+    </style>
+    <marker id="c" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto"><path d="M0 0 L10 5 L0 10 z" fill="#9aa6b6"/></marker>
+    <marker id="cd" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto"><path d="M0 0 L10 5 L0 10 z" fill="#7c8cf8"/></marker>
+  </defs>
+  <rect width="1160" height="520" fill="#fbfcfe" rx="16"/>
+  <text class="t" x="40" y="42">记忆卫生 · 四条路径分工，LLM 只裁决、不扫描</text>
+  <text class="s" x="40" y="62">在线 0 次 LLM，近线只对候选问一次，离线摊销 —— 成本随记忆规模线性增，不随对话轮次增</text>
+
+  <rect x="44" y="86" width="248" height="152" rx="12" fill="#eef4ff" stroke="#9fc4f5" stroke-width="1.2"/>
+  <text class="k" x="62" y="112">① 写入门控 · 在线</text>
+  <text class="l" x="62" y="134">hash 短路 / 同 slot 判等</text>
+  <text class="l" x="62" y="154">近重复 containment + dice</text>
+  <text class="l" x="62" y="174">投毒启发式打标</text>
+  <text class="l" x="62" y="200">成本 · O(1) 哈希 + 少量相似度</text>
+  <text class="l" x="62" y="220">原则 · 宁可漏，不可误杀</text>
+
+  <rect x="312" y="86" width="248" height="152" rx="12" fill="#f7f5ff" stroke="#c3b6f2" stroke-width="1.2"/>
+  <text class="k" x="330" y="112">② 近线裁决 · 候选级</text>
+  <text class="l" x="330" y="134">dedupe_scan 只报候选簇</text>
+  <text class="l" x="330" y="154">正在跑的 Agent 当裁判</text>
+  <text class="l" x="330" y="174">decisions → curate apply</text>
+  <text class="l" x="330" y="200">成本 · 0 API（复用当前会话）</text>
+  <text class="l" x="330" y="220">原则 · 宁可多报，不漏</text>
+
+  <rect x="580" y="86" width="248" height="152" rx="12" fill="#fffaf1" stroke="#f0cf9a" stroke-width="1.2"/>
+  <text class="k" x="598" y="112">③ 离线整合 · 夜间</text>
+  <text class="l" x="598" y="134">nightly 重算 brief / metrics</text>
+  <text class="l" x="598" y="154">配额淘汰（打 quota 标）</text>
+  <text class="l" x="598" y="174">compact 物理清理墓碑</text>
+  <text class="l" x="598" y="200">成本 · 摊销、可重放</text>
+  <text class="l" x="598" y="220">原则 · 慢操作不挡在线</text>
+
+  <rect x="848" y="86" width="268" height="152" rx="12" fill="#eefaf2" stroke="#9ed8b4" stroke-width="1.2"/>
+  <text class="k" x="866" y="112">④ 检索期过滤</text>
+  <text class="l" x="866" y="134">validTo 过滤（失效不删）</text>
+  <text class="l" x="866" y="154">asOf 还原历史时点</text>
+  <text class="l" x="866" y="174">suspicious 默认遮蔽</text>
+  <text class="l" x="866" y="200">成本 · 查询期零额外调用</text>
+  <text class="l" x="866" y="220">原则 · 读路径不改数据</text>
+
+  <path class="arrow" d="M292 246 L310 246"/>
+  <path class="arrow" d="M560 246 L578 246"/>
+  <path class="arrow" d="M828 246 L846 246"/>
+
+  <rect x="140" y="288" width="880" height="168" rx="12" fill="#f9f9ff" stroke="#c3b6f2" stroke-width="1.2"/>
+  <text class="k" x="162" y="316">闭环 · 记忆库自己会收敛，不依赖"人记得去清理"</text>
+  <text class="l" x="162" y="342">brief 末尾常驻一行「待裁决去重候选 N 条」 → Agent 调 memory_dedupe_scan 看候选簇与 pairs/strength</text>
+  <text class="l" x="162" y="364">→ 判 merge / a_wins / b_wins / keep_both → memory_curate apply 落盘（败者 superseded，真相层全留）</text>
+  <text class="l" x="162" y="386">→ 再扫无候选：这一轮收敛完成；下一轮由新写入自然产生新候选</text>
+  <text class="l" x="162" y="416">它挂在两个已经存在的动作上 ——「每次会话开始读 brief」和「每次收尾写记忆」，不需要额外纪律。</text>
+  <text class="l" x="162" y="438">阈值只负责"召回候选"，判决永远交给人或 Agent：词法阈值做判决，要么漏、要么误杀。</text>
+
+  <path class="loop" d="M420 284 C 372 258, 356 226, 366 212"/>
+  <path class="loop" d="M740 284 C 796 258, 812 230, 800 212"/>
+  <text class="s" x="556" y="272">裁决结果回流，成为下一轮门控的先验</text>
+</svg>
