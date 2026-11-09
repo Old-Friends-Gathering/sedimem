@@ -34,13 +34,14 @@ export async function initGraph({ canvas, detailEl, toolbarEl, apiBase = '/api',
     edges: [],
     sampled: { shown: 0, total: 0 },
     alpha: 1,
-    view: { rotY: 0, rotX: 0, scale: 1, tx: 0, ty: 0 },
+    view: { rotY: 0.55, rotX: 0.22, scale: 1, tx: 0, ty: 0 }, // 初始带倾角：能看出是球
     selectedId: null,
     fitted: false,
     frames: 0,
     userAdjusted: false,
     running: true,
     rotateMode: false,
+    sphereRadius: 0,
     destroyed: false,
     rafId: 0,
   };
@@ -247,14 +248,19 @@ export async function initGraph({ canvas, detailEl, toolbarEl, apiBase = '/api',
   function fitView() {
     const rect = canvas.getBoundingClientRect();
     if (!state.nodes.length || rect.width < 40 || rect.height < 40) return;
+    // 用当前视角投影后的屏幕坐标算包围盒：旋转后自动重新贴合画布
+    const saved = { scale: state.view.scale, tx: state.view.tx, ty: state.view.ty };
+    state.view.scale = 1; state.view.tx = 0; state.view.ty = 0;
     let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
     for (const nd of state.nodes) {
       if (!Number.isFinite(nd.x) || !Number.isFinite(nd.y)) continue;
-      minX = Math.min(minX, nd.x); maxX = Math.max(maxX, nd.x);
-      minY = Math.min(minY, nd.y); maxY = Math.max(maxY, nd.y);
+      const [px, py] = project(nd.x, nd.y, nd.z ?? 0);
+      minX = Math.min(minX, px); maxX = Math.max(maxX, px);
+      minY = Math.min(minY, py); maxY = Math.max(maxY, py);
     }
+    state.view.scale = saved.scale; state.view.tx = saved.tx; state.view.ty = saved.ty;
     if (!Number.isFinite(minX)) return;
-    const pad = 70;
+    const pad = 46;
     const bw = Math.max(1, maxX - minX);
     const bh = Math.max(1, maxY - minY);
     const scale = Math.max(0.4, Math.min(2.5, Math.min((rect.width - pad * 2) / bw, (rect.height - pad * 2) / bh)));
@@ -283,7 +289,7 @@ export async function initGraph({ canvas, detailEl, toolbarEl, apiBase = '/api',
       deg.set(e.to, (deg.get(e.to) ?? 0) + 1);
     }
     const topByDeg = new Set(
-      state.nodes.slice().sort((a, b) => (deg.get(b.id) ?? 0) - (deg.get(a.id) ?? 0)).slice(0, 30).map((n) => n.id)
+      state.nodes.slice().sort((a, b) => (deg.get(b.id) ?? 0) - (deg.get(a.id) ?? 0)).slice(0, 12).map((n) => n.id)
     );
     const cand = state.nodes
       .filter((nd) => typeof nd.label === 'string' && nd.label !== '')
@@ -336,27 +342,35 @@ export async function initGraph({ canvas, detailEl, toolbarEl, apiBase = '/api',
       return;
     }
     const types = activeEdgeTypes();
-    // 边（v0.3.3 降噪：>60 条时只画度数最高的 60 条，其余隐藏 —— 毛球感的主要来源是 hub）
-    let drawEdges = state.edges;
-    if (state.edges.length > 60) {
-      const deg = new Map();
-      for (const e of state.edges) {
-        deg.set(e.from, (deg.get(e.from) ?? 0) + 1);
-        deg.set(e.to, (deg.get(e.to) ?? 0) + 1);
-      }
-      drawEdges = state.edges
-        .slice()
-        .sort((x, y) => (deg.get(y.from) ?? 0) + (deg.get(y.to) ?? 0) - ((deg.get(x.from) ?? 0) + (deg.get(x.to) ?? 0)))
-        .slice(0, 60);
-    }
-    for (const e of drawEdges) {
+    // 边：球体视角下按「3D 空间距离」筛选——长边横跨整个球是「找不着北」的元凶。
+    // 只画两端在球面上足够近的边；近的边按深度给透明度（远侧更淡），形成球体纵深。
+    const cand = [];
+    for (const e of state.edges) {
       if (!types.has(e.type)) continue;
       const a = nodeById.get(e.from);
       const b = nodeById.get(e.to);
       if (!a || !b) continue;
+      const dz = (a.z ?? 0) - (b.z ?? 0);
+      const dx = a.x - b.x;
+      const dy = a.y - b.y;
+      cand.push({ e, a, b, len: Math.sqrt(dx * dx + dy * dy + dz * dz) });
+    }
+    // 距离阈值：取「中位数的 1.15 倍」做上限，保证近半数的边被保留、长线消失
+    let limit = Infinity;
+    if (cand.length > 0) {
+      const lens = cand.map((c) => c.len).sort((x, y) => x - y);
+      limit = lens[Math.floor(lens.length / 2)] * 1.15;
+    }
+    const drawEdges = cand.filter((c) => c.len <= limit).slice(0, 90);
+    for (const c of drawEdges) {
+      const { e, a, b } = c;
       const st = EDGE_STYLE[e.type] || EDGE_STYLE['same-entity'];
-      const [x1, y1] = toScreen(a.x, a.y, a.z ?? 0);
-      const [x2, y2] = toScreen(b.x, b.y, b.z ?? 0);
+      const [x1, y1, p1] = toScreen(a.x, a.y, a.z ?? 0);
+      const [x2, y2, p2] = toScreen(b.x, b.y, b.z ?? 0);
+      // 深度雾化：远侧（persp 小）更淡，近侧更实
+      const depth = (p1 + p2) / 2;
+      const fog = Math.max(0.12, Math.min(1, (depth - 0.78) / 0.5));
+      ctx.globalAlpha = fog;
       ctx.beginPath();
       ctx.setLineDash(st.dash);
       const w = Number.isFinite(e.weight) ? Math.max(0.75, Math.min(3, e.weight)) : 1;
@@ -366,6 +380,7 @@ export async function initGraph({ canvas, detailEl, toolbarEl, apiBase = '/api',
       ctx.lineTo(x2, y2);
       ctx.stroke();
       ctx.setLineDash([]);
+      ctx.globalAlpha = 1;
     }
     // 节点
     for (const nd of state.nodes) {
@@ -374,8 +389,10 @@ export async function initGraph({ canvas, detailEl, toolbarEl, apiBase = '/api',
       const r = Math.max(2.2, radiusOf(nd) * state.view.scale ** 0.6 * persp);
       const color = kindColors[nd.kind] || KIND_COLORS.state;
       const superseded = nd.status === 'superseded';
+      // 深度雾化：背面（persp<1）变暗，正面更亮 —— 球体纵深的关键线索
+      const nodeFog = Math.max(0.35, Math.min(1, (persp - 0.72) / 0.55));
       ctx.beginPath();
-      ctx.globalAlpha = superseded ? 0.4 : 1;
+      ctx.globalAlpha = (superseded ? 0.4 : 1) * nodeFog;
       ctx.fillStyle = color;
       ctx.arc(px, py, r, 0, Math.PI * 2);
       ctx.fill();
@@ -432,12 +449,16 @@ export async function initGraph({ canvas, detailEl, toolbarEl, apiBase = '/api',
     const base = Math.max(120, Math.min(320, Math.min(width, height) / 2.6));
     const n = state.nodes.length;
     const crowd = n > 40 ? Math.sqrt(n / 40) : 1;
+    // 3D 球半径：取画布短边的 0.42，节点数越多半径略收（密度守恒）
+    const sphere = (Math.min(width, height) * 0.46) / Math.sqrt(Math.max(1, crowd));
+    state.sphereRadius = sphere;
     return {
-      // v0.3.3 布局降噪：弹簧加长、斥力加倍、向心减半 —— 拉开间距。
-      // 杂乱感主要来自「挤」（83 点缩在半个画布），不是「多」。
-      springLength: base * Math.min(1.55, crowd) * 1.15,
-      repulsion: 4200 * (base / 120) ** 2 * crowd ** 1.5 * 2.0,
-      centering: 0.012 / Math.max(1, crowd * 0.5) * 0.5,
+      // 球内布局：斥力适中（球壳会兜住，不会炸开），弹簧稍短让簇内聚团
+      springLength: base * 0.9,
+      repulsion: 4200 * (base / 120) ** 2 * 0.8,
+      centering: 0.02,
+      sphere,
+      shellKeep: 0.9,
     };
   }
 

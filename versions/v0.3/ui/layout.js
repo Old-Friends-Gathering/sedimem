@@ -100,6 +100,8 @@ export function layoutTick(nodes, edges, opts = {}) {
     springLength = 120,
     centering = 0.012,
     maxStep = 18,
+    sphere = 0,          // >0 时把布局收进半径 sphere 的球壳（真 3D 球）
+    shellKeep = 0.86,    // 球壳厚度下限（相对 sphere）
   } = opts;
 
   const n = nodes.length;
@@ -206,6 +208,26 @@ export function layoutTick(nodes, edges, opts = {}) {
     nd.y += nd.vy;
     nd.z = (nd.z ?? 0) + (nd.vz ?? 0);
     energy += nd.vx * nd.vx + nd.vy * nd.vy + (nd.vz ?? 0) ** 2;
+  }
+
+  // 球壳约束：把节点拉回半径 sphere 的壳层（3D 球的关键——否则力导向会把图摊平）
+  if (sphere > 0) {
+    for (const nd of free) {
+      const dx = nd.x - cx;
+      const dy = nd.y - cy;
+      const dz = nd.z ?? 0;
+      const r = Math.hypot(dx, dy, dz) || 1e-6;
+      const lo = sphere * shellKeep;
+      let target = r;
+      if (r > sphere) target = sphere;
+      else if (r < lo) target = lo;
+      if (target !== r) {
+        const k = target / r;
+        nd.x = cx + dx * k;
+        nd.y = cy + dy * k;
+        nd.z = dz * k;
+      }
+    }
   }
 
   return { alpha: alpha * alphaDecay, energy };
