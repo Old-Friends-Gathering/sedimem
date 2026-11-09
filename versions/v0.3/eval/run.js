@@ -85,6 +85,7 @@ const CASE_FILES = [
   ['I21', 'i21-view-rebuild.test.js'],
   ['I22', 'i22-brief-quota.test.js'],
   ['I23', 'i23-l3-budget.test.js'],
+  ['I24', 'i24-label-title.test.js'],
 ];
 
 function runCase(id, file) {

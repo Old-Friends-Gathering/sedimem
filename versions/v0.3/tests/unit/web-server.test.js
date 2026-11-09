@@ -124,7 +124,9 @@ test('web-server：绑定地址、7 端点形状、错误形状、遮蔽与穿�
     assert.ok(Array.isArray(r.nodes) && r.nodes.length >= 2);
     for (const n of r.nodes) {
       assert.deepEqual(Object.keys(n).sort(),
-        ['createdAt', 'degree', 'hits', 'id', 'kind', 'label', 'status', 'subject'].sort());
+        ['count', 'createdAt', 'degree', 'hits', 'id', 'kind', 'label', 'predicates', 'status', 'subject'].sort());
+      assert.ok(Number.isInteger(n.count) && n.count >= 1, '裁决 60：count 是聚合条数');
+      assert.ok(Array.isArray(n.predicates), '裁决 60：predicates 带到详情面板');
       assert.ok(['active', 'superseded', 'disputed'].includes(n.status), '裁决 40：节点集含 disputed');
     }
     for (const e of r.edges ?? []) {
@@ -132,10 +134,10 @@ test('web-server：绑定地址、7 端点形状、错误形状、遮蔽与穿�
       assert.ok(typeof e.weight === 'number');
     }
     // 同 slot supersede：svc/port 两条记录间应存在 supersedes 边
+    // 裁决 60：同 subject 合并成单节点，其 count 至少包含被取代的那条
     const svcNodes = r.nodes.filter((n) => n.subject === 'svc');
-    if (svcNodes.length === 2) {
-      const se = (r.edges ?? []).filter((e) => e.type === 'supersedes');
-      assert.ok(se.length >= 1, '应至少有一条 supersedes 边');
+    if (svcNodes.length === 1) {
+      assert.ok(svcNodes[0].count >= 2, '同 subject 的两条记录应合并成一个节点（count>=2）');
     }
     assert.ok(r.sampled && typeof r.sampled.shown === 'number' && typeof r.sampled.total === 'number');
   }

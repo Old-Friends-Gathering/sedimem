@@ -133,3 +133,10 @@ v0.2.1 的两个能力（代码合入本版）：**A) 检索后端可换**（`in
 - **做了什么**：L2 场景块（`src/views/l2.js`，确定性聚类、可字节重建）、注入分级（`brief --tier0` + 每层硬配额 + 完整 id 证据链）、L3 画像（`src/views/l3.js`，固定预算 + 强制 `sourceRefs` + TTL）
 - **刻意不做**：向量检索（等 `noHitRate` 有痛感）、自动捕获 hook（跨端与成本未解）、L2/L3 由 LLM 全量生成（结构层必须确定性）
 - **入口**：`memo view build|show|trace|l3`、`memo brief --tier0`；契约见 `docs/02` §3.14（裁决 54–57）
+
+## v0.3.1（已交付）：标题与可读标签
+
+- **做了什么**：记录新增 `title`（≤40 字单行）；label v2（title → subject → 正文首句，24 字符，predicate 移出 label）；图谱按 subject 聚合 + `×N`；`memo retitle` 回填（规则推导）与 `memo retitle --from-file`（Agent 产出标题）；brief 行首用 title
+- **为什么**：实测 `repo:fae-knowledge-base` 118 条记录，服务端 label 平均 48 字符、图上只画 16 字符 → **51% 节点重名**（`scheme-lead-revi…` ×7）。记录里本来就没有「标题」这个概念，等于让读者靠 subject 前 16 字符认人
+- **刻意不做**：自动让 LLM 给每条旧记录生成标题（回填走显式 `retitle`，避免一次批量调用把成本失控）
+- **入口**：`memo write --title "..."`、`memo retitle [--dry-run|--limit N|--from-file titles.json]`；契约见 `docs/02` §3.16（裁决 59–60）

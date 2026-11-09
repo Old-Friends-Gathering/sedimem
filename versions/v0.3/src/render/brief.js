@@ -142,7 +142,11 @@ function lineFor(record, suspicious) {
     return `- [suspicious withheld]（id ${record.id}）`;
   }
   const asOf = String(record.validFrom ?? '').slice(0, 10) || 'unknown';
-  return `- [${record.kind}] ${String(record.text ?? '')}  (as of ${asOf})`;
+  // 裁决 59：有 title 就用 title 当行首（更短、更能扫），正文靠 memory_search / memory_get 下钻。
+  // 没有 title 的旧记录保持原样（正文全文），避免回填前 brief 丢掉信息。
+  const title = typeof record.title === 'string' ? record.title.trim() : '';
+  const head = title !== '' ? title : String(record.text ?? '');
+  return `- [${record.kind}] ${head}  (as of ${asOf})`;
 }
 
 function isSuspicious(record) {

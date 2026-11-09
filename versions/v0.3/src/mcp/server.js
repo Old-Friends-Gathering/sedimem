@@ -27,6 +27,8 @@ const INSTRUCTIONS =
   ' 写入时未显式给 agent/source 则记为 unknown。' +
   ' 分库：本 server 是常驻进程，cwd 通常不是你的项目目录；若你知道当前项目根，先 memory_scope({action:"get"}) 看，' +
   '与本项目不符就 memory_scope({action:"use", path:"<项目根绝对路径>"}) 对齐（与 Claude/Codex 共享同一分库的关键一步）。' +
+  '写记忆必须给 title（≤40 字、单行）：它就是图谱与 brief 上人看到的那句话；缺了只能从正文截 60 字，'
+  '实测同一分库 118 个节点里 51% 会和别人重名（"Mac mini A4x Bus…" 这种看不出区别）。' +
   ' 自我维护：本记忆库可能积累重复/冲突条目；当用户提到记忆、或会话结束前，若 brief 出现「待裁决去重候选」，' +
   '调用 memory_dedupe_scan 获取候选簇。' +
   '判裁决时看每簇的 pairs（逐对依据）：strength=strong 先怀疑同一事实；strength=weak 多为「同主题词重合」（实测与真改写区间重叠），' +
@@ -102,6 +104,10 @@ const TOOL_DEFS = [
       type: 'object',
       properties: {
         text: { type: 'string', description: '人类可读原句（必填，≤4000 字）' },
+        title: {
+          type: 'string',
+          description: '一句话标题（强烈建议填，≤40 字、单行）：图谱与 brief 上显示的就是它；不填会从 subject/正文里截，可读性差',
+        },
         kind: { type: 'string', enum: ['fact', 'pref', 'decision', 'gotcha', 'state'] },
         subject: { type: 'string' },
         predicate: { type: 'string' },

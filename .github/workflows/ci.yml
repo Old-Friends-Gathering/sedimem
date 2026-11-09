@@ -4,6 +4,7 @@ name: ci
 # - test:   单元 + 注入式回归（Node 22 / 24 双版本）
 # - eval:   I1–I15 注入式评测（行为契约，不看覆盖率）
 # - coverage: 覆盖率下限（lines≥85 / branches≥70 / functions≥90，改阈值需 ADR）
+# - windows-smoke: Windows 回归冒烟（issue #62；只钉冒烟，不替代全量测试）
 
 on:
   push:
@@ -37,6 +38,19 @@ jobs:
       - name: 覆盖率门禁
         if: matrix.node == '22'
         run: node tools/coverage-gate.mjs
+
+  # Windows 回归防线（issue #62 第 1 步）：全量测试仍只跑 ubuntu（13 条 POSIX 假设
+  # 用例在 Windows 红，另建 issue）；这里只钉「写得进、看得见、压得动、跑得成」。
+  windows-smoke:
+    name: windows-smoke
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '24'
+      - name: Windows 冒烟（真相层文件名 / 分库枚举 / compact / nightly）
+        run: node tools/windows-smoke.mjs
 
   eval:
     name: eval (I1–I23)

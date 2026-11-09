@@ -13,19 +13,52 @@ const V0_1_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..
 
 /** 生成节点 label（裁决 33）：有结构用 `subject/predicate`，否则 text 前 60 字（+…）。
  *  withValue=true 时结构化记录追加「：值前 40 字」——用于时间线与清理史行（图谱节点保持短标签）。 */
+const LABEL_MAX = 24;
+// 口语开头：真人写记忆时常带这些前缀，label 里留着只会占掉有限的显示宽度
+// 允许口语前缀后面再跟 ≤6 个字（「我刚刚看到，」「就是那个，」），连逗号一起删掉
+const LABEL_FILLER = /^(?:我刚刚|刚才|你看一下|你看|就是|另外|顺便|其实|对了|嗯+)(?:[^，,。！？!?；;\s]{0,6})?[，,、 ]*/;
+
+/** subject 人性化：下划线/连字符折成空格，连续空白归一。 */
+function humanize(s) {
+  return String(s ?? '').replace(/[_]+/g, ' ').replace(/\s+/g, ' ').trim();
+}
+
+/** 非结构化记录的首句：去掉口语前缀，取到第一个句读/换行为止。 */
+function firstSentence(text) {
+  const t = String(text ?? '').replace(/\s+/g, ' ').trim().replace(LABEL_FILLER, '');
+  const cut = t.split(/[。！？!?；;\n]/)[0] ?? t;
+  return (cut || t).trim();
+}
+
+function clipLabel(t) {
+  const x = String(t ?? '').trim();
+  return x.length > LABEL_MAX ? `${x.slice(0, LABEL_MAX - 1)}…` : x;
+}
+
+/**
+ * 生成节点 label（裁决 33 由服务端生成；裁决 59 改为「标题优先」）。
+ *
+ * 为什么不再拼 `subject/predicate`：实测同一个知识库 118 条记录里，服务端 label 平均 48 字符，
+ * 图谱只画得下 16 字符，结果 51% 的节点与别人重名，predicate（真正区分它们的那半截）一个像素都露不出来。
+ * 现在的规则：
+ *   1) 有 title 用 title（写入方给的「人能读懂的一句话」，≤40 字）
+ *   2) 结构化记录退回 subject（下划线折空格）
+ *   3) 非结构化记录退回正文首句（去口语前缀）
+ * predicate 不再进 label，改由图谱节点 payload 的 predicates 字段带到详情面板。
+ * @param {object} r
+ * @param {{withValue?: boolean}} [opts] withValue：时间线/清理史需要「标题：值」的形态
+ */
 export function makeLabel(r, { withValue = false } = {}) {
+  const title = typeof r.title === 'string' ? r.title.trim() : '';
   const s = typeof r.subject === 'string' ? r.subject : '';
   const p = typeof r.predicate === 'string' ? r.predicate : '';
   const structured = s && p && !(s === 'text' && p === 'text');
-  if (structured) {
-    const base = `${s}/${p}`;
-    if (!withValue) return base;
-    const v = String(r.value ?? r.text ?? '').replace(/\s+/g, ' ').trim();
-    if (!v) return base;
-    return `${base}：${v.length > 40 ? `${v.slice(0, 40)}…` : v}`;
-  }
-  const t = String(r.text ?? '');
-  return t.length > 60 ? `${t.slice(0, 60)}…` : t;
+  const base = clipLabel(title || (structured ? humanize(s) : firstSentence(r.text)));
+  if (!base) return structured ? `${s}/${p}` : String(r.id ?? '');
+  if (!withValue) return base;
+  const v = String(r.value ?? r.text ?? '').replace(/\s+/g, ' ').trim();
+  if (!v || v === base) return base;
+  return `${base}：${v.length > 40 ? `${v.slice(0, 40)}…` : v}`;
 }
 
 function invalidArg(msg) {
@@ -263,41 +296,62 @@ async function apiGraph(service, query) {
     if (got) fullById.set(r.id, got);
   }
 
-  const nodes = picked.map((r) => ({
-    id: r.id,
-    label: makeLabel(r),
-    kind: r.kind,
-    status: r.status,
-    subject: r.subject,
-    createdAt: r.createdAt,
-    hits: r.hits ?? 0,
-    degree: 0,
-  }));
+  // 节点聚合（裁决 60）：同一 subject 的多条记录合并成一个点，用 ×N 表示条数。
+  // 起因：实测 118 条记录里 51% 的节点与人重名（同 subject 写 7 条 → 7 个一模一样的标签），
+  // 图上看起来像「重复沉淀」，其实是一个主题的不同 predicate。合并后 predicate 进详情。
+  const groupOf = new Map(); // groupKey → node
+  const nodeIdOf = new Map(); // recordId → node.id
+  for (const r of picked) {
+    const structured = typeof r.subject === 'string' && r.subject !== '' && r.subject !== 'text';
+    const key = structured ? `S:${r.subject}` : `R:${r.id}`;
+    let node = groupOf.get(key);
+    if (!node) {
+      node = {
+        id: r.id,
+        label: makeLabel(r),
+        kind: r.kind,
+        status: r.status,
+        subject: r.subject,
+        createdAt: r.createdAt,
+        hits: 0,
+        degree: 0,
+        count: 0,
+        predicates: [],
+      };
+      groupOf.set(key, node);
+    }
+    node.count += 1;
+    node.hits += r.hits ?? 0;
+    // 组内任一记录带 title，就用它当这个聚合点的标签（title 是写入方给的「人能读懂的一句话」）
+    if (!node.title && typeof r.title === 'string' && r.title.trim() !== '') node.title = r.title.trim();
+    nodeIdOf.set(r.id, node.id);
+    const full = fullById.get(r.id);
+    const pred = full?.predicate ?? r.predicate;
+    if (pred && pred !== 'text' && !node.predicates.includes(pred) && node.predicates.length < 8) {
+      node.predicates.push(pred);
+    }
+    // 代表记录取最老的（版本链起点），status/kind 用它；只要组内有 active 就显示 active
+    if (String(r.createdAt) < String(node.createdAt)) {
+      node.createdAt = r.createdAt;
+      node.kind = r.kind;
+      node.subject = r.subject;
+    }
+    if (r.status === 'active') node.status = 'active';
+    else if (node.status !== 'active' && r.status === 'superseded') node.status = 'superseded';
+  }
+  const nodes = [...groupOf.values()];
+  for (const n of nodes) {
+    if (n.title) n.label = makeLabel({ title: n.title, subject: n.subject, predicate: n.predicates[0] });
+    delete n.title;
+  }
+  const nodeId = (recId) => nodeIdOf.get(recId) ?? null;
 
   const edges = [];
   const degree = new Map();
   const bump = (id) => degree.set(id, (degree.get(id) ?? 0) + 1);
 
-  // 1) same-entity：同 subject 分组且组内 ≥2，按 createdAt 升序只连相邻两条（链）
-  //    裁决 35：组内全连是 O(n²) 毛球（17 节点同 subject 会产出 136 条重叠边，信息量为零），
-  //    改为时间链：组内 n 条 → n-1 条边，既表达「同一实体的时间序列」，又不遮挡其它边。
-  const bySubject = new Map();
-  for (const n of nodes) {
-    if (!bySubject.has(n.subject)) bySubject.set(n.subject, []);
-    bySubject.get(n.subject).push(n);
-  }
-  for (const group of bySubject.values()) {
-    if (group.length < 2) continue;
-    const ordered = [...group].sort((a, b) => {
-      const ta = Date.parse(a.createdAt) || 0;
-      const tb = Date.parse(b.createdAt) || 0;
-      return ta - tb || String(a.id).localeCompare(String(b.id));
-    });
-    for (let i = 1; i < ordered.length; i++) {
-      edges.push({ from: ordered[i - 1].id, to: ordered[i].id, type: 'same-entity', weight: 1 });
-      bump(ordered[i - 1].id); bump(ordered[i].id);
-    }
-  }
+  // 1) same-entity：同 subject 已合并为单节点（裁决 60），链路自然消失，无需再连边。
+  //    `count`/`predicates` 把「同主题多条」的信息带到详情面板，比一堆重叠边更可读。
 
   // 2) supersedes：旧 id → 新 id 有向边。两个来源：
   //    a) 记录自身 supersedes 字段（人工 supersede 路径会写入）；
@@ -307,11 +361,14 @@ async function apiGraph(service, query) {
     const seen = new Set();
     const addSupersedes = (oldId, newId) => {
       if (!oldId || !idSet.has(oldId) || !idSet.has(newId)) return;
-      const key = `${oldId}\u0001${newId}`;
+      const a = nodeId(oldId);
+      const b = nodeId(newId);
+      if (!a || !b || a === b) return;
+      const key = `${a}\u0001${b}`;
       if (seen.has(key)) return;
       seen.add(key);
-      edges.push({ from: oldId, to: newId, type: 'supersedes', weight: 1 });
-      bump(oldId); bump(newId);
+      edges.push({ from: a, to: b, type: 'supersedes', weight: 1 });
+      bump(a); bump(b);
     };
     for (const n of nodes) {
       const full = fullById.get(n.id);
@@ -331,11 +388,13 @@ async function apiGraph(service, query) {
     const scan = await service.dedupeScan({ limit: 50 });
     for (const cluster of scan.clusters) {
       for (const pair of cluster.pairs ?? []) {
-        if (idSet.has(pair.aId) && idSet.has(pair.bId)) {
-          const e = { from: pair.aId, to: pair.bId, type: 'duplicate-of', weight: pair.score };
+        const a = nodeId(pair.aId);
+        const b = nodeId(pair.bId);
+        if (idSet.has(pair.aId) && idSet.has(pair.bId) && a && b && a !== b) {
+          const e = { from: a, to: b, type: 'duplicate-of', weight: pair.score };
           if (pair.strength !== undefined) e.strength = pair.strength;
           edges.push(e);
-          bump(pair.aId); bump(pair.bId);
+          bump(a); bump(b);
         }
       }
     }
@@ -347,15 +406,17 @@ async function apiGraph(service, query) {
     for (const [, peer] of fullById) {
       if (peer.id === full.id || peer.status !== 'active') continue;
       if (peer.scope !== full.scope || peer.subject !== full.subject || peer.predicate !== full.predicate) continue;
-      if (!idSet.has(peer.id)) continue;
-      edges.push({ from: full.id, to: peer.id, type: 'disputed-with', weight: 1 });
-      bump(peer.id);
-      if (idSet.has(full.id)) bump(full.id);
+      if (!idSet.has(peer.id) || !idSet.has(full.id)) continue;
+      const a = nodeId(full.id);
+      const b = nodeId(peer.id);
+      if (!a || !b || a === b) continue;
+      edges.push({ from: a, to: b, type: 'disputed-with', weight: 1 });
+      bump(a); bump(b);
     }
   }
 
   for (const n of nodes) n.degree = degree.get(n.id) ?? 0;
-  return { nodes, edges, sampled: { shown: nodes.length, total: eligible.length } };
+  return { nodes, edges, sampled: { shown: nodes.length, total: eligible.length, records: picked.length } };
 }
 
 /** 裁决 31：metrics 读取——新名 <date>.<scopeKey>.json 优先，回退旧 <date>.json。 */
