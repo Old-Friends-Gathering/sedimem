@@ -34,7 +34,7 @@ export async function initGraph({ canvas, detailEl, toolbarEl, apiBase = '/api',
     edges: [],
     sampled: { shown: 0, total: 0 },
     alpha: 1,
-    view: { rotY: 0, scale: 1, tx: 0, ty: 0 },
+    view: { rotY: 0, rotX: 0, scale: 1, tx: 0, ty: 0 },
     selectedId: null,
     fitted: false,
     frames: 0,
@@ -50,14 +50,22 @@ export async function initGraph({ canvas, detailEl, toolbarEl, apiBase = '/api',
   // 3D 投影：绕 Y 轴旋转 rotY 后做弱透视（camera 在 z=+600）。
   // 返回 [sx, sy, scale因子]——scale因子 = 近大远小，画点/标签时用。
   const project = (x, y, z = 0) => {
-    const cos = Math.cos(state.view.rotY);
-    const sin = Math.sin(state.view.rotY);
-    const rx = x * cos - (z ?? 0) * sin;
-    const rz = x * sin + (z ?? 0) * cos;
-    const persp = 600 / (600 + rz * state.view.scale); // 0.6 ~ 1.4 之间
+    z = z ?? 0;
+    // 俯仰（绕 X）：y/z 平面旋转
+    const cx = Math.cos(state.view.rotX ?? 0);
+    const sxn = Math.sin(state.view.rotX ?? 0);
+    const ry0 = y * cx - z * sxn;
+    const rz0 = y * sxn + z * cx;
+    // 环视（绕 Y）：x/z 平面旋转
+    const cy = Math.cos(state.view.rotY);
+    const sy = Math.sin(state.view.rotY);
+    const rx = x * cy - rz0 * sy;
+    const rz = x * sy + rz0 * cy;
+    // 弱透视：近大远小；不乘 scale（与画布缩放解耦，拖 zoom 不抖）
+    const persp = 600 / (600 + rz);
     return [
       rx * state.view.scale * persp + state.view.tx,
-      y * state.view.scale * persp + state.view.ty,
+      ry0 * state.view.scale * persp + state.view.ty,
       persp,
     ];
   };
@@ -474,11 +482,13 @@ export async function initGraph({ canvas, detailEl, toolbarEl, apiBase = '/api',
       drag.moved += Math.abs(ev.movementX || 0) + Math.abs(ev.movementY || 0);
       state.alpha = Math.max(state.alpha, 0.3); // 拖拽唤醒
     } else if (drag.kind === 'rotate') {
-      // 空白拖拽 = 绕 Y 轴旋转（3D 环视）；每像素 0.01 弧度
-      state.view.rotY += (ev.clientX - drag.lastX) * 0.01;
-      drag.moved += Math.abs(ev.clientX - drag.lastX);
+      // 手动旋转：水平拖 = 环视（绕 Y），垂直拖 = 俯仰（绕 X，±0.9rad 防翻转过头）。
+      // 只改视角、不重跑模拟——用户要的是「转着看」，不是自动动画。
+      state.view.rotY += (ev.clientX - drag.lastX) * 0.008;
+      state.view.rotX = Math.max(-0.9, Math.min(0.9, (state.view.rotX ?? 0) + (ev.clientY - drag.lastY) * 0.006));
+      drag.moved += Math.abs(ev.clientX - drag.lastX) + Math.abs(ev.clientY - drag.lastY);
       drag.lastX = ev.clientX;
-      state.alpha = Math.max(state.alpha, ALPHA_MIN); // 旋转不需要重新模拟
+      drag.lastY = ev.clientY;
     } else {
       state.userAdjusted = true;
       state.view.tx += ev.clientX - drag.lastX;
