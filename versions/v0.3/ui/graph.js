@@ -488,8 +488,13 @@ export async function initGraph({ canvas, detailEl, toolbarEl, apiBase = '/api',
       nd.fx = nd.x;
       nd.fy = nd.y;
       drag = { kind: 'node', node: nd, moved: 0, downX: sx, downY: sy };
-    } else {
+    } else if (ev.shiftKey || ev.button === 1) {
+      // Shift 拖 / 中键拖 = 平移（旋转是默认手势，平移退到修饰键）
       drag = { kind: 'pan', lastX: ev.clientX, lastY: ev.clientY, moved: 0, downX: sx, downY: sy };
+    } else {
+      // 默认：空白拖拽 = 手动旋转。之前这里误留成 pan，导致 rotY 永远不动（用户 m07849）
+      drag = { kind: 'rotate', lastX: ev.clientX, lastY: ev.clientY, moved: 0, downX: sx, downY: sy };
+      state.userAdjusted = true;
     }
     canvas.setPointerCapture?.(ev.pointerId);
   };
@@ -505,9 +510,14 @@ export async function initGraph({ canvas, detailEl, toolbarEl, apiBase = '/api',
     } else if (drag.kind === 'rotate') {
       // 手动旋转：水平拖 = 环视（绕 Y），垂直拖 = 俯仰（绕 X，±0.9rad 防翻转过头）。
       // 只改视角、不重跑模拟——用户要的是「转着看」，不是自动动画。
-      state.view.rotY += (ev.clientX - drag.lastX) * 0.008;
-      state.view.rotX = Math.max(-0.9, Math.min(0.9, (state.view.rotX ?? 0) + (ev.clientY - drag.lastY) * 0.006));
-      drag.moved += Math.abs(ev.clientX - drag.lastX) + Math.abs(ev.clientY - drag.lastY);
+      // NaN 护栏：某一帧缺 lastX/lastY 也不能把视角写脏（写脏会让整个投影变 NaN、画面卡死）
+      const dxr = ev.clientX - (Number.isFinite(drag.lastX) ? drag.lastX : ev.clientX);
+      const dyr = ev.clientY - (Number.isFinite(drag.lastY) ? drag.lastY : ev.clientY);
+      if (Number.isFinite(dxr)) state.view.rotY += dxr * 0.008;
+      if (Number.isFinite(dyr)) {
+        state.view.rotX = Math.max(-0.9, Math.min(0.9, (state.view.rotX ?? 0) + dyr * 0.006));
+      }
+      drag.moved += Math.abs(dxr) + Math.abs(dyr);
       drag.lastX = ev.clientX;
       drag.lastY = ev.clientY;
     } else {
@@ -521,6 +531,7 @@ export async function initGraph({ canvas, detailEl, toolbarEl, apiBase = '/api',
   };
   const onPointerUp = (ev) => {
     if (!drag) return;
+    if (drag.kind === 'rotate' && drag.moved > 2) fitView(); // 旋转后重新贴合画布
     if (drag.kind === 'node') {
       const nd = drag.node;
       const wasLocked = nd.__locked === true;
@@ -573,6 +584,7 @@ export async function initGraph({ canvas, detailEl, toolbarEl, apiBase = '/api',
   };
   const onResize = () => { resizeCanvas(); render(); };
 
+  window.__strataGraphState = state; // 自动化验收用（只读快照，不参与业务）
   canvas.addEventListener('pointerdown', onPointerDown);
   canvas.addEventListener('pointermove', onPointerMove);
   canvas.addEventListener('pointerup', onPointerUp);
