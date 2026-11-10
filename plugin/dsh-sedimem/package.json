@@ -1,6 +1,6 @@
 {
   "name": "dsh-sedimem",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "sedimem 记忆中心：DSH 侧边栏一键打开只读观察台（今日 / 图谱 / 卫生），内嵌 observer，零运行时依赖。",
   "license": "MIT",
   "type": "module",

@@ -107,8 +107,8 @@ async function scanPatterns() {
       if (rule.onlyUnder && !rule.onlyUnder.some((p) => r.startsWith(p))) continue;
       let text;
       try { text = await fsp.readFile(f, 'utf8'); } catch { continue; }
-      // 本脚本自身与 CI 配置里出现模式串是正常的
-      if (r === 'tools/security-check.mjs' || r.startsWith('.github/')) continue;
+      // 本脚本自身、允许清单（它就是模式登记表）与 CI 配置里出现模式串是正常的
+      if (r === 'tools/security-check.mjs' || r === 'tools/security-allowlist.json' || r.startsWith('.github/')) continue;
       for (const m of text.matchAll(rule.pattern)) {
         const line = text.slice(0, m.index).split('\n').length;
         hits.push(`${r}:${line} → ${m[0].slice(0, 60)}`);
