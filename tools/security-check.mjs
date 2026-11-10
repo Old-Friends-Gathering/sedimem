@@ -76,14 +76,34 @@ const RULES = [
   },
 ];
 
+/** 读安全门禁豁免清单（每条必须写 reason；缺 reason 直接失败）。 */
+async function loadAllowlist() {
+  const p = path.join(ROOT, 'tools', 'security-allowlist.json');
+  const raw = await fsp.readFile(p, 'utf8').catch(() => '{"entries":[]}');
+  const json = JSON.parse(raw);
+  // 极简 glob：`**` 跨目录、`*` 不跨目录；其余正则元字符转义
+  const globToRe = (g) => {
+    const esc = (x) => x.replace(/[.+^${}()|[\]\\]/g, '\\$&');
+    const parts = g.split('**').map(esc);
+    return new RegExp('^' + parts.join('\u0001').replace(/\*/g, '[^/]*').replace(/\u0001/g, '.*') + '$');
+  };
+  return (json.entries || []).map((e) => ({ ...e, re: globToRe(e.glob) }));
+}
+
+function allowlisted(list, ruleId, relPath) {
+  return list.some((e) => (e.rules.includes(ruleId) || e.rules.includes('*')) && e.re.test(relPath) && Boolean(e.reason));
+}
+
 async function scanPatterns() {
   const { files, source } = await listFiles();
   const targets = files.filter((f) => TEXT_EXT.test(f));
+  const allow = await loadAllowlist();
   for (const rule of RULES) {
     const hits = [];
     for (const f of targets) {
       const r = rel(f);
       if (rule.allowFiles.some((a) => r.startsWith(a))) continue;
+      if (allowlisted(allow, rule.id, r)) continue;
       if (rule.onlyUnder && !rule.onlyUnder.some((p) => r.startsWith(p))) continue;
       let text;
       try { text = await fsp.readFile(f, 'utf8'); } catch { continue; }
@@ -145,7 +165,12 @@ async function s8GitHistorySecrets() {
     const { stdout } = await execFileAsync('git', ['log', '-p', '--all', '--no-color', '--', '.'],
       { cwd: ROOT, maxBuffer: 64 * 1024 * 1024 });
     const pat = /(ghp_[A-Za-z0-9]{20,}|github_pat_[A-Za-z0-9_]{20,}|-----BEGIN (?:RSA |OPENSSH )?PRIVATE KEY-----)/g;
-    hits = [...new Set([...stdout.matchAll(pat)].map((m) => m[0].slice(0, 24) + '…'))];
+    // 已被 security-allowlist.json 登记为「构造样例」的不算；新出现的值仍然失败
+    const allow = JSON.parse(await fsp.readFile(path.join(ROOT, 'tools', 'security-allowlist.json'), 'utf8').catch(() => '{"syntheticSecrets":[]}'));
+    const known = (allow.syntheticSecrets || []).filter((e) => e.reason);
+    hits = [...new Set([...stdout.matchAll(pat)].map((m) => m[0]))]
+      .filter((v) => !known.some((k) => v.startsWith(k.value)))
+      .map((v) => v.slice(0, 24) + '…');
   } catch {
     hits = [];
   }

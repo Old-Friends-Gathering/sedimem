@@ -61,7 +61,7 @@ I29 的 suspicious 用例实测注入结果仍是：
 
 ```bash
 cd versions/v0.4
-NODE=/Users/yeager/.dsh/dsh-runtimes/dsh-primary-runtime/dependencies/node/bin/node
+NODE=~/.dsh/dsh-runtimes/dsh-primary-runtime/dependencies/node/bin/node
 $NODE reviews/probes/v04-adv-semantic.mjs 2>/dev/null
 ```
 
@@ -503,7 +503,7 @@ MCP 侧等价调用：`memory_curate({ decisions:[{ ids:[tombstoneId, activeId],
 
 ```bash
 cd versions/v0.4
-NODE=/Users/yeager/.dsh/dsh-runtimes/dsh-primary-runtime/dependencies/node/bin/node
+NODE=~/.dsh/dsh-runtimes/dsh-primary-runtime/dependencies/node/bin/node
 for p in reviews/probes/v04-adv-*.mjs; do echo "== $p"; $NODE "$p" 2>/dev/null; done
 ```
 

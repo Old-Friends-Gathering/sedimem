@@ -1,6 +1,6 @@
 # sedimem v0.4 架构审核
 
-- 审核对象：`/Users/yeager/work-yeager/ldywoker/sedimem/versions/v0.4`（`versions/CURRENT` → v0.4）
+- 审核对象：`~/work-yeager/ldywoker/sedimem/versions/v0.4`（`versions/CURRENT` → v0.4）
 - 审核范围：语义道（embedder/vector/hybrid）、每步注入（inject + plugin pre-step）、半自动捕获（extract/queue）、disputed 视图、入库脱敏、搜索页/API、以及 `src/api/*`、`src/cli/*` 的接线。
 - 方式：只读源码 + 跑现有门禁 + 在 `versions/v0.4/reviews/probes/` 写探针。未修改任何 `src/`、`tests/` 文件。
 - 结论先行：**门禁是绿的，但 v0.4 不能按当前状态交付。** 370 个测试与 I1–I30 全过，原因是新路径的失败模式几乎都不在断言范围内；下面 6 个阻断项均可用探针稳定复现。
@@ -10,8 +10,8 @@
 ## 0. 验收复跑
 
 ```bash
-cd /Users/yeager/work-yeager/ldywoker/sedimem/versions/v0.4
-NODE=/Users/yeager/.dsh/dsh-runtimes/dsh-primary-runtime/dependencies/node/bin/node
+cd ~/work-yeager/ldywoker/sedimem/versions/v0.4
+NODE=~/.dsh/dsh-runtimes/dsh-primary-runtime/dependencies/node/bin/node
 
 $NODE --test 'tests/**/*.test.js'
 # tests 370 / suites 52 / pass 370 / fail 0 / duration_ms 6103
@@ -38,8 +38,8 @@ $NODE eval/run.js
 ```text
 case1 { text: '部署说明见 README', value: 'password=hunter2', tags: [] }
 case2 { text: 'api_key=[REDACTED:api_key]',
-        value: 'api_key=sk-abcdefghijklmnopqrstuvwxyz', value_leaks_secret: true }
-case3 supersede { text: 'token=ghp_abcdefghijklmnopqrstuvwxyz0123', text_leaks_token: true }
+        value: 'api_key=sk-REDACTED-EXAMPLE', value_leaks_secret: true }
+case3 supersede { text: 'token=ghp_REDACTED_EXAMPLE', text_leaks_token: true }
 case4 { title: 'token=ghp_bbbb…', title_leaks_token: true }
 secrets_found_in_truth_file: 3
 ```
@@ -416,8 +416,8 @@ N=1000 slots:1 pairs:499500 elapsed:~770-850ms response:43.45MB
 所有探针只写临时 `MEMO_HOME`，不触碰仓库数据：
 
 ```bash
-cd /Users/yeager/work-yeager/ldywoker/sedimem/versions/v0.4
-NODE=/Users/yeager/.dsh/dsh-runtimes/dsh-primary-runtime/dependencies/node/bin/node
+cd ~/work-yeager/ldywoker/sedimem/versions/v0.4
+NODE=~/.dsh/dsh-runtimes/dsh-primary-runtime/dependencies/node/bin/node
 
 $NODE reviews/probes/v04-redaction.mjs        # B1
 $NODE reviews/probes/v04-inject.mjs           # B2
