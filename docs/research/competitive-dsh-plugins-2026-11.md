@@ -80,3 +80,73 @@ sedimem 属于「文件约定型 × 治理增强」：JSONL 真相层 + Agent �
 - 实测（本仓 CI/本机）：sedimem 全列、prime-memory 12.9MB/346 文件（npm 包实测）、三端 PASS。
 - README 自述（未核源码）：engram 23 工具/证据门/SM-2、memsearch 5 端/RRF/Skills、MemOS L1–L3/Skill。
 - awesome 一句话（未核）：OpenViking/skepsun-engram/lgtm 等。
+
+## 6. 复核与补充（2026-11-10 第二轮，用户要求「看看对不对，还有没有其它」）
+
+复核方式：把上文每条数字和断言回本仓取数（`node --test`、`eval/results/LATEST.json`、`config/policy.json`、
+`grep src/`、`plugin/lib/index.js`）。**结论：方向对，但有 1 处数字过时、2 处表述不够准，另有 7 条优势和
+8 条不足被漏掉。**
+
+### 6.1 事实核对
+
+| 上文断言 | 复核结果 |
+|---|---|
+| 288 tests / 59 个测试文件 | ✅ 实测 288 pass / 0 fail，42 suites，59 个 test 文件 |
+| I1–I23 注入评测 | ⚠️ **过时：现为 I1–I24**（LATEST.json 的 `cases` 长度 24） |
+| 4 条自研门禁 | ✅ `tools/{quality-check,security-check,coverage-gate,windows-smoke}.mjs` |
+| p95≈2ms@5000 检索 | ✅ 实测 n5000 search p95 2.48ms（write p95 5.54ms） |
+| Tier-0 ≤800 / brief 总预算 / L3 ≤20 次 | ✅ policy：`brief.tier0Chars=800`、`totalChars=8000`、`l3.maxCallsPerRun=20`、`batchSize=10`、`ttlMs=30d` |
+| 无向量检索 | ✅ `grep -ril embedding\|vector src/` 零命中 |
+| disputed 默认不可见 | ✅ `statusOk(..., {includeDisputed=false, status:'active'})` |
+| 「三端实测 PASS」 | ✅ 脚本在仓且改名后最后一次 PASS；表述应更准确为「**仓内可复跑**，不是常驻验证」 |
+
+### 6.2 表述需要收紧的两处
+
+1. **「零依赖」要限定范围**：核心与插件壳零运行时依赖（gate Q1 强制），但**插件面板依赖 DSH 宿主**（slots/renderer），
+   `node:sqlite` 后端要求 Node ≥22 且是实验特性。写「零第三方依赖、零外部服务」比「零依赖」准确。
+2. **「跨客户端实测」不等于「持续保证」**：三端 PASS 是脚本手工跑出来的，没有 CI 里跑（CI 只有 macOS/Linux/Windows
+   smoke），所以三端一致性是「有证据的能力」而不是「有回归保护的能力」。
+
+### 6.3 漏掉的优势（真实且可核）
+
+1. **文本真相层可直接操作**：`grep`/`jq`/`git diff` 就能查改，坏行有 `memo doctor` 结构化诊断（file:line）；
+   SQLite 系（engram/MemOS/prime-memory）坏页整库难救，我们做过一次坏 JSONL 的结构化兜底。
+2. **记忆系统自身的可观测性**：每次检索落 `search` 事件（存 qHash 不存原文）→ nightly 出 noHitRate /
+   staleHitRate / avgTopScore / active 占比 30 天趋势。对比的 5 家里没有一家公开这种「记忆被用得怎么样」的指标。
+3. **多分库 + 运行时切库 + 按客户端覆盖**：`memory_scope` + `.scope.<client>.json` 解决「DSH 常驻进程 cwd 固定」
+   这个本生态独有问题；engram 有 user/project 双库但没有运行时切库，其它家单库。
+4. **自动裁决可解释、可回滚**：ruleJudge 把规则写进 note（`rule:strong+hits(a=9,b=3)`），`--dry-run` 可预演，
+   重跑幂等（applied=0）。对手多是「自动覆盖/自动合并」，不解释为什么。
+5. **决策日志即工程资产**：`docs/02` 53 条裁决 + 每版本 eval 快照 + CHANGELOG 的 Rejected 段——
+   被拒绝的方案也有记录，这对长期迭代比任何单点功能都值钱。
+6. **无任何网络调用**（无遥测/无云同步/可选远程 rerank 也没有）= 隐私与内网优势；OpenViking 要 server、
+   memsearch 可选 Zilliz 云、MemOS 要 daemon。
+7. **版本目录纪律**：`versions/CURRENT` 单点 + 冻结目录 + 门禁只审 CURRENT；对手无版本目录概念（升级只能覆盖）。
+
+### 6.4 漏掉的不足（按严重度）
+
+1. **没有 pre-step 自动注入（我认为这是比"无自动捕获"更严重的短板）**：`plugin/dsh-sedimem/lib/index.js`
+   只有 UI 代理与 health 路由，**没有任何 pre-step / systemPrompt 注入钩子**；记忆能不能进上下文，全靠模型
+   自觉调 `memory_brief`（靠 AGENTS.md 规则约束）。而 memsearch / OpenViking / prime-memory 都是 pre-step
+   自动召回注入。写进去但读不到 = 冷启动会话等于没记忆。
+2. **disputed 是隐形黑洞**：同 slot 不同值默认既不进 search 也不进 brief，用户看不到「有争议的事实」——
+   对比 engram 有信念视图（成立/待复核/已否定 + 证据链）、mcp-memory-service 有 beliefs 置信度。我们没有
+   面向人的冲突展示，只有 `dedupe scan`/`stats.conflictRate` 这种运维视角。
+3. **写入字段负担**：完整收益要写 subject/predicate/value/kind/slot；只给 text 会落 unstructured，图谱与去重
+   收益大打折扣。对手多数只要 `text + kind`，我们的门槛更高。
+4. **分发门槛**：npm 未发布，装法是 clone + `pnpm add file:` + cordis 配置 + 重启；对手 `dsh plugin add` 一条命令。
+   收录 PR 还在等审。
+5. **规模上限没测过**：bench 只到 n=5000，且每次启动全量重建索引（JSONL 全读 + 内存倒排）；10 万条会怎样
+   是空白——engram（SQLite+向量）与 memsearch（Milvus）在这点上是设计上更有余量。
+6. **明文落盘、无入库脱敏**：记忆里可能有密钥/内部信息，我们只做「检测可疑 + 读路径遮蔽」，engram 明确写了
+   入库脱敏（`[REDACTED:*]` 标记可筛选审计）。
+7. **图谱只读且不可搜索**：3 页都是只读，想定位某条具体记忆只能 CLI/Agent；engram 有检索实验台/长廊视图。
+8. **无 schema 迁移通道**：大版本换目录靠整体复制 + JSONL 稳定兼容；metrics/views 目录命名暗改过一次
+   （metrics 文件名 scope 化），没有正式 migration 工具（只有 compact 的备份）。
+
+### 6.5 修正后的短板排序（供 v0.4 取舍）
+
+`pre-step 注入 > 语义检索 > 自动捕获 > disputed 展示 > 分发门槛 > 规模验证 > 脱敏存储 > UI 搜索`
+
+理由：前三条共享同一个后果——「记忆存在但没用上」；其中 pre-step 注入是用一行钩子就能撬动最大收益的一条，
+应作为 v0.4 的第一优先，而不是此前写的「embedding 优先」。
