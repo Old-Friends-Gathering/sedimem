@@ -230,10 +230,9 @@ test('外部观察台死掉后自动回落内嵌（await probeOk 回归）', { t
   const port = await listen(server);
   const base = `http://127.0.0.1:${port}`;
   try {
-    // 第一轮：外部活着 → external
+    // 第一轮：外部活着 → external（ui/ 触发 ensureObserver，health 读模式）
+    await fetch(`${base}/api/dsh-sedimem/ui/`);
     let h = await (await fetch(`${base}/api/dsh-sedimem/health`)).json();
-    await fetch(`${base}/api/dsh-sedimem/ui/`); // 触发 ensureObserver
-    h = await (await fetch(`${base}/api/dsh-sedimem/health`)).json();
     assert.equal(h.mode, 'external');
 
     // 杀掉外部观察台 → 下一轮请求必须回落 embedded（而不是继续用死端口）
