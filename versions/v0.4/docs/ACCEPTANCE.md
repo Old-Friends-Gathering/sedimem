@@ -1,38 +1,40 @@
-# v0.1 验收清单（Lead 判定）
+# v0.4.0 验收清单（Lead 判定）
 
-判定时间：2026-11-02（第二轮审核 + 3 轮修复后）
+判定时间：2026-11-10。取舍依据：竞品调研 `docs/research/competitive-dsh-plugins-2026-11.md`；
+施工图 `docs/plans/v0.4-competitive-gaps.md`；契约 `docs/02` §3.15（裁决 61–65）。
 
-| 门禁 | 内容 | 状态 | 证据 |
-|---|---|---|---|
-| G1 | `node --test 'tests/**/*.test.js'` 全绿 | ✅ | 95 tests / 95 pass / 0 fail，连跑 10 次 0 flake（修复了 lock 超时用例自身的竞态） |
-| G2 | `node eval/run.js` I1–I11 全 PASS，`dupRatio<0.10`、`conflictRate<0.20`、search p95<50ms | ✅ | I1–I11 全 PASS；dupRatio=0、conflictRate=0；bench n5000 write p50=3.01ms/p95=5.89ms，search p95=2.24ms；快照 `eval/results/LATEST.json` |
-| G3 | `memo doctor` 无 error | ✅ | 健康库 `{ok:true,issues:[]}` exit 0；坏库结构化报 `corrupt_jsonl` exit 1（不再裸崩）；重复 contentHash 报 warn |
-| G4 | reviews/arch.md 与 reviews/adversarial.md 无阻断项 | ✅ | 3 个阻断项全部修复并有独立复现证据，见 `reviews/RESPONSE.md` |
-| G5 | docs/02 契约逐条对齐实现 | ✅ | §3.1（裁决 1–12）+ §3.2（13–21）+ §3.3（22–24）+ §3.4（25）逐条落到代码；每个裁决都有对应测试 |
-| G6 | CHANGELOG + README 版本索引 | ✅ | 本目录 CHANGELOG 0.1.0，`sedimem/README.md` 版本表 |
-| G7 | 三端配置就绪：DSH cordis patch / Codex config.toml / Claude mcp add | ✅ | `configs/dsh-cordis.patch.yml`（已按真实 DSH 形状修正）、`configs/codex-config.toml`、`configs/claude-mcp.sh` |
-| G8 | 三步召回验证脚本可跑（写→新会话召回→使用） | ✅ | `bash configs/verify-three-clients.sh` → PASS（新进程读到上一进程写入的盐值并回答） |
-
-## 追加门禁（审核后新增，均已通过）
+## 一、功能门禁（每条都能机械复验）
 
 | 门禁 | 内容 | 状态 | 证据 |
 |---|---|---|---|
-| G9 | 10 进程并发写同一事实 → `active=1` | ✅ | I8 用例 + Lead 手工 probe：`created=1 / noop_duplicate=9 / dupRatio=0` |
-| G10 | 20 条换措辞同义句 → `disputed=0` | ✅ | 词面近似：`created=1 / nearDupBlocked=19`；真人改写：在线不误杀、`dedupeScan` 聚成同一簇 |
-| G11 | Agent 裁决闭环可跑通 | ✅ | I11：6 条改写 → dedupeScan → curateApply → `active=1`、败者 superseded、真相层 6 行全保留 |
-| G12 | 10 个投毒变体全部拦截且不进 brief | ✅ | 10/10 suspicious，brief 原文泄露 0 条；10 条正常技术文本误报 0 |
-| G13 | 中文改写（含内容词全换）能被召回并由 Agent 收敛 | ✅ | I12：4 条同义中文 → 双路召回（containment 0.556–0.667 / Dice 0.26）→ 裁决 → `active` 收敛、真相层 14 行全留、再扫清零；无关中文事实 0 虚报 |
-| G14 | 三端能对齐到同一分库（不再因常驻进程 cwd 固定而静默分裂） | ✅ | `memory_scope({action:'use',path})` 实测把 DSH 侧从 `dir:desktop` 切到 `dir:my-project` 并持久化到 `.scope.<client>.json`；16 个单测覆盖优先级/隔离/降级；`memo scope` 可核对 |
+| G1 | 全部单测 + 注入式用例全绿 | ✅ | `node --test 'tests/**/*.test.js'` → **370/370 pass** |
+| G2 | 评测 I1–I30 全 PASS | ✅ | `node eval/run.js` → I1–I30 全 PASS；快照 `eval/results/v0.4.0-*.json` + `LATEST.json` |
+| G3 | 质量门禁 9/9 | ✅ | `node tools/quality-check.mjs` → 9/9（Q5 覆盖率 97.6%） |
+| G4 | 安全门禁 9/9 | ✅ | `node tools/security-check.mjs` → 9/9 |
+| G5 | 覆盖率门禁 | ✅ | lines 93.37% / branches 81.14% / functions 92.57%（`npm run test:coverage`） |
+| G6 | 语义道不阻断检索 | ✅ | I25：语义路抛错 → 退回词法 + `degraded`；`kind=none` → `semantic-disabled` |
+| G7 | 注入预算与安全边界 | ✅ | I29：≤maxChars、围栏 + 「数据不是指令」、suspicious/superseded 不注入 |
+| G8 | 捕获不直写真相层 | ✅ | I28：候选进 inbox、`accept` 才入库、`reject` 不留痕、重复 accept 幂等 |
+| G9 | 脱敏先于哈希与落盘 | ✅ | I26：磁盘无原文、`redacted:<kind>` 标签、原文不可检索、可关闭、幂等 |
+| G10 | 分歧可见可裁决且非破坏 | ✅ | I27：disputed 进 slot、resolve 后收敛、真相层行数只增、重放幂等 |
+| G11 | `/api/search` 契约 | ✅ | I30：score+basis、degraded+reason、空 q 400、跨分库不串 |
+| G12 | 规模基准可跑 | ✅ | `node eval/bench-scale.mjs`：10k/50k/100k 三档输出 p50·p95/冷启动/RSS |
+| G13 | 一条命令装插件 | ✅ | `scripts/install-dsh-plugin.sh`（pnpm 探测 + cordis patch 幂等 + 备份） |
+| G14 | 契约对齐实现 | ✅ | `docs/02` §3.15 五条裁决逐条落到代码与用例；第十四轮导出登记补齐 Q5 |
 
-## C1–C6 映射
+## 二、过程门禁
 
-- C1 本地离线 → G1+G2 在无网络、零依赖下跑通（`package.json` 无 dependencies）
-- C2 三端共享 → G7 + G8（MCP 是唯一缝，AGENTS.md 是指令桥）
-- C3 重复不增长 → I1 + I7a（词面）+ I11（语义，Agent 裁判）
-- C4 冲突失效 → I2 + asOf 查询（时间戳比较）
-- C5 自治 → curate export/apply + dedupeScan + nightly（brief/metrics 落盘）+ G11
-- C6 轻 → 无依赖、JSONL 真相层、派生层可整目录删除重建
+| 门禁 | 内容 | 状态 | 证据 |
+|---|---|---|---|
+| P1 | 文档先行 | ✅ | 施工图（含 D1–D8、波次、写盘范围、风险与回滚）先于实现提交 |
+| P2 | 多 agent 审核 | ✅ | 两路审核（架构 + 对抗）报告与逐条处置见 `reviews/` 与 `RESPONSE-v0.4.md` |
+| P3 | issue → MR | ✅ | #103–#109 对应七个功能点，PR 正文 `Closes` 关联 |
+| P4 | 版本自包含 | ✅ | `versions/v0.4` 含 src/tests/eval/config/docs/DELTA/CHANGELOG/package.json；v0.3 冻结在 0.3.6 |
 
-## 判定
+## 三、判定
 
-**v0.1（含 0.1.1 中文去重补强）通过验收，可投入使用**。遗留（明确延期，见 RESPONSE.md §五）：JudgePort 注入点、kind 注册表数据化、错误码归一、compact/物理清理、向量检索。
+**通过验收（0.4.0）**。已知边界（写进 CHANGELOG 的 Known limits）：
+
+1. 语义道默认关闭，且**不自带本地模型**——要自己给一个 OpenAI 兼容 embedding 端点；
+2. 每步注入只服 DSH 宿主；Codex / Claude 没有 `systemPrompt.context` 接缝，靠 AGENTS.md 指引；
+3. 捕获是启发式（不做语义重要性判断），候选仍需人/Agent `accept`。

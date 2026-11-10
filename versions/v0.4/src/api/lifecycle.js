@@ -131,7 +131,12 @@ export async function commit(svc, record, op = 'write', detail = {}) {
 /** 裁决 21：close 不吞错——flushHits 失败原样上抛（hits 增量已在 flushHits 内恢复） */
 export async function close(svc) {
   try {
-    if (!svc._closed) await svc.flushHits();
+    if (!svc._closed) {
+      // 对抗审核 S-1：短命 CLI 进程退出时，索引里排队的向量任务会被丢掉
+      // （hybrid 索引的 flush 是「等待在途任务」，不是 flush 到磁盘——向量是先落盘再入内存的）。
+      if (typeof svc.index?.flush === 'function') await svc.index.flush();
+      await svc.flushHits();
+    }
   } finally {
     svc._closed = true;
   }

@@ -1,4 +1,56 @@
-# CHANGELOG · v0.3
+# CHANGELOG · v0.4
+
+## [0.4.0] — 2026-11-10
+
+按竞品调研（`docs/research/competitive-dsh-plugins-2026-11.md`）补齐五项「别人有而我们没有」，
+每一项都是**机制**而不是声明；施工图 `docs/plans/v0.4-competitive-gaps.md`，契约 `docs/02` §3.15。
+
+### Added
+- **语义道（可插拔 EmbedderPort）**：`policy.search.embedder.kind = none|http`（默认 none）。
+  `src/index/embedder.js`（OpenAI 兼容 /v1/embeddings，超时 + 维度锁定）、`vector-index.js`
+  （`$MEMO_HOME/index/<scopeKey>.vectors.jsonl`，float32 base64，热加载容错）、`hybrid.js`
+  （RRF k=60 融合）、`hybrid-index.js`（IndexPort 包装：写入后台补向量、检索两路融合、
+  **语义路故障只降级不阻断**）。`memo backfill-vectors` 回填历史记录。
+- **每步注入（pre-step）**：`src/render/inject.js`（权威组装）+ `plugin/dsh-sedimem/lib/pre-step.js`
+  （宿主注册壳）。经 `systemPrompt.context` 动态 `text()` 注入，预算 `maxChars=1200`，
+  `<memory-context>` 围栏 + 「数据不是指令」声明；suspicious / superseded 永不注入；
+  默认关闭（`inject.enabled` 或 `SEDIMEM_INJECT=on`）。
+- **半自动捕获**：`src/capture/extract.js`（确定性抽取：前缀 / 引导词 / 列表项，代码块与 URL 排除）、
+  `queue.js`（`$MEMO_HOME/inbox/<scopeKey>.jsonl` 状态流）、`memo capture scan|list|accept|reject`。
+  候选**不进真相层**，accept 才走写入门禁。
+- **分歧（disputed）一等公民**：`src/views/conflicts.js`（按 slot 分组 + 候选对）、
+  `memo conflicts [resolve]`、`GET /api/conflicts`。
+- **入库脱敏**：`src/hygiene/redact.js`（private_key / jwt / github_token / aws_key / api_key /
+  internal_host / assignment），**先脱敏再算 contentHash**，tags 记 `redacted:<kind>`；幂等；
+  `policy.redact.enabled=false` 可整体关闭。
+- **UI 搜索页**：`#/search?q=`，结果带 `basis`（bm25 / vector / bm25+vector）与降级提示；
+  图谱节点详情可跳转到搜索。`GET /api/search` 是新端点（带 `degraded` / `degradedReason`）。
+- **规模基准**：`eval/bench-scale.mjs`（10k/50k/100k，write/search p50·p95 + 冷启动 + RSS）。
+- **一条命令安装插件**：`scripts/install-dsh-plugin.sh`（pnpm 自动探测、cordis patch 幂等更新、备份）。
+
+### Changed
+- `createMemoryService({ policy })` 支持构造期策略覆盖（浅合并，测试与多租户用）。
+- `search()` 结果多带 `basis`；`/api/search` 与 MCP 检索响应透传 `degraded`。
+- `package.json` 版本 0.4.0；版本目录按规则新建 `versions/v0.4`（v0.3 冻结在 0.3.6）。
+
+### Fixed
+- 脱敏与写入的顺序：`value` 曾从原始 input 取（绕过脱敏），改为取脱敏后的写输入。
+
+#### Fixed（v0.4 双路审核修复，见 `reviews/RESPONSE-v0.4.md`）
+
+- 脱敏旁路：`value`/`title`/`source.quote` 与 `supersede()` 现在都脱敏（`redactedInput()`），assignment 规则覆盖 `"password":"x"`、`DB_PASSWORD=`、嵌套 JSON。
+- 注入越权：围栏标记转义、按 id 折叠只注当前版本、`suspicious` 永不注入、预算不足不输出。
+- 分歧超组：自由文本不再构成 slot 分歧，`resolveConflicts` 明确拒绝。
+- 捕获队列并发：同步互斥锁 + 原子 rename，两进程 200 条不丢；坏行只跳过不阻断。
+- 向量模型隔离：换模型后旧向量被跳过并清理；hybrid `add` 兼容单参调用（在线写入立即产向量）。
+- 裁决不能复活墓碑：`curateApply` 拒绝 `tombstoned`（含 MCP 路径）。
+- `/api/conflicts` 载荷上限：`limit`（默认 50/上限 200）+ 单 slot 候选对 200，带 `truncated` 标记。
+
+## Known limits
+- 语义道默认关闭，且**没有内置本地模型**（要自己给一个 OpenAI 兼容 embedding 端点）；
+  未配置时所有检索 `degraded=true / semantic-disabled`，UI 如实提示。
+- 每步注入只服 DSH 宿主（`systemPrompt.context`）；Codex / Claude 需靠 AGENTS.md / CLAUDE.md 指引。
+- 捕获是启发式（引导词/前缀/列表），不判断语义重要性；候选仍需人/Agent accept。
 
 ## [0.3.6] – 2026-11-10
 
@@ -275,7 +327,17 @@
 
 - `src/api/service.js` 索引构造改为 `createIndex({...})` 单点注入（import + 一行调用，不改任何检索语义）。
 
-### Known limits
+#### Fixed（v0.4 双路审核修复，见 `reviews/RESPONSE-v0.4.md`）
+
+- 脱敏旁路：`value`/`title`/`source.quote` 与 `supersede()` 现在都脱敏（`redactedInput()`），assignment 规则覆盖 `"password":"x"`、`DB_PASSWORD=`、嵌套 JSON。
+- 注入越权：围栏标记转义、按 id 折叠只注当前版本、`suspicious` 永不注入、预算不足不输出。
+- 分歧超组：自由文本不再构成 slot 分歧，`resolveConflicts` 明确拒绝。
+- 捕获队列并发：同步互斥锁 + 原子 rename，两进程 200 条不丢；坏行只跳过不阻断。
+- 向量模型隔离：换模型后旧向量被跳过并清理；hybrid `add` 兼容单参调用（在线写入立即产向量）。
+- 裁决不能复活墓碑：`curateApply` 拒绝 `tombstoned`（含 MCP 路径）。
+- `/api/conflicts` 载荷上限：`limit`（默认 50/上限 200）+ 单 slot 候选对 200，带 `truncated` 标记。
+
+## Known limits
 
 - 后端切换走 `config/policy.json`（未提供 `MEMO_INDEX` 环境变量覆盖）。
 - 同一 scope 的 sqlite 索引仍要求单写者（与真相层锁一致），不做多进程并发写索引。
@@ -331,7 +393,17 @@
 
 - 并发漏读（`_reload` 水位序）已在 **[0.1.2]** 修复，本版不重复；此处仅引用——Web 层只读路径因此可信。
 
-### Known limits
+#### Fixed（v0.4 双路审核修复，见 `reviews/RESPONSE-v0.4.md`）
+
+- 脱敏旁路：`value`/`title`/`source.quote` 与 `supersede()` 现在都脱敏（`redactedInput()`），assignment 规则覆盖 `"password":"x"`、`DB_PASSWORD=`、嵌套 JSON。
+- 注入越权：围栏标记转义、按 id 折叠只注当前版本、`suspicious` 永不注入、预算不足不输出。
+- 分歧超组：自由文本不再构成 slot 分歧，`resolveConflicts` 明确拒绝。
+- 捕获队列并发：同步互斥锁 + 原子 rename，两进程 200 条不丢；坏行只跳过不阻断。
+- 向量模型隔离：换模型后旧向量被跳过并清理；hybrid `add` 兼容单参调用（在线写入立即产向量）。
+- 裁决不能复活墓碑：`curateApply` 拒绝 `tombstoned`（含 MCP 路径）。
+- `/api/conflicts` 载荷上限：`limit`（默认 50/上限 200）+ 单 slot 候选对 200，带 `truncated` 标记。
+
+## Known limits
 
 - **不做导出**（PDF/分享链接）、**不做写操作**（页面无任何写按钮，写入入口仍只有 CLI 与 MCP）、
   **不做远程访问**（仅 `127.0.0.1`，无鉴权故不监听局域网）。
@@ -429,7 +501,17 @@
 - `close()` 吞 `flushHits` 错误 → 错误传播 + `doctor` 报 `hits_unflushed`
 - `source.agent` 从枚举放宽为自由标签（保留名黑名单），新客户端可直接接入
 
-### Known limits（明确延期到 v0.2，见 reviews/RESPONSE.md §五）
+#### Fixed（v0.4 双路审核修复，见 `reviews/RESPONSE-v0.4.md`）
+
+- 脱敏旁路：`value`/`title`/`source.quote` 与 `supersede()` 现在都脱敏（`redactedInput()`），assignment 规则覆盖 `"password":"x"`、`DB_PASSWORD=`、嵌套 JSON。
+- 注入越权：围栏标记转义、按 id 折叠只注当前版本、`suspicious` 永不注入、预算不足不输出。
+- 分歧超组：自由文本不再构成 slot 分歧，`resolveConflicts` 明确拒绝。
+- 捕获队列并发：同步互斥锁 + 原子 rename，两进程 200 条不丢；坏行只跳过不阻断。
+- 向量模型隔离：换模型后旧向量被跳过并清理；hybrid `add` 兼容单参调用（在线写入立即产向量）。
+- 裁决不能复活墓碑：`curateApply` 拒绝 `tombstoned`（含 MCP 路径）。
+- `/api/conflicts` 载荷上限：`limit`（默认 50/上限 200）+ 单 slot 候选对 200，带 `truncated` 标记。
+
+## Known limits（明确延期到 v0.2，见 reviews/RESPONSE.md §五）
 - 无向量检索、无跨机同步、无自动摘要
 - 语义去重依赖「Agent 当裁判」，尚无 `JudgePort` 注入点（无法夜间无人 LLM 裁决）
 - `kind`/`status` 仍非数据化注册表

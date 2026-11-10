@@ -8,6 +8,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { defaultPolicy as POLICY } from '../config/policy.js';
 import { metricsFileName, legacyMetricsFileName } from '../config/paths.js';
+import { listConflicts, resolveConflicts } from '../views/conflicts.js';
 
 const V0_1_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
 
@@ -635,6 +636,42 @@ function dateShift(date, deltaDays) {
 
 // ---------------------------------------------------------------- 路由
 
+/**
+ * /api/search（v0.4 D1）：带 basis / degraded 的检索视图。
+ * 语义道未配置或不可用时照常返回结果，但给 degraded=true + 原因，UI 据此提示。
+ */
+async function apiSearch(service, query) {
+  const q = String(query.get('q') ?? '').trim();
+  if (!q) throw invalidArg('search: q (non-empty) is required');
+  const limit = intArg(query, 'limit', { min: 1, max: 100, fallback: 30 });
+  const result = await service.search(q, { limit, includeDisputed: true });
+  return {
+    query: q,
+    items: result.items.map((it) => ({
+      id: it.record.id,
+      text: it.record.text,
+      kind: it.record.kind,
+      score: it.score,
+      basis: it.basis ?? 'bm25',
+      validFrom: it.record.validFrom ?? it.record.createdAt,
+    })),
+    total: result.total,
+    degraded: result.degraded === true,
+    degradedReason: result.degradedReason ?? null,
+  };
+}
+
+/** /api/conflicts（v0.4 D4）：disputed 一等公民视图（按 slot 分组 + 候选对）。 */
+async function apiConflicts(service, params) {
+  const raw = params?.get?.('limit');
+  if (raw === null || raw === undefined || raw === '') return listConflicts({ service });
+  const limit = Number(raw);
+  if (!Number.isInteger(limit) || limit < 1) {
+    throw Object.assign(new Error('conflicts: limit must be a positive integer'), { code: 'E_INVALID_ARG' });
+  }
+  return listConflicts({ service, limit });
+}
+
 const ROUTES = new Map([
   ['/api/summary', apiSummary],
   ['/api/brief', apiBrief],
@@ -643,6 +680,8 @@ const ROUTES = new Map([
   ['/api/graph', apiGraph],
   ['/api/hygiene', apiHygiene],
   ['/api/timeline', apiTimeline],
+  ['/api/search', apiSearch],
+  ['/api/conflicts', apiConflicts],
 ]);
 
 /** 从 E_CORRUPT_JSONL 的 message 解析 file/line（与 service._parseCorruptLocation 同格式）。 */

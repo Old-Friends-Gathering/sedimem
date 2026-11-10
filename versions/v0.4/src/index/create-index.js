@@ -6,6 +6,9 @@
 import { createRequire } from 'node:module';
 import { InvertedIndex } from './inverted-index.js';
 import { SqliteIndex } from './sqlite-index.js';
+import { createEmbedder } from './embedder.js';
+import { createVectorIndex } from './vector-index.js';
+import { createHybridIndex } from './hybrid-index.js';
 
 const require = createRequire(import.meta.url);
 
@@ -30,6 +33,15 @@ function indexUnavailable(msg) {
  * @returns {InvertedIndex|SqliteIndex}
  */
 export function createIndex({ policy, memoHome, scope = 'default', clock, sqliteModule } = {}) {
+  const base = createLexicalIndex({ policy, memoHome, scope, clock, sqliteModule });
+  const hybrid = maybeWrapHybrid(base, { policy, memoHome, scope, clock });
+  return hybrid ?? base;
+}
+
+/**
+ * 只构造词法索引（memory / sqlite）。语义道是外挂包装，不改变词法后端的语义。
+ */
+function createLexicalIndex({ policy, memoHome, scope, clock, sqliteModule }) {
   const backend = policy?.index?.backend ?? 'memory';
   if (backend === 'memory') return new InvertedIndex({ clock });
   if (backend !== 'sqlite') {
@@ -61,6 +73,37 @@ export function createIndex({ policy, memoHome, scope = 'default', clock, sqlite
   }
   warnExperimentalOnce();
   return new SqliteIndex({ memoHome, scope, clock, sqlite: mod });
+}
+
+/**
+ * 语义道包装（v0.4 D1）：policy.search.embedder.kind !== 'none' 时把词法索引
+ * 包成双路索引；未配置时原样返回（返回 null 表示不包装，零成本）。
+ * 向量文件落在 $MEMO_HOME/index/<scopeKey>.vectors.jsonl，删掉可用 backfill 重建。
+ */
+function maybeWrapHybrid(base, { policy, memoHome, scope, clock }) {
+  const cfg = policy?.search?.embedder ?? { kind: 'none' };
+  const kind = cfg.kind ?? 'none';
+  if (kind === 'none') return null;
+  if (!memoHome) {
+    const err = new Error('createIndex: semantic lane requires memoHome (vector index path)');
+    err.code = 'E_INVALID_ARG';
+    throw err;
+  }
+  const embedder = createEmbedder({ policy, memoHome });
+  const dim = Number(cfg.dim ?? 0) > 0 ? Number(cfg.dim) : undefined;
+  const vectorIndex = createVectorIndex({ memoHome, scope, dim, model: cfg.model });
+  return createHybridIndex({
+    base,
+    embedder,
+    vectorIndex,
+    rrfK: policy?.search?.rrfK ?? 60,
+    vectorTopK: policy?.search?.vectorTopK ?? 30,
+    minScore: policy?.search?.minScore ?? 0.25,
+    clock,
+    onDegrade: (reason) => {
+      if (!process.env.MEMO_QUIET) console.warn(`[memo] semantic lane degraded: ${reason}`);
+    },
+  });
 }
 
 /** 默认加载 node:sqlite；加载失败返回 null（由调用方统一抛 E_INDEX_UNAVAILABLE） */

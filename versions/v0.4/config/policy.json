@@ -48,7 +48,17 @@
   "search": {
     "limitDefault": 10,
     "kindWeighted": true,
-    "recencyHalflifeMs": 7776000000
+    "recencyHalflifeMs": 7776000000,
+    "rrfK": 60,
+    "vectorTopK": 30,
+    "minScore": 0.25,
+    "embedder": {
+      "kind": "none",
+      "url": "",
+      "model": "",
+      "timeoutMs": 3000,
+      "dim": 0
+    }
   },
   "curate": {
     "batchLimit": 20,
@@ -87,5 +97,22 @@
     "maxCallsPerRun": 20,
     "batchSize": 10,
     "ttlMs": 2592000000
+  },
+  "redact": {
+    "enabled": true,
+    "kinds": [
+      "private_key",
+      "jwt",
+      "github_token",
+      "aws_key",
+      "api_key",
+      "internal_host",
+      "assignment"
+    ]
+  },
+  "capture": {
+    "maxItems": 50,
+    "maxLineChars": 400,
+    "inboxDir": "inbox"
   }
 }

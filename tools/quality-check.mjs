@@ -23,7 +23,11 @@ export const THRESHOLDS = {
   // v0.3 调高到 9000：分层视图新增 4 个模块（views/l2 302 行、views/l3 272 行、
   // render/tier0 103 行、cli/view 177 行 = 854 行）。单文件 900 硬线不动 ——
   // 总量放大允许「多个小模块」，不允许「一个大文件」。改这条要同步 docs/07 基线表与 CHANGELOG。
-  maxTotalSrcLines: 9000,
+  // v0.4 调高到 12000：竞品差距补齐新增 8 个模块（index/embedder 142 + vector-index 175 +
+  // hybrid 85 + hybrid-index 210 + capture/extract 120 + capture/queue 200 + views/conflicts 200
+  // + hygiene/redact 110 + render/inject 204 ≈ 1450 行）。单文件 900 硬线**不动** ——
+  // 放宽总量是允许「多写几个职责单一的小模块」，不是允许「一个文件堆更多东西」。
+  maxTotalSrcLines: 12000,
   /** 单元测试文件数下限 */
   minTestFiles: 8,
   /** 契约文档对 src 导出名的覆盖率（%）；内部工具函数在 contract-exempt.json 里登记豁免 */

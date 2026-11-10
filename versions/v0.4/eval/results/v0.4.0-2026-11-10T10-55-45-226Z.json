@@ -1,0 +1,230 @@
+{
+  "version": "0.4.0",
+  "ts": "2026-11-10T10:55:45.233Z",
+  "cases": [
+    {
+      "id": "I1",
+      "pass": true,
+      "ms": 243,
+      "detail": "ok"
+    },
+    {
+      "id": "I2",
+      "pass": true,
+      "ms": 176,
+      "detail": "ok"
+    },
+    {
+      "id": "I3",
+      "pass": true,
+      "ms": 173,
+      "detail": "ok"
+    },
+    {
+      "id": "I4",
+      "pass": true,
+      "ms": 177,
+      "detail": "ok"
+    },
+    {
+      "id": "I5",
+      "pass": true,
+      "ms": 141,
+      "detail": "ok"
+    },
+    {
+      "id": "I6",
+      "pass": true,
+      "ms": 268,
+      "detail": "ok"
+    },
+    {
+      "id": "I7",
+      "pass": true,
+      "ms": 570,
+      "detail": "ok"
+    },
+    {
+      "id": "I8",
+      "pass": true,
+      "ms": 246,
+      "detail": "ok"
+    },
+    {
+      "id": "I9",
+      "pass": true,
+      "ms": 89,
+      "detail": "ok"
+    },
+    {
+      "id": "I10",
+      "pass": true,
+      "ms": 92,
+      "detail": "ok"
+    },
+    {
+      "id": "I11",
+      "pass": true,
+      "ms": 104,
+      "detail": "ok"
+    },
+    {
+      "id": "I12",
+      "pass": true,
+      "ms": 95,
+      "detail": "ok"
+    },
+    {
+      "id": "I13",
+      "pass": true,
+      "ms": 100,
+      "detail": "ok"
+    },
+    {
+      "id": "I14",
+      "pass": true,
+      "ms": 128,
+      "detail": "ok"
+    },
+    {
+      "id": "I15",
+      "pass": true,
+      "ms": 205,
+      "detail": "ok"
+    },
+    {
+      "id": "I16",
+      "pass": true,
+      "ms": 109,
+      "detail": "ok"
+    },
+    {
+      "id": "I17",
+      "pass": true,
+      "ms": 82,
+      "detail": "ok"
+    },
+    {
+      "id": "I18",
+      "pass": true,
+      "ms": 86,
+      "detail": "ok"
+    },
+    {
+      "id": "I19",
+      "pass": true,
+      "ms": 94,
+      "detail": "ok"
+    },
+    {
+      "id": "I20",
+      "pass": true,
+      "ms": 161,
+      "detail": "ok"
+    },
+    {
+      "id": "I21",
+      "pass": true,
+      "ms": 397,
+      "detail": "ok"
+    },
+    {
+      "id": "I22",
+      "pass": true,
+      "ms": 320,
+      "detail": "ok"
+    },
+    {
+      "id": "I23",
+      "pass": true,
+      "ms": 109,
+      "detail": "ok"
+    },
+    {
+      "id": "I24",
+      "pass": true,
+      "ms": 105,
+      "detail": "ok"
+    },
+    {
+      "id": "I25",
+      "pass": true,
+      "ms": 65,
+      "detail": "ok"
+    },
+    {
+      "id": "I26",
+      "pass": true,
+      "ms": 76,
+      "detail": "ok"
+    },
+    {
+      "id": "I27",
+      "pass": true,
+      "ms": 99,
+      "detail": "ok"
+    },
+    {
+      "id": "I28",
+      "pass": true,
+      "ms": 77,
+      "detail": "ok"
+    },
+    {
+      "id": "I29",
+      "pass": true,
+      "ms": 67,
+      "detail": "ok"
+    },
+    {
+      "id": "I30",
+      "pass": true,
+      "ms": 110,
+      "detail": "ok"
+    }
+  ],
+  "metrics": {
+    "active": 3,
+    "dupRatio": 0,
+    "conflictRate": 0,
+    "unitCost": 12.667,
+    "nearDupBlocked": 19,
+    "disputedAfterCurate": 0,
+    "dedupeClusters": 1,
+    "agentMerged": 5,
+    "agentLoopActive": 1,
+    "gate": {
+      "dupRatio": true,
+      "conflictRate": true,
+      "disputedCountI7": true,
+      "dedupeClustersFound": true,
+      "agentLoopConverged": true
+    }
+  },
+  "bench": {
+    "n1000": {
+      "write": {
+        "p50": 0.8912920000002487,
+        "p95": 1.3890419999997903,
+        "n": 1000
+      },
+      "search": {
+        "p50": 0.6062499999998181,
+        "p95": 0.8655840000001263,
+        "n": 200
+      }
+    },
+    "n5000": {
+      "write": {
+        "p50": 2.904500000000553,
+        "p95": 6.39454200000182,
+        "n": 5000
+      },
+      "search": {
+        "p50": 1.7772920000024897,
+        "p95": 2.4520840000004682,
+        "n": 200
+      }
+    }
+  }
+}

@@ -36,33 +36,61 @@ export function invalidArg(msg) {
 }
 
 /**
+ * 策略浅合并：override 的每个顶层 section 整体替换，section 内部按 key 覆盖一层。
+ * 只用于构造期覆盖（测试 / 多租户），不做深递归——策略结构是我们自己定义的，两层足够。
+ * @param {object} base 默认策略
+ * @param {object|undefined} override 覆盖项
+ */
+export function mergePolicy(base, override) {
+  if (!override) return base;
+  const out = { ...base };
+  for (const [key, val] of Object.entries(override)) {
+    const cur = base?.[key];
+    out[key] = val && typeof val === 'object' && !Array.isArray(val)
+      && cur && typeof cur === 'object' && !Array.isArray(cur)
+      ? { ...cur, ...val }
+      : val;
+  }
+  return out;
+}
+
+/**
  * 创建 MemoryService（已 build 索引）。
  * @param {{memoHome: string, scope?: string, cwd?: string, clock?: object,
- *          store?: JsonlStore, index?: InvertedIndex, quota?: QuotaPolicy}} args
+ *          store?: JsonlStore, index?: InvertedIndex, quota?: QuotaPolicy,
+ *          judge?: object, policy?: object}} args
+ *   policy 覆盖项（v0.4）：传部分对象时与默认 POLICY 深合并，用于测试与多租户。
  */
 export async function createMemoryService({
   memoHome, scope, cwd, clock = systemClock,
-  store, index, quota, judge,
+  store, index, quota, judge, policy,
 } = {}) {
   if (!memoHome) throw invalid('createMemoryService: memoHome is required');
+  // 浅合并（每个顶层 section 一层）：传 {redact:{enabled:false}} 只改那一项，
+  // 其余 section 仍取默认 POLICY —— 避免测试里的局部覆盖把 kinds/quota 一起抹掉。
+  const effectivePolicy = mergePolicy(POLICY, policy);
   const resolvedScope = scope ?? resolveScope({ cwd, env: process.env }).scope;
   const service = new MemoryService({
     memoHome,
     scope: resolvedScope,
     clock,
     store: store ?? new JsonlStore({ memoHome }),
-    index: index ?? createIndex({ policy: POLICY, memoHome, scope: resolvedScope, clock }),
+    // policy 可在构造时覆盖（测试与多租户用）；默认仍是 config/policy.json 的 POLICY。
+    policy: effectivePolicy,
+    index: index ?? createIndex({ policy: effectivePolicy, memoHome, scope: resolvedScope, clock }),
     quota: quota ?? new QuotaPolicy({}),
     // 裁决 50：裁决器是注入点（JudgePort）。缺省 ruleJudge 确定性、无 LLM，保证 curateAuto 行为可复现。
-    judge: judge ?? createJudge({ policy: POLICY }),
+    judge: judge ?? createJudge({ policy: effectivePolicy }),
   });
   await service._init();
   return service;
 }
 
 export class MemoryService {
-  constructor({ memoHome, scope, clock, store, index, quota, judge }) {
+  constructor({ memoHome, scope, clock, store, index, quota, judge, policy }) {
     this.memoHome = memoHome;
+    /** @type {object} 生效策略（默认 config/policy.json；构造期可覆盖，裁决 53 之后新增） */
+    this.policy = policy;
     this.scope = scope;
     this.clock = clock;
     this.store = store;

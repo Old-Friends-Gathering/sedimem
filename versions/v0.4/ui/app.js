@@ -5,6 +5,7 @@
  * 安全约定：所有接口数据一律 textContent 写入，禁止 innerHTML 拼数据，无 eval。
  */
 import { renderLineChart, fmtPct as pctFmt } from './charts.js';
+import { renderSearchResults } from './search-view.js';
 
 const API = 'api'; // 文档相对：根路径部署与子路径代理（DSH 插件 iframe）都能解析
 /** 东八区为 +480；-new Date().getTimezoneOffset() 把浏览器时区换成「东为正」分钟数。 */
@@ -415,9 +416,81 @@ function destroyGraph() {
   graphScope = undefined;
 }
 
+/* ---------------- 搜索页（B3 / D8） ---------------- */
+
+/** 当前路由 query 里的 ?q= 值（搜索词）；无则空串。 */
+function currentQuery() {
+  const m = /(?:^|[?&])q=([^&]*)/.exec(location.hash.split('?')[1] ?? '');
+  return m ? decodeURIComponent(m[1].replace(/\+/g, ' ')) : '';
+}
+
+/** 渲染搜索页：读 hash 里的 q，fetch api/search（scope 由 api() 统一拼接），结果整段写入。 */
+async function loadSearch() {
+  const input = document.getElementById('search-input');
+  const box = document.getElementById('search-results');
+  const q = currentQuery();
+  if (input && input.value !== q) input.value = q;
+  if (!q) {
+    box.replaceChildren(el('p', 'dim', '输入关键词后回车开始搜索。'));
+    return;
+  }
+  box.replaceChildren(el('p', 'dim', '搜索中…'));
+  let data;
+  try {
+    // 相对路径（无前导斜杠）；scope 拼接照 api() 现有实现；limit=30（D8 契约）
+    data = await api(`/search?q=${encodeURIComponent(q)}&limit=30`);
+  } catch (err) {
+    showError(box, err);
+    return;
+  }
+  // Q9 禁 innerHTML：用 DOMParser 把已 escapeHtml 的字符串解析成 DOM 再挂载。
+  // 这样既保留 search-view.js 的「纯函数返回 HTML 字符串」（node 可测），
+  // 又不把字符串直接赋给 innerHTML/insertAdjacentHTML。
+  const html = renderSearchResults({
+    query: q,
+    items: Array.isArray(data?.items) ? data.items : [],
+    degraded: !!data?.degraded,
+  });
+  const doc = new DOMParser().parseFromString(html, 'text/html');
+  box.replaceChildren(...Array.from(doc.body.childNodes));
+}
+
+/** 输入框回车 → 写 hash（保留当前 scope），hashchange 触发重查；切分库同理重查。 */
+function bindSearchControls() {
+  document.getElementById('search-input').addEventListener('keydown', (ev) => {
+    if (ev.key !== 'Enter') return;
+    const v = ev.target.value.trim();
+    if (!v) return;
+    const sc = currentScope();
+    location.hash = `#/search?q=${encodeURIComponent(v)}${sc ? `&scope=${encodeURIComponent(sc)}` : ''}`;
+  });
+}
+
+/**
+ * 图谱节点详情浮层末尾追加「在搜索中查看」。
+ * graph.js 不在 B3 写盘范围：借助其暴露的只读快照 window.__sedimemGraphState.selectedId
+ * 拿到当前节点 id（D8：仅传 id 查询），用 MutationObserver 在详情刷新后补一行链接。
+ */
+function watchGraphDetail() {
+  const detail = document.getElementById('graph-detail');
+  if (!detail || typeof MutationObserver !== 'function') return;
+  const mo = new MutationObserver(() => {
+    const id = window.__sedimemGraphState?.selectedId;
+    if (!id) return; // 未选中（占位文案）不加链接
+    if (detail.lastElementChild?.classList?.contains('graph-search-link')) return; // 已加过（自身触发）
+    const sc = currentScope();
+    const p = el('p', 'graph-search-link');
+    const a = el('a', '', '在搜索中查看');
+    a.href = `#/search?q=${encodeURIComponent(id)}${sc ? `&scope=${encodeURIComponent(sc)}` : ''}`;
+    p.append(a);
+    detail.append(p);
+  });
+  mo.observe(detail, { childList: true });
+}
+
 /* ---------------- 路由 ---------------- */
 
-const ROUTES = ['today', 'graph', 'hygiene'];
+const ROUTES = ['today', 'graph', 'search', 'hygiene'];
 
 function currentRoute() {
   // 只取 path 部分：`#/graph?scope=repo:x` 的路由是 graph，不是 "graph?scope=repo:x"
@@ -433,6 +506,7 @@ async function render() {
   }
   if (route === 'today') await loadToday();
   else if (route === 'graph') await loadGraph();
+  else if (route === 'search') await loadSearch();
   else await loadHygiene();
 }
 
@@ -490,6 +564,8 @@ function renderScopePicker(scopes) {
 /* ---------------- 启动 ---------------- */
 
 bindTodayControls();
+bindSearchControls();
+watchGraphDetail();
 loadScopes();
 loadSummary();
 if (!location.hash) location.hash = '#/today';

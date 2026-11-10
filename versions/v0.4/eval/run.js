@@ -86,6 +86,18 @@ const CASE_FILES = [
   ['I22', 'i22-brief-quota.test.js'],
   ['I23', 'i23-l3-budget.test.js'],
   ['I24', 'i24-label-title.test.js'],
+  ['I25', 'i25-hybrid-fusion.test.js'],
+  ['I26', 'i26-redaction.test.js'],
+  ['I27', 'i27-conflicts.test.js'],
+  ['I28', 'i28-capture.test.js'],
+  ['I29', 'i29-injection-budget.test.js'],
+  ['I30', 'i30-search-api.test.js'],
+  ['I31', 'i31-redaction-surfaces.test.js'],
+  ['I32', 'i32-injection-hardening.test.js'],
+  ['I33', 'i33-conflicts-scope.test.js'],
+  ['I34', 'i34-capture-queue-safety.test.js'],
+  ['I35', 'i35-vector-model-and-incremental.test.js'],
+  ['I36', 'i36-curate-tombstone-guard.test.js'],
 ];
 
 function runCase(id, file) {

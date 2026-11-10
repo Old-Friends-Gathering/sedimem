@@ -191,6 +191,13 @@ const UNSTRUCTURED_SLOT = '\u0000unstructured';
  * @param {import('../core/record.js').MemoryRecord} r
  * @returns {string}
  */
+/** 是否为「无结构」记录（subject 与 predicate 都是默认值 text）。 */
+export function isUnstructured(r) {
+  const s = normalizeText(String(r?.subject ?? 'text'));
+  const p = normalizeText(String(r?.predicate ?? 'text'));
+  return s === 'text' && p === 'text';
+}
+
 export function dedupeSlotKey(r) {
   const s = normalizeText(String(r?.subject ?? 'text'));
   const p = normalizeText(String(r?.predicate ?? 'text'));

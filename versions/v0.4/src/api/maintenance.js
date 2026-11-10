@@ -321,6 +321,12 @@ export async function applyIdsDecision(svc, d) {
   const recs = ids.map((id) => {
     const r = svc._records.get(id);
     if (!r) throw notFound(`curateApply: record ${id} not found`);
+    // 对抗审核 B-6：墓碑是「物理删除前的终态」，裁决不能把它翻回 active。
+    // 之前 keep_both 会把墓碑改回 active（删除被撤销）、a_wins 会把墓碑 winner 复活，
+    // 而且这条路径从 MCP `memory_curate` 可达 —— 等于远端工具能撤销删除。
+    if (r.status === 'tombstoned') {
+      throw invalidArg(`curateApply: record ${id} is tombstoned（已删除的记录不参与裁决）`);
+    }
     return r;
   });
   const decision = d.decision;

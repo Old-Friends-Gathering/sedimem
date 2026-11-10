@@ -118,3 +118,19 @@ td.b{width:78px}
   border:1px solid var(--line,#2a3140);border-radius:999px;padding:4px 10px;font-size:12px;
   font-family:inherit;cursor:pointer;max-width:min(48vw,320px)}
 .scope-select:focus-visible{outline:2px solid var(--fact,#5b9cf5);outline-offset:2px}
+
+/* 搜索页（B3 / D8） */
+.search-bar{display:flex;gap:8px;margin:10px 0 14px}
+.search-bar input[type="search"]{flex:1;max-width:520px;background:var(--panel2);color:var(--fg);
+  border:1px solid var(--line,#2a3140);border-radius:8px;padding:8px 12px;font:inherit;font-size:13px}
+.search-bar input[type="search"]:focus-visible{outline:2px solid var(--fact,#5b9cf5);outline-offset:1px}
+.search-q{color:var(--dim,#8b95a8);font-size:12px;margin-bottom:8px}
+.search-empty{color:var(--faint);font-size:13px;padding:32px 0;text-align:center}
+.hitrow{display:grid;grid-template-columns:auto 1fr;gap:4px 10px;align-items:start;
+  padding:10px 0;border-top:1px solid var(--line)}
+.hitrow:first-of-type{border-top:none}
+.hit-text{color:var(--fg);font-size:13px;white-space:pre-wrap;word-break:break-word}
+.hitrow .meta{grid-column:2;color:var(--faint);font-size:11px}
+.search-more{color:var(--faint);font-size:12px;padding:8px 0;text-align:center}
+.graph-search-link{margin:10px 0 0;font-size:12px}
+.graph-search-link a{color:var(--fact,#5b9cf5)}

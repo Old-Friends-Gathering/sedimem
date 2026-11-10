@@ -73,12 +73,13 @@ export async function searchRecords(svc, query, {
   const pickedById = new Map(picked.map((r) => [r.id, r]));
   const filter = (rec) => pickedById.has(rec.id);
   const idxLimit = typeof svc.index.size === 'number' ? svc.index.size : undefined;
-  const hits = svc.index.search(query, { limit: idxLimit, filter });
+  // 语义道包装（hybrid-index）的 search 是 async（要跑 embedder）；await 对同步索引是零成本。
+  const hits = await svc.index.search(query, { limit: idxLimit, filter });
 
   const nowMs = svc.clock.nowMs();
   const halfLife = POLICY.search.recencyHalflifeMs;
   const items = [];
-  for (const { id, score } of hits) {
+  for (const { id, score, basis } of hits) {
     const rec = pickedById.get(id);
     if (!rec) continue;
     // 裁决 49：kind 的唯一真相是 policy.kinds（kindMeta 内部 kinds 优先、旧 kindWeight 兜底），
@@ -87,7 +88,7 @@ export async function searchRecords(svc, query, {
     const ageMs = Math.max(0, nowMs - Date.parse(rec.createdAt));
     const decay = monotonicDecay(ageMs, halfLife);
     const final = score * kw * decay * (typeof rec.confidence === 'number' ? rec.confidence : 0.8);
-    if (final > 0) items.push({ record: rec, score: final });
+    if (final > 0) items.push({ record: rec, score: final, basis: basis ?? null });
   }
   items.sort((a, b) => b.score - a.score);
   const top = items.slice(0, limit);
@@ -113,11 +114,25 @@ export async function searchRecords(svc, query, {
       svc._extraHits.set(record.id, (svc._extraHits.get(record.id) ?? 0) + 1);
     }
   }
-  return {
+  const out = {
     items: top.map((it) => ({ ...it, record: withExtraHits(svc, maskSuspicious(svc, it.record, includeSuspicious)) })),
     total: items.length,
     asOf: asOfIso ?? svc._nowIso(),
   };
+  // 语义道状态要显式可见（D1）：调用方（/api/search、CLI、MCP）据此提示「这次是纯词法」。
+  // 两种情形都算降级，但原因不同：
+  //  - 已启用但运行期不可用（embedder 挂了 / 维度漂移）→ hybrid 索引自带 degraded + reason；
+  //  - 从未启用（policy.search.embedder.kind='none'）→ 索引没被包装，这里按策略补齐，
+  //    避免「配置关闭」被误读成「检索正常但没结果」。
+  const semanticKind = ((svc.policy ?? POLICY).search?.embedder?.kind) ?? 'none';
+  if (svc.index?.degraded) {
+    out.degraded = true;
+    out.degradedReason = svc.index.degradedReason ?? 'unknown';
+  } else if (semanticKind === 'none') {
+    out.degraded = true;
+    out.degradedReason = 'semantic-disabled';
+  }
+  return out;
 }
 
 /** 裁决 16/42：遮蔽实现见 api/mask.js（四个正文字段一起遮，避免 payload 换字段绕过） */

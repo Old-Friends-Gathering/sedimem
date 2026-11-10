@@ -20,6 +20,7 @@
 <nav>
   <button id="tab-today">今日</button>
   <button id="tab-graph">图谱</button>
+  <button id="tab-search">搜索</button>
   <button id="tab-hygiene">卫生</button>
 </nav>
 
@@ -53,6 +54,16 @@
       <aside id="graph-detail"><p class="dim" id="graph-hint">点击节点查看详情。</p></aside>
     </div>
     <p class="dim" id="graph-mode-note" style="margin-top:6px">3D 力导向（实验）：滚轮缩放、空白拖拽旋转、双击节点聚焦。</p>
+  </section>
+
+  <!-- ============ 搜索（B3 / D8） ============ -->
+  <section id="search">
+    <h2>搜索记忆</h2>
+    <div class="sub">词法检索（语义道启用时自动融合）；结果按相关度排序，跟随顶栏分库。</div>
+    <div class="search-bar">
+      <input type="search" id="search-input" placeholder="输入关键词，回车搜索" aria-label="搜索记忆">
+    </div>
+    <div id="search-results"></div>
   </section>
 
   <!-- ============ 卫生 ============ -->

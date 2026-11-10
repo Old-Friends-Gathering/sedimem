@@ -5,9 +5,46 @@ import { createRecord, validateRecord, withPatch } from '../core/record.js';
 import { withLock } from '../storage/lock.js';
 import { decideWrite } from '../hygiene/write-gate.js';
 import { detectSuspicious } from '../hygiene/suspicious.js';
+import { redactText } from '../hygiene/redact.js';
 import { defaultPolicy as POLICY } from '../config/policy.js';
 // 错误工厂从 service.js 反向引用（错误文本被测试断言，必须单一来源）。
 import { invalid, notFound } from './service.js';
+
+
+/**
+ * 统一脱敏入口（对抗审核 B1）：text / value / title / source.quote **四个面**都要过一遍，
+ * 且**不依赖 text 是否变化**——上一版把 value 脱敏嵌在 `if (red.changed)` 里，
+ * text 干净而 value 含密钥时 value 原样落盘。
+ * @returns {{input: object, kinds: string[]}}
+ */
+function redactInput(svc, input) {
+  const policy = svc.policy ?? POLICY;
+  if ((policy.redact ?? POLICY.redact)?.enabled === false) return { input, kinds: [] };
+  const kinds = new Set();
+  const collect = (red) => { for (const { kind } of red.redactions) kinds.add(kind); };
+  const out = { ...input };
+  if (typeof out.text === 'string') {
+    const red = redactText(out.text, { policy });
+    collect(red);
+    if (red.changed) out.text = red.text;
+  }
+  if (typeof out.value === 'string') {
+    const red = redactText(out.value, { policy });
+    collect(red);
+    if (red.changed) out.value = red.text;
+  }
+  if (typeof out.title === 'string') {
+    const red = redactText(out.title, { policy });
+    collect(red);
+    if (red.changed) out.title = red.text;
+  }
+  if (out.source && typeof out.source === 'object' && typeof out.source.quote === 'string') {
+    const red = redactText(out.source.quote, { policy });
+    collect(red);
+    if (red.changed) out.source = { ...out.source, quote: red.text };
+  }
+  return { input: out, kinds: [...kinds] };
+}
 
 /**
  * 写入。严格按契约动作优先级：hash 命中 → 同 slot 同值 → 同 slot 异值 → created。
@@ -27,11 +64,21 @@ export async function writeRecord(svc, input) {
   );
   if (verdict.suspicious && !tags.includes('suspicious')) tags.push('suspicious');
 
+  // 脱敏（v0.4 D7）：先脱敏再进 createRecord —— 这样 contentHash、真相层、索引、
+  // 事件流看到的都是脱敏后的文本，原文不落盘（只留 redacted:<kind> 痕迹供审计）。
+  // 关掉时（policy.redact.enabled=false）行为与 0.3.x 完全一致。
+  const redacted = redactInput(svc, input);
+  const writeInput = redacted.input;
+  for (const kind of redacted.kinds) {
+    const tag = `redacted:${kind}`;
+    if (!tags.includes(tag)) tags.push(tag);
+  }
+
   const candidate = createRecord({
-    ...input,
+    ...writeInput,
     tags,
     scope: svc.scope,
-    value: input.value ?? input.text,
+    value: writeInput.value ?? writeInput.text,
     subject: input.subject ?? 'text',
     predicate: input.predicate ?? 'text',
   }, { clock: svc.clock });
@@ -104,17 +151,27 @@ export async function supersedeRecord(svc, { oldId, value, text, source, reason 
   if (old.status === 'tombstoned') {
     throw invalid(`supersede: record ${oldId} is tombstoned（已删除的记录不可取代，请直接写新记录）`);
   }
-  const body = text ?? value;
+  // 对抗审核 B1：supersede 是第二条写路径，之前完全绕过脱敏与投毒检测。
+  const bodyInput = { text: text ?? value ?? '', value: value ?? old.value, source: source ?? old.source };
+  const redacted = redactInput(svc, bodyInput);
+  const body = redacted.input.text;
+  const supTags = Array.isArray(old.tags) ? [...old.tags] : [];
+  for (const kind of redacted.kinds) {
+    const tag = `redacted:${kind}`;
+    if (!supTags.includes(tag)) supTags.push(tag);
+  }
+  const supVerdict = detectSuspicious(body, POLICY.suspiciousPatterns, { heuristics: POLICY.suspiciousHeuristics });
+  if (supVerdict.suspicious && !supTags.includes('suspicious')) supTags.push('suspicious');
   const record = createRecord({
     text: body,
-    value: value ?? old.value,
+    value: redacted.input.value,
     subject: old.subject,
     predicate: old.predicate,
     kind: old.kind,
     scope: svc.scope,
-    source: source ?? old.source,
+    source: redacted.input.source,
     confidence: old.confidence,
-    tags: old.tags,
+    tags: supTags,
     privacy: old.privacy,
     supersedes: oldId,
   }, { clock: svc.clock });

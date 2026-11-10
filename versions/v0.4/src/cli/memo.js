@@ -674,6 +674,56 @@ async function main() {
       }
       return 0;
     }
+    case 'backfill-vectors': {
+      const { backfillCli } = await import('./backfill.js');
+      const { createEmbedder } = await import('../index/embedder.js');
+      const { loadPolicy } = await import('../config/policy.js');
+      return await backfillCli(opts, {
+        createEmbedder,
+        policy: loadPolicy(),
+        json: asJson,
+      });
+    }
+    case 'conflicts': {
+      const { listConflicts, resolveConflicts } = await import('../views/conflicts.js');
+      const service = await loadService();
+      try {
+        if (positional[0] === 'resolve') {
+          const r = await resolveConflicts({
+            service,
+            slot: String(opts.slot ?? ''),
+            winnerId: String(opts.winner ?? positional[1] ?? ''),
+            note: opts.note === true ? undefined : opts.note,
+          });
+          if (asJson) printJson(r);
+          else {
+            process.stdout.write(`conflicts resolve: 落败 ${r.resolved.length} 条`
+              + `${r.skipped.length ? `，跳过 ${r.skipped.length}` : ''}\n`);
+            for (const x of r.resolved) process.stdout.write(`  · ${x.id} → superseded\n`);
+          }
+          return 0;
+        }
+        const r = await listConflicts({ service });
+        if (asJson) printJson(r);
+        else {
+          process.stdout.write(`conflicts: ${r.slots.length} 个 slot，disputed ${r.disputedCount} 条，scanned ${r.scanned}\n`);
+          for (const slot of r.slots) {
+            process.stdout.write(`  [${slot.disputedCount ? 'DISPUTED' : 'ACTIVE'}] ${slot.key}（${slot.records.length} 条）\n`);
+            for (const rec of slot.records) {
+              process.stdout.write(`    ${rec.status === 'disputed' ? '!' : '·'} ${rec.id}  ${String(rec.text).slice(0, 60)}\n`);
+            }
+          }
+          if (r.slots.length > 0) process.stdout.write('  用 memo conflicts resolve --slot <key> --winner <id> 裁决\n');
+        }
+        return 0;
+      } finally {
+        await service.close();
+      }
+    }
+    case 'capture': {
+      const { captureCli } = await import('./capture.js');
+      return await captureCli({ sub: positional[0], file: opts.file, scope: opts.scope, json: asJson, ids: opts.ids, all: opts.all === true, note: opts.note });
+    }
     case 'migrate':
       if (positional[0] !== 'dsh-memory') {
         throw new UsageError(`未知的 migrate 目标: ${positional[0] ?? '(空)'}\n${USAGE}`);
