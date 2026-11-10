@@ -3,7 +3,7 @@
 // 各写一遍正则，改名漂移会让趋势图静默缺数。这里把「scope → scopeKey → 文件名」收敛到一处。
 
 /**
- * scope 归一化成文件名安全片段：`repo:strata` → `repo-strata`。
+ * scope 归一化成文件名安全片段：`repo:sedimem` → `repo-sedimem`。
  * 规则：非 [a-z0-9._-] 的连续字符折叠成单个 `-`（大小写统一小写）。
  * @param {string} scope
  * @returns {string}

@@ -23,13 +23,13 @@ test('I21 视图重建：12 条真实记录 → 删 views 目录 → 重建字�
     // 同 slot 两条（subject/predicate 显式）：值不可比 → 第二条 disputed，
     // 两条都进真相层，exportRecords(status:'all') 一并取出，slot 块因此有 2 条
     writes.push(svc.write({
-      text: 'strata 的依赖策略是零运行时依赖', kind: 'decision',
-      subject: 'strata', predicate: 'dependency-policy',
+      text: 'sedimem 的依赖策略是零运行时依赖', kind: 'decision',
+      subject: 'sedimem', predicate: 'dependency-policy',
       value: 'zero-runtime-deps', source: { agent: 'test' },
     }));
     writes.push(svc.write({
       text: '依赖策略补充：第三方包一律不引入', kind: 'decision',
-      subject: 'strata', predicate: 'dependency-policy',
+      subject: 'sedimem', predicate: 'dependency-policy',
       value: 'no-third-party-packages', source: { agent: 'test' },
     }));
 
@@ -41,9 +41,9 @@ test('I21 视图重建：12 条真实记录 → 删 views 目录 → 重建字�
 
     // 其余 8 条：结构化单值事实，覆盖多种 kind
     const slots = [
-      ['strata', 'version', '0.3.0'],
-      ['strata', 'module-lifecycle', 'fsync-before-rename'],
-      ['strata', 'test-runner', 'node-test'],
+      ['sedimem', 'version', '0.3.0'],
+      ['sedimem', 'module-lifecycle', 'fsync-before-rename'],
+      ['sedimem', 'test-runner', 'node-test'],
       ['team', 'release-cadence', 'biweekly'],
       ['build', 'node-major', '22'],
       ['repo', 'license', 'proprietary'],
@@ -82,8 +82,8 @@ test('I21 视图重建：12 条真实记录 → 删 views 目录 → 重建字�
     // 同 slot 两条 → dependency-policy 这个 slot 块恰有 2 条
     const slotBlock = view1.blocks.find((b) => b.key.startsWith('slot:'));
     assert.ok(slotBlock, '应存在 slot 块');
-    // normalizeText 把 '-' 归一成空格 → key 为 slot:strata\u0001dependency policy
-    const depBlock = view1.blocks.find((b) => b.key === 'slot:strata\u0001dependency policy');
+    // normalizeText 把 '-' 归一成空格 → key 为 slot:sedimem\u0001dependency policy
+    const depBlock = view1.blocks.find((b) => b.key === 'slot:sedimem\u0001dependency policy');
     assert.ok(depBlock, '应存在 dependency-policy slot 块');
     assert.equal(depBlock.recordIds.length, 2, `同 slot 两条应聚在一个块，实际 ${depBlock.recordIds.length}`);
 

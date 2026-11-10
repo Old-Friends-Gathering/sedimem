@@ -23,7 +23,7 @@ test('I24 标题优先 + 同主题聚合（label / brief / graph 三面一致）
     await service.write({ text: '观察台只读，没有写端点', kind: 'fact', subject: 'observer', predicate: 'readonly', value: 'true', source: SRC });
     await service.write({ text: '观察台支持 ?scope= 切分库', kind: 'fact', subject: 'observer', predicate: 'scope', value: 'query', source: SRC });
     // 两条自由文本（无法聚合）
-    await service.write({ text: '部署脚本在 scripts/strata-run.sh', kind: 'fact', source: SRC });
+    await service.write({ text: '部署脚本在 scripts/sedimem-run.sh', kind: 'fact', source: SRC });
     await service.write({ text: '夜间整合 03:30 由 launchd 触发', kind: 'fact', source: SRC });
 
     const all = await service.exportRecords({ status: 'all', limit: 1000 });

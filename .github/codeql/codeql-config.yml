@@ -3,6 +3,6 @@
 # `versions/v0.1/` 是冻结的历史快照（0.1.2，见其 FROZEN.md）：只读、不随 CI 跑、不再演进。
 # 对它做安全扫描没有收益（修了也不发版），却会把当年已修过的问题重新报成新告警，
 # 噪声盖住真正需要关注的当前版本。所以扫描范围收敛到当前版本（versions/CURRENT = v0.2）。
-name: strata
+name: sedimem
 paths-ignore:
   - versions/v0.1/**

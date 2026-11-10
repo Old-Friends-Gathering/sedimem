@@ -5,7 +5,7 @@
 
 | 计划 | 对应需求 | 状态 | 覆盖版本 |
 |---|---|---|---|
-| [`v0.2-web-ui-plan.md`](v0.2-web-ui-plan.md) | issue [#10](https://github.com/Old-Friends-Gathering/strata/issues/10) 只读 Web UI（设计见 [`08-web-ui.md`](../08-web-ui.md)） | 待执行 | v0.1.3 + v0.2.0 |
+| [`v0.2-web-ui-plan.md`](v0.2-web-ui-plan.md) | issue [#10](https://github.com/Old-Friends-Gathering/sedimem/issues/10) 只读 Web UI（设计见 [`08-web-ui.md`](../08-web-ui.md)） | 待执行 | v0.1.3 + v0.2.0 |
 
 ## 约定
 

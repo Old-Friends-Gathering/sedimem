@@ -36,7 +36,7 @@ test('I15 常驻服务：外部进程写入后，下一次 API 请求立即可�
     const { stdout } = await execFileAsync(process.execPath, [
       CLI, 'write',
       '--text', '常驻服务必须能看到外部进程写入的新记忆，否则截面会自相矛盾。',
-      '--subject', 'strata/web', '--predicate', 'live-refresh',
+      '--subject', 'sedimem/web', '--predicate', 'live-refresh',
       '--agent', 'cli-writer',
     ], { env });
     assert.match(stdout, /created/, `CLI 写入应成功，实际输出：${stdout}`);
@@ -48,12 +48,12 @@ test('I15 常驻服务：外部进程写入后，下一次 API 请求立即可�
 
     const records = await (await fetch(url('api/records?status=active'))).json();
     assert.equal(records.records.length, 1, '记录列表必须包含外部写入');
-    assert.equal(records.records[0].subject, 'strata/web');
+    assert.equal(records.records[0].subject, 'sedimem/web');
 
     // 4) 时间线：新事件必须有服务端生成的 label，不能退化成 op 名
     const today = await (await fetch(url(`api/today?date=${new Date().toISOString().slice(0, 10)}&tzOffset=0`))).json();
     assert.equal(today.counts.created, 1, '今日新增应为 1');
-    const createdRow = today.timeline.find((r) => r.op === 'write' && r.label && r.label.includes('strata/web'));
+    const createdRow = today.timeline.find((r) => r.op === 'write' && r.label && r.label.includes('sedimem/web'));
     assert.ok(createdRow, `时间线应有带 label 的创建行，实际：${JSON.stringify(today.timeline)}`);
     assert.ok(!/^(write|created)$/.test(createdRow.label), 'label 不得退化为操作名');
 

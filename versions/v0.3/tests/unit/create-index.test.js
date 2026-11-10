@@ -12,7 +12,7 @@ import { InvertedIndex } from '../../src/index/inverted-index.js';
 import { SqliteIndex } from '../../src/index/sqlite-index.js';
 
 let memoHome;
-beforeEach(() => { memoHome = mkdtempSync(join(tmpdir(), 'strata-createidx-')); });
+beforeEach(() => { memoHome = mkdtempSync(join(tmpdir(), 'sedimem-createidx-')); });
 afterEach(() => { rmSync(memoHome, { recursive: true, force: true }); });
 
 const clock = { now: () => '2026-01-01T00:00:00Z', nowMs: () => 0 };

@@ -99,7 +99,7 @@
 ### Why
 
 用户开了 Codex 会话干活，观察台看不到任何记录——查下来 `~/.memo/items/` 只有一个分库
-`repo:strata`，说明 Codex 一条都没写；而观察台本来就只服务启动时那一个分库，
+`repo:sedimem`，说明 Codex 一条都没写；而观察台本来就只服务启动时那一个分库，
 即使别的项目写了另一分库也看不见。两个问题都修：观察台能切分库（本版），
 写入规则从「用户说记住才写」改成「有实质产出写 1–3 条」（`~/.codex/AGENTS.md`，本机配置非仓库内容）。
 
@@ -248,11 +248,11 @@
 - `docs/02-data-model-and-contract.md` **§3.8 内部模块导出清单**（15 个内部导出登记，Q5 契约覆盖从 62% 提到 100%）。
 
 ### Changed
-- 目录 `memory-system/` → **`strata/`**（产品名 strata；技术标识保持 `memo`/`MEMO_*`/`memory_*`/`serverName: memo`，
-  v0.2 再做带兼容期的重命名）。仓库 https://github.com/Old-Friends-Gathering/strata 。
-- `package.json`：name → `@old-friends-gathering/strata`，version → 0.1.2，`test` 脚本改 glob 形状
+- 目录 `memory-system/` → **`sedimem/`**（产品名 sedimem；技术标识保持 `memo`/`MEMO_*`/`memory_*`/`serverName: memo`，
+  v0.2 再做带兼容期的重命名）。仓库 https://github.com/Old-Friends-Gathering/sedimem 。
+- `package.json`：name → `@old-friends-gathering/sedimem`，version → 0.1.2，`test` 脚本改 glob 形状
   （`node --test tests/` 在 Node 24 会 MODULE_NOT_FOUND），补 `license`/`repository`/`homepage`/`bugs`。
-- `README.md` 重写为品牌页（为什么叫 strata、地层表、门禁表、迭代纪律）。
+- `README.md` 重写为品牌页（为什么叫 sedimem、地层表、门禁表、迭代纪律）。
 
 ## [0.1.1] - 2026-11-02（三端接入后补强：中文去重）
 

@@ -2,7 +2,7 @@
 
 ## 这个系统里"什么是敏感数据"
 
-`strata`（仓库名 strata，技术标识仍是 `memo`）存的是**跨会话的个人/项目事实**，默认落在本机
+`sedimem`（仓库名 sedimem，技术标识仍是 `memo`）存的是**跨会话的个人/项目事实**，默认落在本机
 `$MEMO_HOME`（缺省 `~/.memo`）。真正的敏感面不是"代码漏洞"，而是：
 
 | 资产 | 风险 | 现有防线 |
@@ -19,7 +19,7 @@
 ## 报告漏洞
 
 - **不要开公开 issue**。用 GitHub 私密漏洞报告：
-  <https://github.com/Old-Friends-Gathering/strata/security/advisories/new>
+  <https://github.com/Old-Friends-Gathering/sedimem/security/advisories/new>
 - 报告请包含：影响版本（`versions/*/CHANGELOG.md` 的最新段）、复现步骤、影响面（是否泄露记忆正文/能否跨分库读取/能否绕过 suspicious 遮蔽）。
 - 我们会在 7 天内给出初步结论；确认后修复并在此文件记录（不含利用细节）。
 

@@ -10,7 +10,7 @@
  * - 拖节点（拖时固定 fx/fy）、滚轮缩放 0.4–2.5（鼠标为锚）、空白拖拽平移、
  *   单击节点渲染详情到 detailEl、双击锁定/释放。
  * - 边默认只画 same-entity + supersedes；工具栏「全开」+ duplicate-of / disputed-with 单独勾选；
- *   偏好存 localStorage 键 `strata.graph.edges`（JSON，只存偏好不存正文）。
+ *   偏好存 localStorage 键 `sedimem.graph.edges`（JSON，只存偏好不存正文）。
  * - sampled.shown < sampled.total 时画布右上角常驻「已采样 shown / total 条」。
  */
 

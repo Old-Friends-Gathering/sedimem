@@ -32,14 +32,14 @@ function rec(id, createdAt, text, extra = {}) {
 }
 
 test('viewDir 用 scopeKeyOf 拼出 <memoHome>/views/<scopeKey>/', () => {
-  assert.equal(viewDir('/mh', 'repo:strata'), join('/mh', 'views', scopeKeyOf('repo:strata')));
-  assert.equal(viewDir('/mh', 'repo:strata'), join('/mh', 'views', 'repo-strata'));
+  assert.equal(viewDir('/mh', 'repo:sedimem'), join('/mh', 'views', scopeKeyOf('repo:sedimem')));
+  assert.equal(viewDir('/mh', 'repo:sedimem'), join('/mh', 'views', 'repo-sedimem'));
 });
 
 test('稳定 blockId：两次 build 结果完全相等', () => {
   const records = [
-    rec('01A', '2026-01-01T00:00:00.000Z', 'strata 用 node 内置模块'),
-    rec('01B', '2026-01-02T00:00:00.000Z', '零依赖原则', { subject: 'strata', predicate: 'dependency' }),
+    rec('01A', '2026-01-01T00:00:00.000Z', 'sedimem 用 node 内置模块'),
+    rec('01B', '2026-01-02T00:00:00.000Z', '零依赖原则', { subject: 'sedimem', predicate: 'dependency' }),
   ];
   const a = buildL2(records, { scope: 'repo:test', policy: POLICY });
   const b = buildL2(records, { scope: 'repo:test', policy: POLICY });
@@ -47,7 +47,7 @@ test('稳定 blockId：两次 build 结果完全相等', () => {
 });
 
 test('blockId = sha256(key).slice(0,12)，key 含 slot 前缀', () => {
-  const records = [rec('01B', '2026-01-02T00:00:00.000Z', 'v1', { subject: 'strata', predicate: 'version' })];
+  const records = [rec('01B', '2026-01-02T00:00:00.000Z', 'v1', { subject: 'sedimem', predicate: 'version' })];
   const { blocks } = buildL2(records, { scope: 'repo:test', policy: POLICY });
   assert.equal(blocks.length, 1);
   const key = blocks[0].key;

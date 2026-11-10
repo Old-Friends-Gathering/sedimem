@@ -1,77 +1,77 @@
 {
-  "version": "0.3.2",
-  "ts": "2026-11-09T09:28:33.460Z",
+  "version": "0.3.4",
+  "ts": "2026-11-10T02:38:40.941Z",
   "cases": [
     {
       "id": "I1",
       "pass": true,
-      "ms": 90,
+      "ms": 98,
       "detail": "ok"
     },
     {
       "id": "I2",
       "pass": true,
-      "ms": 89,
+      "ms": 80,
       "detail": "ok"
     },
     {
       "id": "I3",
       "pass": true,
-      "ms": 79,
+      "ms": 78,
       "detail": "ok"
     },
     {
       "id": "I4",
       "pass": true,
-      "ms": 71,
+      "ms": 80,
       "detail": "ok"
     },
     {
       "id": "I5",
       "pass": true,
-      "ms": 73,
+      "ms": 78,
       "detail": "ok"
     },
     {
       "id": "I6",
       "pass": true,
-      "ms": 119,
+      "ms": 121,
       "detail": "ok"
     },
     {
       "id": "I7",
       "pass": true,
-      "ms": 158,
+      "ms": 132,
       "detail": "ok"
     },
     {
       "id": "I8",
       "pass": true,
-      "ms": 304,
+      "ms": 243,
       "detail": "ok"
     },
     {
       "id": "I9",
       "pass": true,
-      "ms": 72,
+      "ms": 71,
       "detail": "ok"
     },
     {
       "id": "I10",
       "pass": true,
-      "ms": 73,
+      "ms": 75,
       "detail": "ok"
     },
     {
       "id": "I11",
       "pass": true,
-      "ms": 89,
+      "ms": 85,
       "detail": "ok"
     },
     {
       "id": "I12",
       "pass": true,
-      "ms": 83,
+      "ms": 84,
       "detail": "ok"
     },
     {
@@ -83,67 +83,67 @@
     {
       "id": "I14",
       "pass": true,
-      "ms": 123,
+      "ms": 126,
       "detail": "ok"
     },
     {
       "id": "I15",
       "pass": true,
-      "ms": 139,
+      "ms": 144,
       "detail": "ok"
     },
     {
       "id": "I16",
       "pass": true,
-      "ms": 106,
+      "ms": 117,
       "detail": "ok"
     },
     {
       "id": "I17",
       "pass": true,
-      "ms": 81,
+      "ms": 82,
       "detail": "ok"
     },
     {
       "id": "I18",
       "pass": true,
-      "ms": 82,
+      "ms": 117,
       "detail": "ok"
     },
     {
       "id": "I19",
       "pass": true,
-      "ms": 92,
+      "ms": 180,
       "detail": "ok"
     },
     {
       "id": "I20",
       "pass": true,
-      "ms": 158,
+      "ms": 169,
       "detail": "ok"
     },
     {
       "id": "I21",
       "pass": true,
-      "ms": 382,
+      "ms": 395,
       "detail": "ok"
     },
     {
       "id": "I22",
       "pass": true,
-      "ms": 337,
+      "ms": 380,
       "detail": "ok"
     },
     {
       "id": "I23",
       "pass": true,
-      "ms": 101,
+      "ms": 110,
       "detail": "ok"
     },
     {
       "id": "I24",
       "pass": true,
-      "ms": 99,
+      "ms": 107,
       "detail": "ok"
     }
   ],
@@ -168,25 +168,25 @@
   "bench": {
     "n1000": {
       "write": {
-        "p50": 0.9100829999997586,
-        "p95": 1.3416670000001432,
+        "p50": 0.9294589999999516,
+        "p95": 1.5193749999998545,
         "n": 1000
       },
       "search": {
-        "p50": 0.5777090000001408,
-        "p95": 0.7385840000006283,
+        "p50": 0.5517079999999623,
+        "p95": 0.8248750000002474,
         "n": 200
       }
     },
     "n5000": {
       "write": {
-        "p50": 2.7579169999999067,
-        "p95": 5.143499999998312,
+        "p50": 2.8459160000002157,
+        "p95": 5.5399579999975685,
         "n": 5000
       },
       "search": {
-        "p50": 1.7011249999995925,
-        "p95": 2.313750000001164,
+        "p50": 1.8222080000014103,
+        "p95": 2.483124999998836,
         "n": 200
       }
     }

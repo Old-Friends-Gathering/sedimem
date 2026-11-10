@@ -63,7 +63,7 @@ memory_scope({action:'use', path:'/abs/path/to/project'})  # 切到项目分库�
 - **命令行等价物**（不想开 Agent 时）：
   ```bash
   NODE=${MEMO_NODE:-node}
-  cd strata/versions/v0.3
+  cd sedimem/versions/v0.3
   $NODE src/cli/memo.js brief
   $NODE src/cli/memo.js dedupe scan          # 可加 --threshold 0.45 --dice 0.15 --json
   $NODE src/cli/memo.js doctor
@@ -72,7 +72,7 @@ memory_scope({action:'use', path:'/abs/path/to/project'})  # 切到项目分库�
 
 ## 4. 换一台机器/新增客户端
 
-1. 把 `strata/` 整个目录拷过去（零依赖，只需 Node ≥22）。
+1. 把 `sedimem/` 整个目录拷过去（零依赖，只需 Node ≥22）。
 2. 按 `configs/` 三个模板改路径：
    - DSH：`configs/dsh-cordis.patch.yml`（合入 `~/.dsh/profiles/<name>/cordis.patch.yml`）
    - Codex：`configs/codex-config.toml`
@@ -85,7 +85,7 @@ memory_scope({action:'use', path:'/abs/path/to/project'})  # 切到项目分库�
 零依赖不变，只需 Node ≥22；代码与 CLI 直接可用，`bash` 脚本换成等价的 MCP stdio 调用即可。
 落位时有三处与 macOS 不同：
 
-- **文件名**：真相层是 `items/repo+strata.jsonl`（scope 里的冒号换成 `+`），不是 `repo:strata.jsonl`。
+- **文件名**：真相层是 `items/repo+sedimem.jsonl`（scope 里的冒号换成 `+`），不是 `repo:sedimem.jsonl`。
   按路径 grep/备份时别照搬 mac 上的写法，规则见 `docs/02` 裁决 58。
 - **观察台常驻**：没有 launchd，用「计划任务 + VBS 隐藏启动」。直接用 `node.exe` 当 action 会弹一个控制台窗口，
   且 `StopOnIdleEnd` 默认 `true`——机器一空闲任务就被停掉（退出码 0，像是"自己挂了"）。两份都要显式改掉：
@@ -100,7 +100,7 @@ memory_scope({action:'use', path:'/abs/path/to/project'})  # 切到项目分库�
   $s = New-ScheduledTaskSettingsSet -DontStopOnIdleEnd -AllowStartIfOnBatteries `
        -DontStopIfGoingOnBatteries -ExecutionTimeLimit ([TimeSpan]::Zero)
   $a = New-ScheduledTaskAction -Execute wscript.exe -Argument '"<repo>\start-observer.vbs"'
-  Register-ScheduledTask -TaskName strata-observer -Action $a `
+  Register-ScheduledTask -TaskName sedimem-observer -Action $a `
        -Trigger (New-ScheduledTaskTrigger -AtLogOn) -Settings $s
   ```
 
@@ -136,7 +136,7 @@ memory_scope({action:'use', path:'/abs/path/to/project'})  # 切到项目分库�
 ### 7.1 启动
 
 ```bash
-cd strata/versions/v0.3
+cd sedimem/versions/v0.3
 node src/cli/memo.js serve --port 7788     # 默认 127.0.0.1:7788；--no-ui 只提供 API
 ```
 
@@ -154,7 +154,7 @@ node src/cli/memo.js serve --port 7788     # 默认 127.0.0.1:7788；--no-ui 只
 
 - **只读**：页面没有任何写操作；写入入口仍然只有 CLI 与 MCP。
 - **只绑本机**：服务只监听 `127.0.0.1`，无鉴权；需要局域网访问属于新需求，先提 issue。
-- **图谱边开关存 localStorage**（键 `strata.graph.edges`，只存偏好不存正文）；清掉它即恢复默认边集。
+- **图谱边开关存 localStorage**（键 `sedimem.graph.edges`，只存偏好不存正文）；清掉它即恢复默认边集。
 - **采样上限 300**：图谱节点默认取最近 `createdAt` + 高 `hits` 的前 300 条（`limit` 可调 1–1000），页眉会显示 `shown/total`——**库大于 300 时看到的是采样图，不是全量**。
 - 趋势数据来自 nightly metrics 快照：没跑过 nightly 的日期在趋势图上是空点（不是 0）。
 
@@ -197,7 +197,7 @@ IndexPort 契约：同一 `tokenize()` 切词、同一排序与过滤约定）�
 把「候选 → 裁决 → 落盘」固定成三步，Agent 不用手工拼 JSON：
 
 ```bash
-cd strata/versions/v0.3
+cd sedimem/versions/v0.3
 node src/cli/memo.js curate prompt            # 1. 生成裁决任务包
 #    → $MEMO_HOME/curate/<batchId>.md（人读：裁决表 + 全文对照）
 #    → 同名 .json（机读：Agent 只回填这个，避免从 Markdown 反解析）
@@ -251,7 +251,7 @@ memo compact --grace 0                    # 立刻删（小心：不可回查）
 ## 12. 常驻服务（macOS launchd）：观察台 + 夜间整合
 
 两件事适合常驻：**只读观察台**（随时打开看）和 **夜间整合**（每天跑一次）。都走同一个入口脚本
-`scripts/strata-run.sh`——它读 `versions/CURRENT` 决定跑哪个版本目录，所以换大版本时 plist 不用动。
+`scripts/sedimem-run.sh`——它读 `versions/CURRENT` 决定跑哪个版本目录，所以换大版本时 plist 不用动。
 
 > 为什么非要这个脚本：有台机器的 crontab 里写死了 `versions/v0.1/src/cli/nightly.js`，
 > 版本目录切到 v0.2 之后，**夜间整合一直在跑冻结代码**，仓库里的门禁扫不到，只有查 crontab 才发现。
@@ -265,37 +265,37 @@ cd <仓库根>
 sed -e "s|__REPO_ROOT__|$PWD|" \
     -e "s|__MEMO_HOME__|$HOME/.memo|" \
     -e "s|__NODE__|$(command -v node)|" \
-    versions/v0.3/configs/launchd/live.strata.observer.plist > /tmp/observer.plist
+    versions/v0.3/configs/launchd/live.sedimem.observer.plist > /tmp/observer.plist
 plutil -lint /tmp/observer.plist
-mv /tmp/observer.plist ~/Library/LaunchAgents/live.strata.observer.plist
-launchctl load ~/Library/LaunchAgents/live.strata.observer.plist
+mv /tmp/observer.plist ~/Library/LaunchAgents/live.sedimem.observer.plist
+launchctl load ~/Library/LaunchAgents/live.sedimem.observer.plist
 
 # 夜间整合：每天 03:30（机器睡眠时唤醒后补跑）
 sed -e "s|__REPO_ROOT__|$PWD|" \
     -e "s|__MEMO_HOME__|$HOME/.memo|" \
     -e "s|__NODE__|$(command -v node)|" \
-    versions/v0.3/configs/launchd/live.strata.nightly.plist > /tmp/nightly.plist
+    versions/v0.3/configs/launchd/live.sedimem.nightly.plist > /tmp/nightly.plist
 plutil -lint /tmp/nightly.plist
-mv /tmp/nightly.plist ~/Library/LaunchAgents/live.strata.nightly.plist
-launchctl load ~/Library/LaunchAgents/live.strata.nightly.plist
+mv /tmp/nightly.plist ~/Library/LaunchAgents/live.sedimem.nightly.plist
+launchctl load ~/Library/LaunchAgents/live.sedimem.nightly.plist
 ```
 
 ### 12.2 确认与操作
 
 ```bash
-launchctl list | grep strata            # 第一列 PID，第二列 0 = 上次退出码正常
+launchctl list | grep sedimem            # 第一列 PID，第二列 0 = 上次退出码正常
 curl -s http://127.0.0.1:7788/api/summary | head -c 80
 
 # 改完代码让它加载新版本（launchd 不会自动重载文件）
-launchctl kickstart -k gui/$(id -u)/live.strata.observer
+launchctl kickstart -k gui/$(id -u)/live.sedimem.observer
 
 # 立刻跑一次夜间整合，看效果
-launchctl kickstart -k gui/$(id -u)/live.strata.nightly
+launchctl kickstart -k gui/$(id -u)/live.sedimem.nightly
 tail -f ~/.memo/nightly.log
 
 # 停掉（卸载后不再自启）
-launchctl unload ~/Library/LaunchAgents/live.strata.observer.plist
-launchctl unload ~/Library/LaunchAgents/live.strata.nightly.plist
+launchctl unload ~/Library/LaunchAgents/live.sedimem.observer.plist
+launchctl unload ~/Library/LaunchAgents/live.sedimem.nightly.plist
 ```
 
 ### 12.3 别同时用 crontab
@@ -373,7 +373,7 @@ memo view trace <L3 的 id>               # 核出处：哪些已 superseded / �
 
 ```bash
 memo write --text "观察台默认跑在 127.0.0.1:7788，只读、无写端点" \
-  --title "观察台端口 7788" --kind fact --subject strata/observer --predicate port --value 7788 --agent dsh
+  --title "观察台端口 7788" --kind fact --subject sedimem/observer --predicate port --value 7788 --agent dsh
 ```
 
 MCP 侧就是 `memory_write({text, title, kind})`；`~/.codex/AGENTS.md` 已把它写成硬要求。

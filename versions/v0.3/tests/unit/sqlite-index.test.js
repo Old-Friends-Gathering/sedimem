@@ -22,7 +22,7 @@ function rec(text, extra = {}) {
 }
 
 let memoHome;
-beforeEach(() => { memoHome = mkdtempSync(join(tmpdir(), 'strata-sqlidx-')); });
+beforeEach(() => { memoHome = mkdtempSync(join(tmpdir(), 'sedimem-sqlidx-')); });
 afterEach(() => { rmSync(memoHome, { recursive: true, force: true }); });
 
 function newIndex() {

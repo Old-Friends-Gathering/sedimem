@@ -7,7 +7,7 @@ import { scopeKeyOf, metricsFileName, legacyMetricsFileName } from '../../src/co
 import { maskSuspiciousRecord, SUSPICIOUS_MASK } from '../../src/api/mask.js';
 
 test('scopeKeyOf：合法字符保留、非法字符折叠、空值与首尾横线归一', () => {
-  assert.equal(scopeKeyOf('repo:strata'), 'repo-strata');
+  assert.equal(scopeKeyOf('repo:sedimem'), 'repo-sedimem');
   assert.equal(scopeKeyOf('dir:My_Project.v2'), 'dir-my_project.v2');
   assert.equal(scopeKeyOf('user:Yeager'), 'user-yeager');
   assert.equal(scopeKeyOf('repo:a  b'), 'repo-a-b', '连续非法字符折叠成一个 -');
@@ -19,7 +19,7 @@ test('scopeKeyOf：合法字符保留、非法字符折叠、空值与首尾横�
 });
 
 test('metrics 文件名：新命名带 scopeKey，旧命名只用于读侧兼容', () => {
-  assert.equal(metricsFileName('2026-11-02', 'repo:strata'), '2026-11-02.repo-strata.json');
+  assert.equal(metricsFileName('2026-11-02', 'repo:sedimem'), '2026-11-02.repo-sedimem.json');
   assert.equal(metricsFileName('2026-11-02', ''), '2026-11-02.default.json');
   assert.equal(legacyMetricsFileName('2026-11-02'), '2026-11-02.json');
   assert.notEqual(metricsFileName('2026-11-02', 'repo:x'), legacyMetricsFileName('2026-11-02'));

@@ -41,7 +41,7 @@ memo dedupe scan    [--dice D]               （既有）只读扫描候选簇
 {
   "batchId": "batch-2026-11-02T10-15-00-ab12",
   "createdAt": "2026-11-02T10:15:00.000Z",
-  "scope": "repo:strata",
+  "scope": "repo:sedimem",
   "policy": { "scanThreshold": 0.45, "scanDiceThreshold": 0.15, "nearDupThreshold": 0.85 },
   "pairs": [
     {
@@ -50,8 +50,8 @@ memo dedupe scan    [--dice D]               （既有）只读扫描候选簇
       "strength": "strong",
       "containment": 0.62, "dice": 0.41,
       "suggestion": "merge",
-      "a": { "label": "strata/dedupe-threshold：在线近重复阈值 0.60", "text": "全文…", "kind": "fact", "createdAt": "…" },
-      "b": { "label": "strata/dedupe-threshold：在线近重复阈值 0.85", "text": "全文…", "kind": "fact", "createdAt": "…" }
+      "a": { "label": "sedimem/dedupe-threshold：在线近重复阈值 0.60", "text": "全文…", "kind": "fact", "createdAt": "…" },
+      "b": { "label": "sedimem/dedupe-threshold：在线近重复阈值 0.85", "text": "全文…", "kind": "fact", "createdAt": "…" }
     }
   ],
   "decisions": []

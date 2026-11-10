@@ -84,7 +84,7 @@
       "id": "I14",
       "pass": false,
       "ms": 111,
-      "detail": "  AssertionError [ERR_ASSERTION]: 图谱节点 AGG:cache.alert 必须存在于 status:\"all\" 快照 |       at TestContext.<anonymous> (file:///Users/yeager/work-yeager/ldywoker/strata/versions/v0.3/tests/injection/i14-cross-section.test.js:105:14) |       at process.processTicksAndRejections (node:internal/process/task_queues:104:5) |       at async Test.run (node:internal/test_runner/test:1409:7) |       at async startSubtestAfterBootstrap (node:internal/test_runner/harness:387:3) { |     generatedMessage: false, | "
+      "detail": "  AssertionError [ERR_ASSERTION]: 图谱节点 AGG:cache.alert 必须存在于 status:\"all\" 快照 |       at TestContext.<anonymous> (file://<repo>/versions/v0.3/tests/injection/i14-cross-section.test.js:105:14) |       at process.processTicksAndRejections (node:internal/process/task_queues:104:5) |       at async Test.run (node:internal/test_runner/test:1409:7) |       at async startSubtestAfterBootstrap (node:internal/test_runner/harness:387:3) { |     generatedMessage: false, | "
     },
     {
       "id": "I15",

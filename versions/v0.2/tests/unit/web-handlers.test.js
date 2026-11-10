@@ -60,7 +60,7 @@ test('api/today：时间线 label 非空且不是裸 op 名', async (t) => {
     subject: 'deploy', predicate: 'notes', value: 'tools/deploy.sh', text: '部署脚本位于 tools/deploy.sh',
   });
   await writeRec(service, {
-    subject: 'text', predicate: 'text', text: '今天讨论了 strata 的 metrics 命名回退方案',
+    subject: 'text', predicate: 'text', text: '今天讨论了 sedimem 的 metrics 命名回退方案',
   });
 
   const web = await createWebServer({ memoHome, scope: SCOPE, port: 0, includeUi: false, service });

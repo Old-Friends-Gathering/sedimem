@@ -30,15 +30,15 @@
       "kind": "state"
     },
     {
-      "text": "strata 仓库门禁：零运行时依赖、只用 node: 内置模块",
-      "subject": "strata.policy",
+      "text": "sedimem 仓库门禁：零运行时依赖、只用 node: 内置模块",
+      "subject": "sedimem.policy",
       "predicate": "deps",
       "value": "node-builtins-only",
       "kind": "fact"
     },
     {
       "text": "compact 备份策略：只保留最新一份 .bak.<ts>",
-      "subject": "strata.compact",
+      "subject": "sedimem.compact",
       "predicate": "backup",
       "value": "keep-latest-one",
       "kind": "decision"

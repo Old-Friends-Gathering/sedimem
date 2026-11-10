@@ -100,7 +100,7 @@ async function resolveMetricsFile(memoHome, expectedName) {
 }
 
 async function main() {
-  const memoHome = await fsp.mkdtemp(path.join(os.tmpdir(), 'strata-windows-smoke-'));
+  const memoHome = await fsp.mkdtemp(path.join(os.tmpdir(), 'sedimem-windows-smoke-'));
   const itemName = itemsFileName(SCOPE);
   const briefName = briefFileName(SCOPE);
   const date = new Date().toISOString().slice(0, 10);
