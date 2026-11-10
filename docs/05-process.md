@@ -91,3 +91,15 @@ Issue（feature/bug/chore 模板，验收标准必须可机械检验）
 | 安全 | `security` S1–S8 + CodeQL | 读路径是否绕过 suspicious 遮蔽 |
 | 文档 | `quality` Q6（链接）、Q7（版本一致性） | 契约是否先于实现改 |
 | 流程 | `issue-link` | issue 的验收标准是否真的可检验 |
+
+### 6.1 发版必做三件同步（Q10 会拦）
+
+任何版本（含 `X.Y.Z` 补丁）合入前，必须同步三处，否则 `quality` 检查直接红：
+
+1. **README 版本表**：加一行 `| vX.Y.Z | 主题 | ✅ 当前 |`（旧行的「当前」标记要去掉）。
+2. **项目站 `docs/index.html`**：版本时间线加该版本（GitHub Pages 直接服务 `main/docs`，合并即上线）。
+3. **`.github/workflows/ci.yml` 的 eval job 名**：用例数变了就改成 `eval (I1–IN)`，
+   **并在合并前先 `gh api PATCH .../branches/main/protection/required_status_checks` 同步**，
+   否则 PR 会永远等一个不存在的检查。
+
+另需同步但不在 Q10 机械检查范围内的：`CHANGELOG`、`docs/DELTA.md`、`docs/07` 基线数字、`files under versions/<CURRENT>/eval/results/` 各留一份。
