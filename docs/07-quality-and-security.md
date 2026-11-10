@@ -56,7 +56,7 @@ cd versions/v0.3 && node eval/run.js   # 行为（I1–I12）
 
 阈值贴着基线设置，意味着**新增未覆盖代码会直接卡住**——这是故意的：先写测试再实现（TDD）。
 
-## 三、质量门禁（quality-check.mjs，9 项）
+## 三、质量门禁（quality-check.mjs，10 项）
 
 | ID | 检查 | 判定 | 为什么这条值得占一个门禁 |
 |---|---|---|---|
@@ -69,6 +69,7 @@ cd versions/v0.3 && node eval/run.js   # 行为（I1–I12）
 | Q7 | 版本自包含 | `versions/<v>/` 必须有 `src/tests/eval/config/docs/DELTA.md/CHANGELOG.md/package.json`；`package.json.version` 必须等于 `CHANGELOG` 最新段 | 版本隔离是本项目的迭代纪律，靠人工守不住 |
 | Q8 | 编码卫生 | 无 CRLF；文件末尾有换行 | 纯机械项，零争议，成本近乎为零 |
 | Q9 | Web UI 层边界 | `ui/**` 与 `src/web/**` 不得 import `../hygiene/`、`../storage/`、`../index/`；`ui/**` 无 `http(s)://` 外链、无 `innerHTML/outerHTML/insertAdjacentHTML` 拼数据、无 `eval(`/`new Function(`（行级白名单 `// q9-allow: <理由>`，无理由即失败）；**零构建**（`ui/` 内无 `package.json`/锁文件/`node_modules`/`dist`/`build`）；**单文件 ≤600 行、`ui/` 总量 ≤2500 行**；HTML 的 `<script src>`/`<link href>` 只允许相对路径；`src/web/static.js` 存在且只服务 ui 目录 | Web 层是只读投影（docs/08 契约），越界 import 或 HTML 拼接会破坏"读不到、改不了、注入不进"三条安全底线 |
+| Q10 | 发布面同步 | README 版本表含当前 `vX.Y.Z`；`docs/index.html` 含当前 `X.Y.Z`；`ci.yml` 的 `eval (I1–IN)` 中 N 等于 `eval/run.js` 的用例数 | 发布面是对外唯一入口，落后等于对外撒谎；CI 检查名不同步会让 PR 永远等一个不存在的检查 |
 
 ## 四、安全门禁（security-check.mjs，9 项）
 

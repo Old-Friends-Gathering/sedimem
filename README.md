@@ -281,7 +281,8 @@ node tools/quality-check.mjs && node tools/security-check.mjs && node tools/cove
 | v0.4.0 | 竞品差距补齐：语义道（可选，RRF + `basis`）、每步注入、半自动捕获、分歧视图、入库脱敏、UI 搜索页、规模基准、一条命令装插件 | ✅ |
 | v0.4.1 | 修 CLI `capture`/`conflicts` 的退出码崩溃；CodeQL 清零 | ✅ |
 | v0.4.2 | 浅色外观下图谱可读性（节点压暗 + 描边、边压暗加粗）；安全门禁加允许清单 | ✅ |
-| v0.4.3 | 修插件 `inject` 形状导致「记忆中心面板全黑」；可选注入不再拖垮路由注册 | ✅ 当前 |
+| v0.4.3 | 修插件 `inject` 形状导致「记忆中心面板全黑」；可选注入不再拖垮路由注册 | ✅ |
+| v0.4.4 | 新增 Q10 发布面同步门禁：README / 项目站 / CI 检查名三处漂移会直接红 | ✅ 当前 |
 
 目录规则：**`X.Y` 换目录**，**`X.Y.Z` 补丁同目录递增**；老目录冻结并留 `FROZEN.md`；指针在 `versions/CURRENT`。
 

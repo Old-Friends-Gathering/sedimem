@@ -409,8 +409,55 @@ async function q9WebUiBoundary() {
 
 CURRENT = await readCurrentVersion();
 
+
+// ── Q10 发布面同步 ────────────────────────────────────────────────
+// 起因（2026-11-10）：v0.4 上线后 README 与项目站仍停在 v0.3 —— 数字、"新增能力"、
+// 安装路径、CI 检查名全都过期，但没有任何门禁拦。发布面是给人看的唯一入口，
+// 它一旦落后就等于对外撒谎，所以必须有机械检查。
+//
+// 三条断言（都是"改了就忘"的高频漂移点）：
+//   1. README 版本表必须出现当前版本号 vX.Y.Z；
+//   2. docs/index.html 必须出现当前 X.Y.Z（项目站的时间线/门禁数字跟着走）；
+//   3. ci.yml 的 eval job 名必须与 eval/run.js 的用例数一致（改名忘了同步分支保护会卡死 PR）。
+async function q10ReleaseSurface() {
+  const problems = [];
+  const versionDir = currentVersionDir();
+  const pkgPath = path.join(versionDir, 'package.json');
+  const pkg = JSON.parse(await fsp.readFile(pkgPath, 'utf8'));
+  const version = String(pkg.version ?? '');
+  if (!/^\d+\.\d+\.\d+$/.test(version)) {
+    problems.push(`${rel(pkgPath)}: version 不是 X.Y.Z（实际 ${JSON.stringify(version)}）`);
+  }
+
+  // 1) README 版本表
+  const readme = await fsp.readFile(path.join(ROOT, 'README.md'), 'utf8');
+  if (version && !readme.includes(`v${version}`)) {
+    problems.push(`README.md: 版本表没有当前版本 v${version}（发版必须同步 README）`);
+  }
+
+  // 2) 项目站
+  const pagePath = path.join(ROOT, 'docs', 'index.html');
+  const page = await fsp.readFile(pagePath, 'utf8');
+  if (version && !page.includes(version)) {
+    problems.push(`${rel(pagePath)}: 没有当前版本号 ${version}（发版必须同步项目站时间线）`);
+  }
+
+  // 3) CI eval job 名 vs 评测用例数
+  const ci = await fsp.readFile(path.join(ROOT, '.github', 'workflows', 'ci.yml'), 'utf8');
+  const evalRun = await fsp.readFile(path.join(versionDir, 'eval', 'run.js'), 'utf8');
+  const caseCount = (evalRun.match(/^\s*\['I\d+'/gm) ?? []).length;
+  const m = ci.match(/name:\s*eval \(I1–I(\d+)\)/);
+  if (!m) {
+    problems.push('.github/workflows/ci.yml: eval job 名不是 `eval (I1–IN)` 形状');
+  } else if (caseCount && Number(m[1]) !== caseCount) {
+    problems.push(`.github/workflows/ci.yml: eval job 名写 I1–I${m[1]}，但 eval/run.js 有 ${caseCount} 个用例（改名后记得同步分支保护 required checks）`);
+  }
+
+  record('Q10', `发布面同步（README 版本表 / 项目站 / CI eval 用例区间，当前 v${version || '?'}）`, problems.length === 0, problems);
+}
+
 const CHECKS = [q1ZeroDependencies, q2SourceSize, q3TestInventory, q4EvalAlignment,
-  q5ContractCoverage, q6DocLinks, q7VersionIntegrity, q8Encoding, q9WebUiBoundary];
+  q5ContractCoverage, q6DocLinks, q7VersionIntegrity, q8Encoding, q9WebUiBoundary, q10ReleaseSurface];
 
 for (const check of CHECKS) {
   try {

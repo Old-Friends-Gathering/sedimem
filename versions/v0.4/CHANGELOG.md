@@ -1,5 +1,23 @@
 # CHANGELOG · v0.4
 
+## [0.4.4] — 2026-11-10
+
+新增门禁 **Q10 发布面同步**：发版忘了同步 README / 项目站 / CI 检查名，现在会直接红。
+
+### Added
+
+- `tools/quality-check.mjs` Q10，三条机械断言：
+  1. `README.md` 版本表必须出现当前版本号 `vX.Y.Z`；
+  2. `docs/index.html`（GitHub Pages 项目站）必须出现当前 `X.Y.Z`；
+  3. `.github/workflows/ci.yml` 的 `eval (I1–IN)` 中 N 必须等于 `eval/run.js` 的用例数
+     （改名忘了同步分支保护 required checks 会让 PR 永远等一个不存在的检查）。
+- 起因：v0.4 上线后 README 与项目站仍停在 v0.3 的数字与能力，没人拦。
+
+### Docs
+
+- `docs/07` 质量门禁表补 Q10 与失败含义；`docs/05` 发布清单补「三处必须同步」。
+- README 版本表补 0.4.4；项目站时间线补 0.4.4。
+
 ## [0.4.3] — 2026-11-10
 
 修「DSH 记忆中心面板全黑」。插件侧两处加固：
