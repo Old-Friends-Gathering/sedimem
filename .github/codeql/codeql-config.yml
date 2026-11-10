@@ -9,6 +9,10 @@ paths-ignore:
   # 审核留证脚本（reviews/probes/）是一次性证据，不随版本发布、不进运行时：
   # 它们的未用变量/风格问题没有修复价值，却会淹掉当前代码的真实告警。
   - versions/*/reviews/probes/**
+  # 插件里的两份文件是 scripts/sync-plugin.sh 从 versions/<CURRENT>/src 复制的**生成物**
+  # （inject.js / paths.js 已按源码扫描）：扫副本只会把同一处代码重复报一遍。
+  - plugin/dsh-sedimem/lib/inject-core.js
+  - plugin/dsh-sedimem/lib/paths-core.js
 
 # 已知误报：embedding 端点 URL 来自用户自己的 policy 文件（本机配置，可信来源），
 # 且 createEmbedder() 里用 validatedEndpoint() 只放行 http(s)+host。
