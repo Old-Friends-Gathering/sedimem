@@ -28,7 +28,7 @@ const EDGE_STYLE = {
   'disputed-with': { color: '#ef4444', dash: [2, 4], width: 1.25 },
 };
 
-export async function initGraph({ canvas, detailEl, toolbarEl, apiBase = '/api', scope = '' }) {
+export async function initGraph({ canvas, detailEl, toolbarEl, apiBase = 'api', scope = '' }) {
   const ctx = canvas.getContext('2d');
   const state = {
     nodes: [],

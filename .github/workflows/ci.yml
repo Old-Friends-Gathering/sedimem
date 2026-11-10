@@ -71,9 +71,22 @@ jobs:
           path: versions/v0.3/eval/results/LATEST.json
           if-no-files-found: warn
 
+  plugin:
+    name: plugin
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+      - name: dsh-sedimem host tests
+        run: node --test --test-force-exit plugin/dsh-sedimem/test/host.test.js
+      - name: client bundle syntax
+        run: node --check plugin/dsh-sedimem/lib/client.js
+
   gate:
     name: ci-gate
-    needs: [test, eval]
+    needs: [test, eval, plugin]
     runs-on: ubuntu-latest
     steps:
       - run: echo "行为门禁全部通过"
