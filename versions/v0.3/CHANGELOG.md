@@ -1,5 +1,13 @@
 # CHANGELOG · v0.3
 
+## [0.3.4] — 2026-11-10
+
+### Changed
+- **项目更名：strata → sedimem**（`sediment + memory`）。GitHub 上名字含 `strata` 的仓库有 7432 个（其中 `Niko1221/Strata` ⭐42537、`mjackson/strata` ⭐364 同名），npm 的 `strata` 也已被占用；`sedimem` 在 GitHub 同名仓库数为 0、npm 未占用。
+- 仓库、本地目录、Pages 地址（`old-friends-gathering.github.io/sedimem/`）、三端客户端配置、launchd 标签、现有记忆分库（`repo:strata` → `repo:sedimem`）同步迁移。
+- 技术标识按既有兼容策略保持不变：CLI `memo`、`MEMO_HOME`/`MEMO_*`、MCP 工具 `memory_*`、`serverName: memo`。
+- 顺带修掉各版本 `package.json` 的 `repository.directory`（v0.2/v0.3 一直被历史拷贝写成 `versions/v0.1`）。
+
 ## [0.3.2] — 2026-11-09
 
 ### Fixed
@@ -37,11 +45,11 @@
 ### Fixed
 
 - **Windows：真相层被写成 NTFS 备用数据流**（裁决 58）。`items/<scope>.jsonl` 的 scope 恒含 `:`，
-  Windows 把 `:` 当数据流分隔符，`items/repo:strata.jsonl` 实际是文件 `repo` 的一个数据流：
+  Windows 把 `:` 当数据流分隔符，`items/repo:sedimem.jsonl` 实际是文件 `repo` 的一个数据流：
   `readdir` 看不见它（分库列表 0 条、Web 下拉缺项）、`rewriteScope` 的 `copyFile` 直接 `EINVAL`
   （`compact` 崩溃）、备份与压缩不保留数据流（真相层静默丢失）。
   新增 `config/paths.js` 的 `itemsFileName` / `briefFileName` / `scopeFromItemsFileName`：Windows 上把
-  scope 的 `:` 换成 `+`（`repo+strata.jsonl`），POSIX 保持 `<scope>.jsonl` 字节不变。
+  scope 的 `:` 换成 `+`（`repo+sedimem.jsonl`），POSIX 保持 `<scope>.jsonl` 字节不变。
   `JsonlStore`、`web/scopes.js`、`cli/nightly.js` 与测试一律改为引用这一处。
 - 测试里 15 处硬编码的 `items/${scope}.jsonl` 改为 `itemsFileName(scope)`（POSIX 上路径等价）。
 
@@ -56,7 +64,7 @@
 
 `0.3` 属于 `X.Y`（minor）变更，**必须新建目录**：本版起代码在 `versions/v0.3/`，`versions/v0.2/` 冻结在 `0.2.1`。
 规则原文：**`X.Y` 换目录，`X.Y.Z` 补丁同目录递增**（`0.3.0 → 0.3.1` 都在 `versions/v0.3/`）。
-`versions/CURRENT` 已指 `v0.3`；三端客户端配置（DSH / Codex / Claude）与 launchd 入口（`scripts/strata-run.sh` 读 CURRENT）自动跟随。
+`versions/CURRENT` 已指 `v0.3`；三端客户端配置（DSH / Codex / Claude）与 launchd 入口（`scripts/sedimem-run.sh` 读 CURRENT）自动跟随。
  - 2026-11-07（分层视图：L2 场景块 / 注入分级 / L3 画像）
 
 > 依据 `docs/research/layered-memory-2026.md` 与 `docs/plans/v0.3-layered-views.md`：
@@ -185,7 +193,7 @@
 ### Why
 
 用户开了 Codex 会话干活，观察台看不到任何记录——查下来 `~/.memo/items/` 只有一个分库
-`repo:strata`，说明 Codex 一条都没写；而观察台本来就只服务启动时那一个分库，
+`repo:sedimem`，说明 Codex 一条都没写；而观察台本来就只服务启动时那一个分库，
 即使别的项目写了另一分库也看不见。两个问题都修：观察台能切分库（本版），
 写入规则从「用户说记住才写」改成「有实质产出写 1–3 条」（`~/.codex/AGENTS.md`，本机配置非仓库内容）。
 
@@ -334,11 +342,11 @@
 - `docs/02-data-model-and-contract.md` **§3.8 内部模块导出清单**（15 个内部导出登记，Q5 契约覆盖从 62% 提到 100%）。
 
 ### Changed
-- 目录 `memory-system/` → **`strata/`**（产品名 strata；技术标识保持 `memo`/`MEMO_*`/`memory_*`/`serverName: memo`，
-  v0.2 再做带兼容期的重命名）。仓库 https://github.com/Old-Friends-Gathering/strata 。
-- `package.json`：name → `@old-friends-gathering/strata`，version → 0.1.2，`test` 脚本改 glob 形状
+- 目录 `memory-system/` → **`sedimem/`**（产品名 sedimem；技术标识保持 `memo`/`MEMO_*`/`memory_*`/`serverName: memo`，
+  v0.2 再做带兼容期的重命名）。仓库 https://github.com/Old-Friends-Gathering/sedimem 。
+- `package.json`：name → `@old-friends-gathering/sedimem`，version → 0.1.2，`test` 脚本改 glob 形状
   （`node --test tests/` 在 Node 24 会 MODULE_NOT_FOUND），补 `license`/`repository`/`homepage`/`bugs`。
-- `README.md` 重写为品牌页（为什么叫 strata、地层表、门禁表、迭代纪律）。
+- `README.md` 重写为品牌页（为什么叫 sedimem、地层表、门禁表、迭代纪律）。
 
 ## [0.1.1] - 2026-11-02（三端接入后补强：中文去重）
 

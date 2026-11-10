@@ -3,8 +3,8 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>strata · 跨会话、跨客户端的本地记忆层</title>
-<meta name="description" content="strata 是一个把记忆当数据库治理的本地记忆层：append-only 真相层、四条卫生路径、MCP 三端共用。">
+<title>sedimem · 跨会话、跨客户端的本地记忆层</title>
+<meta name="description" content="sedimem 是一个把记忆当数据库治理的本地记忆层：append-only 真相层、四条卫生路径、MCP 三端共用。">
 <style>
   :root{
     --bg:#080b12; --bg2:#0c111b; --panel:#111827; --panel2:#151d2b;
@@ -163,7 +163,7 @@
 
 <header>
   <div class="wrap nav">
-    <div class="brand"><span class="dot"></span>strata</div>
+    <div class="brand"><span class="dot"></span>sedimem</div>
     <a class="lnk" href="#problem">为什么</a>
     <a class="lnk" href="#arch">架构</a>
     <a class="lnk" href="#hygiene">卫生闭环</a>
@@ -171,7 +171,7 @@
     <a class="lnk" href="#deploy">部署</a>
     <a class="lnk" href="#gates">门禁</a>
     <span class="spacer"></span>
-    <a class="btn" href="https://github.com/Old-Friends-Gathering/strata">GitHub ↗</a>
+    <a class="btn" href="https://github.com/Old-Friends-Gathering/sedimem">GitHub ↗</a>
   </div>
 </header>
 
@@ -180,7 +180,7 @@
   <div class="wrap">
     <span class="eyebrow">LOCAL-FIRST · MCP · ZERO DEPENDENCY</span>
     <h1 class="title">记忆不是攒得越多越好，<br>它该像<em>地层</em>一样沉积。</h1>
-    <p class="lede">strata 是一个<b>跨会话、跨客户端的本地记忆层</b>：DSH / Codex CLI / Claude Code 共读一份<b>只追加的真相层</b>，把记忆当数据库治理 —— 写入时去重、冲突时失效而不删除、过期后仍可回看、脏数据不进上下文。</p>
+    <p class="lede">sedimem 是一个<b>跨会话、跨客户端的本地记忆层</b>：DSH / Codex CLI / Claude Code 共读一份<b>只追加的真相层</b>，把记忆当数据库治理 —— 写入时去重、冲突时失效而不删除、过期后仍可回看、脏数据不进上下文。</p>
     <div class="cta">
       <a class="btn primary" href="#deploy">三分钟接上你的客户端</a>
       <a class="btn" href="#arch">先看架构</a>
@@ -233,7 +233,7 @@
          其余全部可以从它重算出来。</p>
     </div>
     <div class="figure reveal">
-      <img src="assets/architecture.svg" alt="strata 架构分层图">
+      <img src="assets/architecture.svg" alt="sedimem 架构分层图">
     </div>
     <div class="figcap reveal">客户端三端共读 → MCP/CLI/Web 三入口 → 一个 MemoryService → 治理层 → 派生层 + 真相层</div>
 
@@ -336,8 +336,8 @@ created: 01M7…  <span class="cmt"># 词法抓不住 → 交给 Agent 裁决（
     <div class="steps">
       <div class="step reveal"><h3>拿到代码</h3>
         <div class="code"><div class="bar"><i></i><i></i><i></i><span>shell</span>
-          <button class="cp" data-copy="git clone https://github.com/Old-Friends-Gathering/strata && cd strata">复制</button></div>
-          <pre>git clone https://github.com/Old-Friends-Gathering/strata && cd strata
+          <button class="cp" data-copy="git clone https://github.com/Old-Friends-Gathering/sedimem && cd sedimem">复制</button></div>
+          <pre>git clone https://github.com/Old-Friends-Gathering/sedimem && cd sedimem
 export MEMO_HOME="$HOME/.memo"        <span class="cmt"># 真相层放哪</span>
 export V="versions/$(cat versions/CURRENT)"</pre></div>
       </div>
@@ -357,10 +357,10 @@ node $V/eval/run.js                  <span class="cmt"># I1–I24 注入式评�
           <button class="cp" data-copy="[mcp_servers.memo]">复制</button></div>
           <pre>[mcp_servers.memo]
 command = "/usr/local/bin/node"      <span class="cmt"># which node</span>
-args = ["/path/to/strata/versions/v0.3/src/mcp/server.js"]
+args = ["/path/to/sedimem/versions/v0.3/src/mcp/server.js"]
 enabled = true
 [mcp_servers.memo.env]
-MEMO_HOME = "/Users/you/.memo"</pre></div>
+MEMO_HOME = "$HOME/.memo"   <span class="cmt"># 换成你的数据目录</span></pre></div>
       </div>
       <div class="step reveal"><h3>验证三端真的是同一份记忆</h3>
         <div class="code"><div class="bar"><i></i><i></i><i></i><span>shell</span>
@@ -370,13 +370,13 @@ MEMO_HOME = "/Users/you/.memo"</pre></div>
 PASS</pre></div>
       </div>
       <div class="step reveal"><h3>常驻（可选，macOS launchd）</h3>
-        <p>观察台与 nightly 都由 <code>scripts/strata-run.sh</code> 启动，它读 <code>versions/CURRENT</code> ——
+        <p>观察台与 nightly 都由 <code>scripts/sedimem-run.sh</code> 启动，它读 <code>versions/CURRENT</code> ——
           <b>换大版本只改指针，plist 不用碰</b>。</p>
         <div class="code"><div class="bar"><i></i><i></i><i></i><span>shell</span>
-          <button class="cp" data-copy="launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/live.strata.observer.plist">复制</button></div>
-          <pre>launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/live.strata.observer.plist
-launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/live.strata.nightly.plist
-launchctl kickstart -k gui/$(id -u)/live.strata.observer   <span class="cmt"># 热加载新代码</span>
+          <button class="cp" data-copy="launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/live.sedimem.observer.plist">复制</button></div>
+          <pre>launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/live.sedimem.observer.plist
+launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/live.sedimem.nightly.plist
+launchctl kickstart -k gui/$(id -u)/live.sedimem.observer   <span class="cmt"># 热加载新代码</span>
 open http://127.0.0.1:7788</pre></div>
       </div>
     </div>
@@ -470,9 +470,9 @@ open http://127.0.0.1:7788</pre></div>
   <div class="wrap foot">
     <div>© 2026 Old Friends Gathering · MIT</div>
     <div>
-      <a href="https://github.com/Old-Friends-Gathering/strata">GitHub</a> ·
-      <a href="https://github.com/Old-Friends-Gathering/strata/blob/main/docs/02-data-model-and-contract.md">数据契约</a> ·
-      <a href="https://github.com/Old-Friends-Gathering/strata/blob/main/SECURITY.md">安全</a>
+      <a href="https://github.com/Old-Friends-Gathering/sedimem">GitHub</a> ·
+      <a href="https://github.com/Old-Friends-Gathering/sedimem/blob/main/docs/02-data-model-and-contract.md">数据契约</a> ·
+      <a href="https://github.com/Old-Friends-Gathering/sedimem/blob/main/SECURITY.md">安全</a>
     </div>
   </div>
 </footer>

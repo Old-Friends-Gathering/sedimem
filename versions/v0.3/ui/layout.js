@@ -15,7 +15,7 @@
  * - 拖节点（拖时固定 fx/fy）、滚轮缩放 0.4–2.5（鼠标为锚）、空白拖拽平移、
  *   单击节点渲染详情到 detailEl、双击锁定/释放。
  * - 边默认只画 same-entity + supersedes；工具栏「全开」+ duplicate-of / disputed-with 单独勾选；
- *   偏好存 localStorage 键 `strata.graph.edges`（JSON，只存偏好不存正文）。
+ *   偏好存 localStorage 键 `sedimem.graph.edges`（JSON，只存偏好不存正文）。
  * - sampled.shown < sampled.total 时画布右上角常驻「已采样 shown / total 条」。
  */
 
@@ -58,7 +58,7 @@ export const DEFAULT_EDGE_TYPES = ['supersedes', 'same-entity'];
 /** 可选边类型（工具栏单独勾选） */
 export const OPTIONAL_EDGE_TYPES = ['duplicate-of', 'disputed-with'];
 /** localStorage 持久化键 */
-export const EDGE_PREF_KEY = 'strata.graph.edges';
+export const EDGE_PREF_KEY = 'sedimem.graph.edges';
 
 /** 交互阈值（graph.js 的缩放与停帧判断共用，避免两处各写一份魔法数字） */
 export const MIN_SCALE = 0.4;

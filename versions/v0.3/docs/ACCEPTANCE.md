@@ -9,7 +9,7 @@
 | G3 | `memo doctor` 无 error | ✅ | 健康库 `{ok:true,issues:[]}` exit 0；坏库结构化报 `corrupt_jsonl` exit 1（不再裸崩）；重复 contentHash 报 warn |
 | G4 | reviews/arch.md 与 reviews/adversarial.md 无阻断项 | ✅ | 3 个阻断项全部修复并有独立复现证据，见 `reviews/RESPONSE.md` |
 | G5 | docs/02 契约逐条对齐实现 | ✅ | §3.1（裁决 1–12）+ §3.2（13–21）+ §3.3（22–24）+ §3.4（25）逐条落到代码；每个裁决都有对应测试 |
-| G6 | CHANGELOG + README 版本索引 | ✅ | 本目录 CHANGELOG 0.1.0，`strata/README.md` 版本表 |
+| G6 | CHANGELOG + README 版本索引 | ✅ | 本目录 CHANGELOG 0.1.0，`sedimem/README.md` 版本表 |
 | G7 | 三端配置就绪：DSH cordis patch / Codex config.toml / Claude mcp add | ✅ | `configs/dsh-cordis.patch.yml`（已按真实 DSH 形状修正）、`configs/codex-config.toml`、`configs/claude-mcp.sh` |
 | G8 | 三步召回验证脚本可跑（写→新会话召回→使用） | ✅ | `bash configs/verify-three-clients.sh` → PASS（新进程读到上一进程写入的盐值并回答） |
 

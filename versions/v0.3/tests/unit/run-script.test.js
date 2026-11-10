@@ -1,6 +1,6 @@
 // tests/unit/run-script.test.js — 入口脚本必须跟着 versions/CURRENT 走（issue #47）
 // 为什么：有台机器的 crontab 写死了 versions/v0.1，版本切换后 nightly 一直在跑冻结代码；
-// 门禁扫仓库扫不到，只有查 crontab 才发现。所以入口收敛到 scripts/strata-run.sh，并在这里守住。
+// 门禁扫仓库扫不到，只有查 crontab 才发现。所以入口收敛到 scripts/sedimem-run.sh，并在这里守住。
 
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
@@ -10,7 +10,7 @@ import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const ROOT = fileURLToPath(new URL('../../../..', import.meta.url));
-const SCRIPT = join(ROOT, 'scripts', 'strata-run.sh');
+const SCRIPT = join(ROOT, 'scripts', 'sedimem-run.sh');
 const CURRENT = readFileSync(join(ROOT, 'versions', 'CURRENT'), 'utf8').trim();
 
 function print(...args) {

@@ -1,7 +1,7 @@
 # v0.1 · 版本说明（DELTA）
 
 > **0.1.2 增量（2026-11-02）**：本版新增「不被自己腐化」的机制——四道门禁（质量/安全/覆盖率/issue 关联）+ 四个 CI workflow，
-> 以及并发漏读缺陷根治（`_reload` 先取水位再读，见 CHANGELOG [0.1.2]）。产品更名 strata，技术标识保持不变。
+> 以及并发漏读缺陷根治（`_reload` 先取水位再读，见 CHANGELOG [0.1.2]）。产品更名 sedimem，技术标识保持不变。
 
 ## 本版做了什么
 
@@ -116,11 +116,11 @@ v0.2.1 的两个能力（代码合入本版）：**A) 检索后端可换**（`in
 
 施工图见 `docs/plans/v0.2.1-plan.md`（对应 issue #32–#37）。本轮 5 个交付项**均为进行中 / v0.2.1 将提供**，未完成的不得写成已完成：
 
-1. **拆分 service**（[#32](https://github.com/Old-Friends-Gathering/strata/issues/32)）：`src/api/service.js` 拆为 lifecycle / write-path / search-path / maintenance 四个承接模块，主文件回落到 ≤320 行；只搬不改语义（`MemoryService` 仍是唯一对外类）。
-2. **kind 注册表数据化**（[#33](https://github.com/Old-Friends-Gathering/strata/issues/33)）：kind 清单从代码迁到 `config/policy.json`，新增 kind 只改配置、代码零改动。
-3. **JudgePort + `memo curate auto`**（[#34](https://github.com/Old-Friends-Gathering/strata/issues/34)）：确定性规则 judge（默认无 LLM）+ 一条命令跑完 scan→判→apply，幂等。
-4. **compact 物理清理**（[#35](https://github.com/Old-Friends-Gathering/strata/issues/35)）：墓碑 + `purge` 标签 + 超 grace 才物理删；原子替换 + 自动备份，events 永不删。
-5. **检索健康指标**（[#36](https://github.com/Old-Friends-Gathering/strata/issues/36)）：metrics 新增 `searchCount` / `noHitRate` / `staleHitRate` / `avgTopScore`，无数据写 `null`；不存 query 原文。
+1. **拆分 service**（[#32](https://github.com/Old-Friends-Gathering/sedimem/issues/32)）：`src/api/service.js` 拆为 lifecycle / write-path / search-path / maintenance 四个承接模块，主文件回落到 ≤320 行；只搬不改语义（`MemoryService` 仍是唯一对外类）。
+2. **kind 注册表数据化**（[#33](https://github.com/Old-Friends-Gathering/sedimem/issues/33)）：kind 清单从代码迁到 `config/policy.json`，新增 kind 只改配置、代码零改动。
+3. **JudgePort + `memo curate auto`**（[#34](https://github.com/Old-Friends-Gathering/sedimem/issues/34)）：确定性规则 judge（默认无 LLM）+ 一条命令跑完 scan→判→apply，幂等。
+4. **compact 物理清理**（[#35](https://github.com/Old-Friends-Gathering/sedimem/issues/35)）：墓碑 + `purge` 标签 + 超 grace 才物理删；原子替换 + 自动备份，events 永不删。
+5. **检索健康指标**（[#36](https://github.com/Old-Friends-Gathering/sedimem/issues/36)）：metrics 新增 `searchCount` / `noHitRate` / `staleHitRate` / `avgTopScore`，无数据写 `null`；不存 query 原文。
 
 仍在候选池（本轮不做）：
 

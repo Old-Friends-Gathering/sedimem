@@ -1,23 +1,23 @@
 <div align="center">
 
-# strata
+# sedimem
 
 **记忆不是攒得越多越好 —— 它该像地层一样沉积、可回溯、会收敛。**
 
 跨会话、跨客户端的本地记忆层：DSH / Codex CLI / Claude Code 三端共读一份真相层，
 把"记忆"当数据库治理，而不是当 prompt 攒。
 
-[![ci](https://github.com/Old-Friends-Gathering/strata/actions/workflows/ci.yml/badge.svg)](https://github.com/Old-Friends-Gathering/strata/actions/workflows/ci.yml)
-[![quality](https://github.com/Old-Friends-Gathering/strata/actions/workflows/quality.yml/badge.svg)](https://github.com/Old-Friends-Gathering/strata/actions/workflows/quality.yml)
-[![security](https://github.com/Old-Friends-Gathering/strata/actions/workflows/security.yml/badge.svg)](https://github.com/Old-Friends-Gathering/strata/actions/workflows/security.yml)
-[![issue-link](https://github.com/Old-Friends-Gathering/strata/actions/workflows/issue-link.yml/badge.svg)](https://github.com/Old-Friends-Gathering/strata/actions/workflows/issue-link.yml)
+[![ci](https://github.com/Old-Friends-Gathering/sedimem/actions/workflows/ci.yml/badge.svg)](https://github.com/Old-Friends-Gathering/sedimem/actions/workflows/ci.yml)
+[![quality](https://github.com/Old-Friends-Gathering/sedimem/actions/workflows/quality.yml/badge.svg)](https://github.com/Old-Friends-Gathering/sedimem/actions/workflows/quality.yml)
+[![security](https://github.com/Old-Friends-Gathering/sedimem/actions/workflows/security.yml/badge.svg)](https://github.com/Old-Friends-Gathering/sedimem/actions/workflows/security.yml)
+[![issue-link](https://github.com/Old-Friends-Gathering/sedimem/actions/workflows/issue-link.yml/badge.svg)](https://github.com/Old-Friends-Gathering/sedimem/actions/workflows/issue-link.yml)
 [![license: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 ![node](https://img.shields.io/badge/node-%E2%89%A522-3c873a)
 ![deps](https://img.shields.io/badge/runtime%20deps-0-brightgreen)
 ![tests](https://img.shields.io/badge/tests-288-brightgreen)
 ![eval](https://img.shields.io/badge/injection%20eval-I1%E2%80%93I24-blueviolet)
 
-**[🌐 图文版项目站](https://old-friends-gathering.github.io/strata/)** · [快速开始](#快速开始) · [架构](#架构) · [三端接入](#三端接入dsh--codex--claude) · [部署](#部署常驻观察台与-nightly) · [设计决策](#设计决策为什么这么做) · [文档](#文档地图)
+**[🌐 图文版项目站](https://old-friends-gathering.github.io/sedimem/)** · [快速开始](#快速开始) · [架构](#架构) · [三端接入](#三端接入dsh--codex--claude) · [部署](#部署常驻观察台与-nightly) · [设计决策](#设计决策为什么这么做) · [文档](#文档地图)
 
 </div>
 
@@ -34,14 +34,14 @@
 | 只增不删，直到把配额吃满 | 检索变慢、token 成本线性上涨 |
 | 有人往记忆里塞了一句"忽略之前所有指令" | 之后每个会话都被悄悄影响 |
 
-strata 的立场是：**记忆的难点在治理，不在检索**。所以它把力气花在四件事上——
+sedimem 的立场是：**记忆的难点在治理，不在检索**。所以它把力气花在四件事上——
 写入时去重、冲突时失效而不删除、过期后仍可回看、脏数据不进上下文。
 
 <p align="center"><img src="docs/diagrams/write-path.svg" alt="写入路径：四道门" width="100%"></p>
 
 ## 它解决什么
 
-| 常见做法 | strata 的做法 |
+| 常见做法 | sedimem 的做法 |
 |---|---|
 | 记忆越攒越多，重复/矛盾条目一起进上下文 | **写入门控**：hash 短路 → 同 slot 判等 → 近重复判定，重复的直接 noop |
 | 换措辞的同一条事实被判成"冲突" | 在线只做**零误杀**去重；语义判断交给**正在跑的 Agent**（`memory_dedupe_scan` → `memory_curate`），零 API 成本、可离线 |
@@ -54,7 +54,7 @@ strata 的立场是：**记忆的难点在治理，不在检索**。所以它把
 
 ## 架构
 
-<p align="center"><img src="docs/diagrams/architecture.svg" alt="strata 架构分层" width="100%"></p>
+<p align="center"><img src="docs/diagrams/architecture.svg" alt="sedimem 架构分层" width="100%"></p>
 
 四层结构，依赖单向：
 
@@ -77,9 +77,11 @@ strata 的立场是：**记忆的难点在治理，不在检索**。所以它把
 | 离线整合 | nightly | 摊销、可重放 | 慢操作不挡在线 |
 | 检索期过滤 | 查询时 | 0 | 读路径不改数据 |
 
-## 为什么叫 strata
+## 为什么叫 sedimem
 
-记忆像地层一样**沉积**，而不是被反复改写覆盖：
+`s edi ment + mem ory`：记忆像地层一样**沉积**，而不是被反复改写覆盖。
+（原名 strata 与多个开源项目重名，2026-11-10 更名。）
+
 
 | 地层 | 实现 | 规则 |
 |---|---|---|
@@ -88,7 +90,7 @@ strata 的立场是：**记忆的难点在治理，不在检索**。所以它把
 | 失效标记 | `superseded` / `tombstoned` + bi-temporal 时间戳 | 过时的事实**失效而非删除**，`asOf` 可回看任意时点 |
 | 风化层 | `nightly`、配额淘汰、去重扫描、`compact` | 慢速、离线、可重放 |
 
-产品名是 `strata`；技术标识为向后兼容保持不变：CLI 仍是 `memo`、环境变量 `MEMO_*`、
+产品名是 `sedimem`；技术标识为向后兼容保持不变：CLI 仍是 `memo`、环境变量 `MEMO_*`、
 MCP 工具 `memory_*`、`serverName` 仍是 `memo`（改名要同步三端配置与历史分库，留到带兼容期的大版本）。
 
 ## 快速开始
@@ -96,7 +98,7 @@ MCP 工具 `memory_*`、`serverName` 仍是 `memo`（改名要同步三端配置
 需要 Node ≥ 22，**零运行时依赖**。
 
 ```bash
-git clone https://github.com/Old-Friends-Gathering/strata && cd strata
+git clone https://github.com/Old-Friends-Gathering/sedimem && cd sedimem
 NODE=$(command -v node)
 V=versions/$(cat versions/CURRENT)          # 当前版本目录由指针决定
 
@@ -145,13 +147,13 @@ $NODE $V/src/cli/nightly.js
 ```
 
 macOS 上建议用 launchd 常驻（模板见 [`configs/launchd/`](versions/v0.3/configs/launchd/)），
-入口统一走 [`scripts/strata-run.sh`](scripts/strata-run.sh) —— 它读 `versions/CURRENT`，
+入口统一走 [`scripts/sedimem-run.sh`](scripts/sedimem-run.sh) —— 它读 `versions/CURRENT`，
 所以**换大版本只改指针，plist 与 crontab 都不用碰**：
 
 ```bash
-launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/live.strata.observer.plist
-launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/live.strata.nightly.plist
-launchctl kickstart -k gui/$(id -u)/live.strata.observer   # 改完代码热加载
+launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/live.sedimem.observer.plist
+launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/live.sedimem.nightly.plist
+launchctl kickstart -k gui/$(id -u)/live.sedimem.observer   # 改完代码热加载
 ```
 
 ## 看一眼（只读观察台）

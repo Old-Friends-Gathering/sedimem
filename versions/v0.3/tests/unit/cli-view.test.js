@@ -37,8 +37,8 @@ async function withService(fn) {
 }
 
 async function seed(service) {
-  await service.write({ text: '真相层是只追加 JSONL', kind: 'fact', subject: 'strata/truth', predicate: 'storage', value: 'jsonl', source: { agent: 'test' } });
-  await service.write({ text: '近重复阈值 0.85，宁漏不误杀', kind: 'decision', subject: 'strata/dedupe', predicate: 'threshold', value: '0.85', source: { agent: 'test' } });
+  await service.write({ text: '真相层是只追加 JSONL', kind: 'fact', subject: 'sedimem/truth', predicate: 'storage', value: 'jsonl', source: { agent: 'test' } });
+  await service.write({ text: '近重复阈值 0.85，宁漏不误杀', kind: 'decision', subject: 'sedimem/dedupe', predicate: 'threshold', value: '0.85', source: { agent: 'test' } });
 }
 
 test('view build → show → rebuild：文件落地且可重建', async () => {
@@ -178,6 +178,6 @@ test('brief --tier0：输出目录且带完整 id', async () => {
     await seed(service);
     const log = fakeLog();
     assert.equal(await cmdBriefTier0({}, false, service, log), 0);
-    assert.match(log.out, /\[fact\] strata\/truth\/storage = jsonl \(id [0-9A-HJKMNP-TV-Z]{26}, \d{4}-\d{2}-\d{2}\)/);
+    assert.match(log.out, /\[fact\] sedimem\/truth\/storage = jsonl \(id [0-9A-HJKMNP-TV-Z]{26}, \d{4}-\d{2}-\d{2}\)/);
   });
 });

@@ -504,7 +504,7 @@ await svc.exportRecords({ since, until, status = 'active', kind, limit = 2000 })
 
 | 模块 | 导出 | 职责 |
 |---|---|---|
-| `src/config/paths.js` | `scopeKeyOf(scope)` | scope → 文件名安全片段（裁决 39 的命名单一来源；`repo:strata` → `repo-strata`） |
+| `src/config/paths.js` | `scopeKeyOf(scope)` | scope → 文件名安全片段（裁决 39 的命名单一来源；`repo:sedimem` → `repo-sedimem`） |
 | `src/config/paths.js` | `metricsFileName(date, scope)` | metrics 快照文件名 `<date>.<scopeKey>.json`（写侧唯一入口） |
 | `src/config/paths.js` | `legacyMetricsFileName(date)` | 旧命名 `<date>.json`，仅供读侧兼容回退 |
 | `src/api/mask.js` | `maskSuspiciousRecord(r, includeSuspicious)` | 裁决 42 的遮蔽单一实现 |
@@ -686,7 +686,7 @@ Windows 上 `:` 是 NTFS **备用数据流（ADS）**分隔符，`items/repo:x.j
 | 平台 | `itemsFileName(scope)` | `briefFileName(scope)` |
 |---|---|---|
 | POSIX | `<scope>.jsonl`（不变） | `<scope>.md` |
-| Windows | 把 scope 里的 `:` 换成 `+`，如 `repo+strata.jsonl` | 同规则，`repo+strata.md` |
+| Windows | 把 scope 里的 `:` 换成 `+`，如 `repo+sedimem.jsonl` | 同规则，`repo+sedimem.md` |
 
 - 反解用 `scopeFromItemsFileName(name)`，供 `JsonlStore.listScopes` 与 `web/scopes.js` 枚举时还原 scope。
 - `+` 不在 `SCOPE_PATTERN` 的允许字符集（`[a-z0-9._-]`）里，因此映射无歧义、可逆。

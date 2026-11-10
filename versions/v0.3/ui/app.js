@@ -1,5 +1,5 @@
 /**
- * app.js —— strata 记忆观察台（只读）的壳：
+ * app.js —— sedimem 记忆观察台（只读）的壳：
  * hash 路由（#/today 默认、#/graph、#/hygiene）+ 取数渲染今日/卫生两页；
  * 图谱页只放容器并动态委托给 graph.js（不存在时显示占位）。
  * 安全约定：所有接口数据一律 textContent 写入，禁止 innerHTML 拼数据，无 eval。

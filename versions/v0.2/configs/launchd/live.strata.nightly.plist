@@ -2,21 +2,21 @@
 <!--
   夜间整合（macOS launchd）：配额淘汰、brief 重建、metrics 快照、去重候选统计。
 
-  同样走 scripts/strata-run.sh（跟 versions/CURRENT 走），所以换大版本不用改这里。
+  同样走 scripts/sedimem-run.sh（跟 versions/CURRENT 走），所以换大版本不用改这里。
   不要同时用 crontab：两边都装会让 nightly 一天跑两次，metrics 互相覆盖（同日同 scope 是覆盖写）。
 
   用法：
     1) 把两处占位符换成真实路径：__REPO_ROOT__ / __MEMO_HOME__
-    2) cp 到 ~/Library/LaunchAgents/ && launchctl load ~/Library/LaunchAgents/live.strata.nightly.plist
-    3) 立刻跑一次看效果：launchctl kickstart -k gui/$(id -u)/live.strata.nightly
+    2) cp 到 ~/Library/LaunchAgents/ && launchctl load ~/Library/LaunchAgents/live.sedimem.nightly.plist
+    3) 立刻跑一次看效果：launchctl kickstart -k gui/$(id -u)/live.sedimem.nightly
     日志：tail -f ~/.memo/nightly.log
 -->
 <plist version="1.0">
 <dict>
-  <key>Label</key><string>live.strata.nightly</string>
+  <key>Label</key><string>live.sedimem.nightly</string>
   <key>ProgramArguments</key>
   <array>
-    <string>__REPO_ROOT__/scripts/strata-run.sh</string>
+    <string>__REPO_ROOT__/scripts/sedimem-run.sh</string>
     <string>nightly</string>
   </array>
   <key>EnvironmentVariables</key>
