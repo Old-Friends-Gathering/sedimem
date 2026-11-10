@@ -114,7 +114,7 @@ td.b{width:78px}
 /* 分库切换（issue #23）：顶栏下拉，窄屏时压缩标签 */
 .scope-pick{display:inline-flex;align-items:center;gap:6px}
 .scope-pick .scope-label{font-size:11px;color:var(--muted,#8b95a8)}
-.scope-select{background:var(--panel-2,#1b2130);color:var(--fg,#e6ebf5);
+.scope-select{background:var(--panel2);color:var(--fg);
   border:1px solid var(--line,#2a3140);border-radius:999px;padding:4px 10px;font-size:12px;
   font-family:inherit;cursor:pointer;max-width:min(48vw,320px)}
-.scope-select:focus-visible{outline:2px solid var(--accent,#5b9cf5);outline-offset:2px}
+.scope-select:focus-visible{outline:2px solid var(--fact,#5b9cf5);outline-offset:2px}

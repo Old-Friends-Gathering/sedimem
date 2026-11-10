@@ -240,7 +240,7 @@ export async function initGraph({ canvas, detailEl, toolbarEl, apiBase = 'api', 
    * 排序后逐个放，**与已画标签重叠就跳过**——宁可少画几个，也不要叠字。
    * 字号固定 11px（屏幕空间），缩得太小（<0.2）才完全关掉。
    */
-  function drawLabels() {
+  function drawLabels(pal) {
     if (state.view.scale < 0.2) return;
     const boxes = [];
     // v0.3.3 标签降噪：83 个全画必然叠。只画「聚合点（count>1）」与
@@ -389,7 +389,7 @@ export async function initGraph({ canvas, detailEl, toolbarEl, apiBase = 'api', 
       if (state.alpha < 0.02 && !state.fitted) { state.fitted = true; if (!state.userAdjusted) fitView(); }
 
     }
-    drawLabels();
+    drawLabels(pal);
     // 采样提示（右上角常驻）
     if (state.sampled.shown < state.sampled.total) {
       const text = `已采样 ${state.sampled.shown} / ${state.sampled.total} 条`;
