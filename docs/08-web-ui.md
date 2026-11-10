@@ -244,3 +244,43 @@ async exportRecords({ since, until, status = 'active', kind, limit = 2000 } = {}
 
 **为什么不做「跨分库聚合视图」**：分库的意义是隔离（不同项目的事实不该互相污染）；一个混在一起的
 "全部分库" 页面会立刻把 scope 隔离的价值抹掉。要看别的项目就切过去看。
+
+## 14. v0.4 搜索页与两个新端点
+
+竞品调研（`docs/research/competitive-dsh-plugins-2026-11.md`）里「检索」是我们最大的短板，
+v0.4 先补「可解释的检索」与「界面能搜」，语义道本身是可选增强。
+
+### 14.1 `GET /api/search`
+
+| 参数 | 约束 | 说明 |
+|---|---|---|
+| `q` | **必填**，非空 | 空 q 直接 `400 E_INVALID_ARG`（绝不返回全库） |
+| `limit` | 1–100，默认 10 | 越界 400 |
+| `scope` | 过 `SCOPE_PATTERN` | 缺省用服务启动分库 |
+
+返回 `{ok, items:[{id, scope, kind, title, text, score, basis, status, validFrom, ...}], degraded, degradedReason, scope}`：
+
+- `basis` ∈ `bm25` / `vector` / `bm25+vector`：告诉调用方「这一条是凭什么被召回的」；
+- `degraded` + `degradedReason`：语义道关闭时 `semantic-disabled`，语义路故障时给具体错误码
+  （`E_EMBED_UNAVAILABLE` / `E_EMBED_DIM_MISMATCH`）。**UI 必须显示这条提示**，
+  否则用户会把「只有词法」误读成「记忆里没有」。
+
+### 14.2 `#/search` 页面
+
+- 路由 `#/search?q=<query>`（query 与 scope 都在 hash 里，刷新保持）。
+- 顶部输入框回车写 hash；切分库后按当前 query 重查。
+- 结果卡片：title（无 title 退正文首句）、kind 徽标、`basis` 徽标、score、正文片段。
+- 渲染是**纯函数** `ui/search-view.js: renderSearchResults()`，返回 HTML 字符串且所有插值都
+  `escapeHtml`；挂载用 `DOMParser` 解析后 `replaceChildren`，**不用 innerHTML**（Q9 硬约束）。
+
+### 14.3 `GET /api/conflicts`
+
+分歧（disputed）的一等公民视图，与 `memo conflicts` 同一份 `listConflicts()`：
+`{ok, slots:[{key, records, pairs:[{aId,bId,sim}], disputedCount}], disputedCount, supersededCount, scanned}`。
+只读——裁决仍走 CLI 的 `memo conflicts resolve`（UI 不产生写，S9 约束不变）。
+
+### 14.4 测试
+
+- I25 语义融合与降级、I26 脱敏、I27 分歧、I28 捕获、I29 注入预算、I30 `/api/search` 契约。
+- 单元：`tests/unit/search-view.test.js`（转义）、`tests/unit/hybrid.test.js`（RRF 性质）、
+  `tests/unit/embedder.test.js`（假 fetch：超时/维度漂移/未就绪）。

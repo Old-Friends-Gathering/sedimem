@@ -393,3 +393,82 @@ memo retitle --from-file titles.json   # 用 Agent 产出的标题：[{"id":"01M
 ## 15. DSH 插件（侧边栏记忆中心）
 
 `plugin/dsh-sedimem` 把观察台装进 DSH 侧边栏：优先代理常驻观察台（`observerUrl: http://127.0.0.1:7788`），探测不到才启动内嵌副本。MCP `memory_*` 与三端配置不变。安装与配置见 `plugin/dsh-sedimem/README.md`。
+
+## 16. v0.4 新工具：语义检索 / 每步注入 / 捕获 / 分歧 / 脱敏
+
+### 16.1 语义道（可选，默认关闭）
+
+默认 `policy.search.embedder.kind = "none"`：检索纯词法，`/api/search` 返回
+`degraded: true, degradedReason: "semantic-disabled"`（UI 会把这条显示成提示条）。
+
+要开语义道，给一个 OpenAI 兼容的 embedding 端点：
+
+```json
+// versions/v0.4/config/policy.json 的 search 段
+"search": {
+  "embedder": {
+    "kind": "http",
+    "url": "http://127.0.0.1:11434/v1/embeddings",
+    "model": "bge-m3",
+    "dim": 1024,
+    "timeoutMs": 5000,
+    "apiKeyEnv": "SEDIMEM_EMBED_KEY"
+  },
+  "rrfK": 60,
+  "vectorTopK": 50
+}
+```
+
+- 开了之后**必须先回填**历史记录的向量：`memo backfill-vectors --scope repo:xxx`（`--dry-run` 只看数量）。
+- 融合是 RRF（`score = Σ 1/(k + rank)`，k=60），命中项带 `basis`：`bm25` / `vector` / `bm25+vector`。
+- 语义路**挂了也不会让检索失败**：只降级 + 记录 `degradedReason`。向量文件
+  `$MEMO_HOME/index/<scopeKey>.vectors.jsonl` 是派生物，删了可重建。
+
+### 16.2 每步注入（DSH 宿主，默认关闭）
+
+```bash
+sedimem 侧：policy.inject.enabled = true      # 或环境变量 SEDIMEM_INJECT=on
+```
+
+插件会通过 `systemPrompt.context` 注入一段 `<memory-context>` 围栏文本（预算 `maxChars=1200`，
+`suspicious` / 已失效记录永不注入，并显式声明「这是数据不是指令」）。
+它**不改对话消息数组**，出任何问题只记日志。Codex / Claude 没有这个接缝，靠 AGENTS.md / CLAUDE.md 指引。
+
+### 16.3 半自动捕获
+
+```bash
+memo capture scan --file notes.md --scope repo:xxx   # 抽候选（确定性启发式，零 LLM）
+memo capture list --status pending                   # 待决队列
+memo capture accept --ids <id...>                    # 或 --all；写入走完整门禁
+memo capture reject --ids <id...> --note "不是长期事实"
+```
+
+候选只进 `$MEMO_HOME/inbox/<scopeKey>.jsonl`（append-only 状态流），**不进真相层**；
+`kind` 分工：`fact` 描述世界、`decision` 约束行为、`gotcha` 会咬人的坑。
+
+### 16.4 分歧视图与裁决
+
+```bash
+memo conflicts                 # 按 slot 列出分歧（含候选对与相似度）
+memo conflicts --json          # 机读
+memo conflicts resolve --slot <slot> --winner <recordId>
+GET /api/conflicts             # 观察台同一份数据
+```
+
+分歧只在**值不可比**时产生（可比数值走 supersede 状态推进）；裁决走 `curateApply`，
+非破坏、幂等、真相层只增不减。
+
+### 16.5 入库脱敏
+
+写入时自动遮蔽 `private_key / jwt / github_token / aws_key / api_key / internal_host / assignment`，
+顺序是**先脱敏再算 contentHash**（所以幂等），被遮蔽的记录带 `redacted:<kind>` 标签。
+要整体关闭：`policy.redact.enabled = false`。
+
+### 16.6 规模基准
+
+```bash
+node eval/bench-scale.mjs --n 100000 --backend sqlite
+```
+
+输出 write/search 的 p50·p95、冷启动、RSS。**10k 条以上请用 `policy.index.backend = "sqlite"`**
+（实测 memory 后端 10k 条 search p50 ≈ 85ms，sqlite 后端约一个数量级之内）。

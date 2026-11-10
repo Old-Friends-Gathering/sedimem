@@ -213,7 +213,7 @@ launchctl kickstart -k gui/$(id -u)/live.sedimem.observer   # 改完代码热加
 |---|---|
 | `test (22)` / `test (24)` | Node 22/24 上跑全部测试，0 失败 |
 | `eval (I1–I23)` | 注入式回归：重复/冲突/过时/删除/投毒/并发/分库…（本地跑 I1–I24） |
-| `quality` | 零依赖、源码规模、测试清单、评测对齐、**契约覆盖 100%**、文档链接、版本自包含、编码卫生 |
+| `quality` | 零依赖、源码规模、测试清单、评测对齐、**契约覆盖率 ≥ 90%**（当前 97.6%）、文档链接、版本自包含、编码卫生 |
 | `security` | 个人路径、凭据、内部域名、配置可移植、`.gitignore`、许可证、大文件、历史面 |
 | `CodeQL` / `codeql` | 静态分析（含 `security-and-quality` 查询集） |
 | `windows-smoke` | 真 `windows-latest` 上验跨平台文件名与 CLI 路径 |
@@ -266,7 +266,8 @@ node tools/quality-check.mjs && node tools/security-check.mjs && node tools/cove
 | v0.3.0 | 分层视图：L2 场景块（可字节重建）+ tier0 注入分级 + L3 画像（固定预算 + 强制溯源） | ✅ |
 | v0.3.1 | `title` 一等字段 + label v2 + 图谱聚合 + 批量回填 | ✅ |
 | v0.3.2 | 密集图谱可读性 + 今日页改标题事件 | ✅ |
-| v0.3.3 | 跨主题连线 + 3D 球体（手动旋转）+ 布局降噪 | ✅ |
+| v0.3.3 | 跨主题连线 + 3D 球体（手动旋转）+ 布局降噪 | 🔒 冻结 0.3.6 |
+| v0.4.0 | 竞品差距补齐：语义道（可选，RRF + `basis` 可解释）、每步注入、半自动捕获、分歧视图、入库脱敏、UI 搜索页、规模基准、一条命令装插件 | ✅ |
 
 目录规则：**`X.Y` 换目录**，**`X.Y.Z` 补丁同目录递增**；老目录冻结并留 `FROZEN.md`；指针在 `versions/CURRENT`。
 
@@ -277,8 +278,10 @@ A：横评过 8 个系统（[`docs/research`](docs/research/README.md)）。结�
 但都不满足"三端共用 + 每条可 as-of 回查 + 真相层不可变"。所以自建薄治理层，提取能力以后按需借。
 
 **Q：为什么不直接用 embedding 检索？**
-A：实测中文改写用 embedding 相似度与"同域无关事实"区间重叠，无法用阈值区分；
-而且它会引入模型依赖与不可离线。现在用 BM25 + 汉字二元组 Dice + Agent 裁决，够用且可解释。
+A：v0.4 起 embedding 是**可选**的第二条路（`policy.search.embedder.kind=http` + RRF 融合），
+但它默认关闭：一是会让「零依赖、可离线」这条护城河失守，二是实测中文改写的余弦与"同域无关事实"
+区间重叠，光靠它不能用阈值区分。默认仍是 BM25 + 汉字二元组 Dice + Agent 裁决，
+开了语义道就变成两路融合，每条结果都带 `basis` 说明凭什么被召回。
 
 **Q：会不会写到磁盘满天飞？**
 A：真相层只追加，但 `compact` + 配额 + nightly 会控增长；`doctor` 会报 `quota_exceeded`。

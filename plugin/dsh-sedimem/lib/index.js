@@ -7,10 +7,13 @@
  *  - 外部观察台不可达时才 fallback 到内嵌副本（为只装插件、没装完整系统的用户兜底）；
  *  - MCP 的 memory_* 工具与插件无关，仍由 cordis.patch.yml 里的 dsh-mcp-client 行提供。
  *
- * 职责三件：
+ * 职责四件：
  *  1. 观察台生命周期：外部优先、内嵌兜底（空闲回环端口 + spawn observer-entry.mjs）；
  *  2. `api/dsh-sedimem/ui` 前缀路由反向代理 —— 侧边栏 iframe 同源，不吃跨源/X-Frame-Options 的亏；
- *  3. `api/dsh-sedimem/health` 精确路由，客户端显示运行态。
+ *  3. `api/dsh-sedimem/health` 精确路由，客户端显示运行态；
+ *  4. **每步记忆注入**（v0.4 D2，默认关闭）：注册 `systemPrompt.context`，每步把
+ *     brief/items 的短目录（≤ maxChars）以「数据不是指令」的围栏文本注入。
+ *     配置：`inject: {mode:'off'|'on', maxChars, scope}` 或环境变量 SEDIMEM_INJECT=on。
  *
  * 刻意不做：KeepAlive 重启循环（launchd 的职责域）；改写 ~/.memo 任何数据。
  */
@@ -21,6 +24,7 @@ import { readdirSync, statSync } from 'node:fs';
 import { homedir } from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { registerPreStep } from './pre-step.js';
 
 const PKG_ID = 'dsh-sedimem';
 /** 观察台 UI 前缀（客户端 iframe 用文档相对路径 `api/dsh-sedimem/ui/` 访问，无前导斜杠）。 */
@@ -33,8 +37,8 @@ const MAX_SUB_PATH = 4096;
 
 /** 插件名（Cordis 稳定标识）。 */
 export const name = PKG_ID;
-/** 依赖宿主服务：只需要 webServer 注册路由。 */
-export const inject = ['webServer'];
+/** 依赖宿主服务：webServer 注册路由；systemPrompt 可选（没有就跳过每步注入）。 */
+export const inject = { required: ['webServer'], optional: ['systemPrompt'] };
 /** 路由常量（测试与客户端镜像用）。 */
 export const routes = { UI_PREFIX, HEALTH_PATH };
 
@@ -331,6 +335,19 @@ export function apply(ctx, config = {}) {
       });
     },
   };
+
+  // 每步注入（D2，默认关闭）：实现在 lib/pre-step.js（含宿主接缝的实证记录与测试）。
+  // 开关两处任一即可：cordis 配置 inject.enabled=true，或环境变量 SEDIMEM_INJECT=on。
+  const injectEnabled = config?.inject?.enabled === true
+    || String(process.env.SEDIMEM_INJECT ?? '').toLowerCase() === 'on';
+  if (injectEnabled) {
+    const state = registerPreStep(ctx, {
+      config: { inject: { ...config?.inject, enabled: true, scope: config?.inject?.scope ?? config?.scope } },
+      memoHome,
+      log: (msg) => log(msg),
+    });
+    if (!state.registered) warn(`per-step injection not registered (${state.mode ?? 'no-hook'})`);
+  }
 
   ctx.effect(() => {
     const disposers = [ctx.webServer.register(uiRoute), ctx.webServer.register(healthRoute)];

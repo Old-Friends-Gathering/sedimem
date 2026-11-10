@@ -77,7 +77,8 @@ function seedMemoHome() {
 
 test('元数据：name/inject/routes 形状正确', { timeout: 10000 }, () => {
   assert.equal(name, 'dsh-sedimem');
-  assert.deepEqual(inject, ['webServer']);
+  // v0.4 D2：systemPrompt 是可选依赖（没有就跳过每步注入，不影响观察台）
+  assert.deepEqual(inject, { required: ['webServer'], optional: ['systemPrompt'] });
   assert.equal(routes.UI_PREFIX, '/api/dsh-sedimem/ui');
   assert.equal(routes.HEALTH_PATH, '/api/dsh-sedimem/health');
 });
