@@ -37,8 +37,10 @@ const MAX_SUB_PATH = 4096;
 
 /** 插件名（Cordis 稳定标识）。 */
 export const name = PKG_ID;
-/** 依赖宿主服务：webServer 注册路由；systemPrompt 可选（没有就跳过每步注入）。 */
-export const inject = { required: ['webServer'], optional: ['systemPrompt'] };
+/** 依赖宿主服务：webServer 注册路由（硬依赖）。systemPrompt 是可选接缝，
+ *  由 lib/pre-step.js 在运行时探测，**不写进 inject** —— cordis 的对象式 inject
+ *  在某些宿主版本里不被识别，会导致整个插件 apply 挂起（表现为面板全黑）。 */
+export const inject = ['webServer'];
 /** 路由常量（测试与客户端镜像用）。 */
 export const routes = { UI_PREFIX, HEALTH_PATH };
 
@@ -336,19 +338,6 @@ export function apply(ctx, config = {}) {
     },
   };
 
-  // 每步注入（D2，默认关闭）：实现在 lib/pre-step.js（含宿主接缝的实证记录与测试）。
-  // 开关两处任一即可：cordis 配置 inject.enabled=true，或环境变量 SEDIMEM_INJECT=on。
-  const injectEnabled = config?.inject?.enabled === true
-    || String(process.env.SEDIMEM_INJECT ?? '').toLowerCase() === 'on';
-  if (injectEnabled) {
-    const state = registerPreStep(ctx, {
-      config: { inject: { ...config?.inject, enabled: true, scope: config?.inject?.scope ?? config?.scope } },
-      memoHome,
-      log: (msg) => log(msg),
-    });
-    if (!state.registered) warn(`per-step injection not registered (${state.mode ?? 'no-hook'})`);
-  }
-
   ctx.effect(() => {
     const disposers = [ctx.webServer.register(uiRoute), ctx.webServer.register(healthRoute)];
     return () => {
@@ -367,4 +356,21 @@ export function apply(ctx, config = {}) {
       }
     };
   }, `${PKG_ID}: routes + observer child`);
+
+  // 可选能力：每步注入（D2，默认关闭）。**放在路由注册之后**且自带 try/catch ——
+  // 可选接缝出问题绝不能把面板拖黑（v0.4.3 之前的写法会：apply 抛错 → 路由没注册）。
+  try {
+    const injectEnabled = config?.inject?.enabled === true
+      || String(process.env.SEDIMEM_INJECT ?? '').toLowerCase() === 'on';
+    if (injectEnabled) {
+      const state = registerPreStep(ctx, {
+        config: { inject: { ...config?.inject, enabled: true, scope: config?.inject?.scope ?? config?.scope } },
+        memoHome,
+        log: (msg) => log(msg),
+      });
+      if (!state.registered) warn(`per-step injection not registered (${state.mode ?? 'no-hook'})`);
+    }
+  } catch (err) {
+    warn('per-step injection failed, memory panel unaffected:', err?.message ?? err);
+  }
 }

@@ -77,8 +77,10 @@ function seedMemoHome() {
 
 test('元数据：name/inject/routes 形状正确', { timeout: 10000 }, () => {
   assert.equal(name, 'dsh-sedimem');
-  // v0.4 D2：systemPrompt 是可选依赖（没有就跳过每步注入，不影响观察台）
-  assert.deepEqual(inject, { required: ['webServer'], optional: ['systemPrompt'] });
+  // inject 必须是**数组**（v0.4.3 回归）：cordis 的对象式 inject 在某些宿主版本里
+  // 不被识别，插件会挂在 pending、路由不注册，表现为「记忆中心全黑」。
+  assert.deepEqual(inject, ['webServer']);
+  // systemPrompt 是可选接缝，由 lib/pre-step.js 运行时探测，不进 inject。
   assert.equal(routes.UI_PREFIX, '/api/dsh-sedimem/ui');
   assert.equal(routes.HEALTH_PATH, '/api/dsh-sedimem/health');
 });
