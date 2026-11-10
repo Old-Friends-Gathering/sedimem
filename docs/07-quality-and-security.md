@@ -111,7 +111,7 @@ cd versions/v0.3 && node eval/run.js   # 行为（I1–I12）
 
 | 门禁 | 结果 |
 |---|---|
-| 单元 + 注入式 | **382 tests / 370 pass**（`node --test 'tests/**/*.test.js'`） |
+| 单元 + 注入式 | **384 tests / 370 pass**（`node --test 'tests/**/*.test.js'`） |
 | 评测 | **eval I1–I36 全 PASS**（`node eval/run.js`） |
 | 质量 | 9/9；Q5 契约覆盖 **97.6%**（165/169 导出，下限 90%，其余为 UI/内部工具） |
 | 安全 | 9/9（含 S9：src/web 无写接口、只绑回环） |
