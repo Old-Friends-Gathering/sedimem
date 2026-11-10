@@ -13,6 +13,7 @@
 | [`memory-ecosystem-2026.md`](memory-ecosystem-2026.md) | **编码 Agent 侧生态**：claude-mem、basic-memory、mcp-memory-service、Cline Memory Bank，以及 Claude Code / Codex CLI / DSH 各自的原生记忆机制与可插拔接缝 | 345 行 | 子代理 B，官方文档当天抓取 + 仓库 Issue 证据 |
 | [`ai-memory-hygiene-survey.md`](ai-memory-hygiene-survey.md) | **治理机制综述**：冗余/重复/冲突/过时四类熵增的治理路径、阈值纪律、bi-temporal 失效语义、成本模型、评测方法、真实反模式 | 519 行 | 子代理 C，论文（arXiv 全部核验）+ 公开实现 |
 | [`layered-memory-2026.md`](layered-memory-2026.md) | **分层蒸馏（L0–L3）在 GitHub 上更好的做法**：确定性聚合 vs LLM 生成、捕获/注入的成本与噪声治理、检索与评测（先校准裁判）；附对 sedimem 的三条建议与最小 A/B 实验设计 | 119 行 | 三名调研代理并行（glm-5.3），2026-11-07，只记打开过的页面/源码 |
+| [`competitive-dsh-plugins-2026-11.md`](competitive-dsh-plugins-2026-11.md) | **DSH 记忆插件竞品对比**：生态四层分层、与 dsh-engram/memsearch/prime-memory/MemOS plugin 的逐维度对比表、我们的优势排序与诚实短板清单、对 v0.4 的候选含义 | 108 行 | Lead（Lead 实测 sedimem 侧 + 3 份竞品 README + awesome 快照通读），2026-11-10 |
 | [`readmes/`](readmes/) | 上述 8 个项目 README 的**当日快照**（防止上游改动后结论无法复核） | 8 份 | 子代理 A 抓取 |
 
 ## 这些调研直接决定了哪些设计
