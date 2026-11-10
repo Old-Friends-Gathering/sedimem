@@ -3,7 +3,7 @@
 ## 标题备选（≤20 字）
 
 1. AI 总失忆？我给记忆建了个"真相层"
-2. 三个 AI 客端共用一份记忆，开源了
+2. 三个 AI 客户端共用一份记忆，开源了
 3. 别再堆 AGENTS.md 了，试试可回溯记忆
 
 ## 正文
@@ -35,8 +35,9 @@
 
 ```bash
 git clone https://github.com/Old-Friends-Gathering/sedimem
-node install-plugin.mcp.js   # 装 DSH 插件（一条命令）
-# 然后按 docs 里 DSH / Codex / Claude 各自的 MCP 配置贴一段即可
+bash sedimem/scripts/install-dsh-plugin.sh   # 一条命令装 DSH 插件
+# 三端 MCP 各自贴一段配置（docs/06-usage.md 里有现成的）
+# DSH 里跑一句：memory_scope use path=<你的项目根>  ← 让三端指向同一份记忆
 ```
 
 自测数字 📊
