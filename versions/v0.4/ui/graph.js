@@ -15,7 +15,8 @@
  */
 
 import { renderToolbar } from './graph-toolbar.js';
-import { uiPalette } from './palette.js';
+import { uiPalette, nodeStroke } from './palette.js';
+import { edgeStyleFor, edgeStrokeColor, edgeAlpha, nodeAlpha, nodeFillColor, nodeRadius } from './graph-style.js';
 import {
   KIND_COLORS, kindColorsFromPolicy, DEFAULT_EDGE_TYPES, OPTIONAL_EDGE_TYPES, EDGE_PREF_KEY, layoutTick,
   MIN_SCALE, MAX_SCALE, ALPHA_MIN,
@@ -114,7 +115,6 @@ export async function initGraph({ canvas, detailEl, toolbarEl, apiBase = 'api', 
   }
 
   const nodeById = new Map(state.nodes.map((nd) => [nd.id, nd]));
-  const radiusOf = (nd) => Math.sqrt(Math.max(Number(nd.hits) || 0, 0)) + 3;
 
   /* ---------- 边偏好 ---------- */
   function loadEdgePref() {
@@ -197,7 +197,7 @@ export async function initGraph({ canvas, detailEl, toolbarEl, apiBase = 'api', 
     let best = null; let bestPersp = -1;
     for (const nd of state.nodes) {
       const [px, py, persp] = toScreen(nd.x, nd.y, nd.z ?? 0);
-      const r = Math.max(6, radiusOf(nd) * state.view.scale ** 0.6 * persp + 4);
+      const r = Math.max(6, nodeRadius(nd) * state.view.scale ** 0.6 * persp + 4);
       if ((sx - px) ** 2 + (sy - py) ** 2 <= r * r && persp > bestPersp) {
         best = nd; bestPersp = persp;
       }
@@ -264,7 +264,7 @@ export async function initGraph({ canvas, detailEl, toolbarEl, apiBase = 'api', 
     const MAX_W = 132; // ≈12 个汉字；再宽会和邻居叠上
     for (const nd of cand) {
       const [px, py] = toScreen(nd.x, nd.y);
-      const r = Math.max(2.2, radiusOf(nd) * state.view.scale ** 0.6);
+      const r = Math.max(2.2, nodeRadius(nd) * state.view.scale ** 0.6);
       const badge = nd.count > 1 ? ` ×${nd.count}` : '';
       let text = `${nd.label}${badge}`;
       if (ctx.measureText(text).width > MAX_W) {
@@ -318,8 +318,7 @@ export async function initGraph({ canvas, detailEl, toolbarEl, apiBase = 'api', 
       const dy = a.y - b.y;
       cand.push({ e, a, b, len: Math.sqrt(dx * dx + dy * dy + dz * dz) });
     }
-    // 距离阈值：取「中位数的 1.15 倍」做上限，保证近半数的边被保留、长线消失
-    let limit = Infinity;
+    let limit = Infinity; // 距离阈值：中位数的 1.15 倍，去掉长线
     if (cand.length > 0) {
       const lens = cand.map((c) => c.len).sort((x, y) => x - y);
       limit = lens[Math.floor(lens.length / 2)] * 1.15;
@@ -327,18 +326,17 @@ export async function initGraph({ canvas, detailEl, toolbarEl, apiBase = 'api', 
     const drawEdges = cand.filter((c) => c.len <= limit).slice(0, 90);
     for (const c of drawEdges) {
       const { e, a, b } = c;
-      const st = EDGE_STYLE[e.type] || EDGE_STYLE['same-entity'];
+      const st = edgeStyleFor(e.type);
       const [x1, y1, p1] = toScreen(a.x, a.y, a.z ?? 0);
       const [x2, y2, p2] = toScreen(b.x, b.y, b.z ?? 0);
-      // 深度雾化：远侧（persp 小）更淡，近侧更实
+      // 深度雾化：远侧（persp 小）更淡，近侧更实（浅色底的下限见 graph-style）
       const depth = (p1 + p2) / 2;
-      const fog = Math.max(0.12, Math.min(1, (depth - 0.78) / 0.5));
-      ctx.globalAlpha = fog;
+      ctx.globalAlpha = edgeAlpha(depth, pal);
       ctx.beginPath();
       ctx.setLineDash(st.dash);
       const w = Number.isFinite(e.weight) ? Math.max(0.75, Math.min(3, e.weight)) : 1;
-      ctx.lineWidth = e.type === 'duplicate-of' ? w : st.width;
-      ctx.strokeStyle = st.color;
+      ctx.lineWidth = (e.type === 'duplicate-of' ? w : st.width) + (pal.light ? 0.45 : 0); // 浅色底细线易消失
+      ctx.strokeStyle = edgeStrokeColor(e.type, pal);
       ctx.moveTo(x1, y1);
       ctx.lineTo(x2, y2);
       ctx.stroke();
@@ -348,17 +346,24 @@ export async function initGraph({ canvas, detailEl, toolbarEl, apiBase = 'api', 
     // 节点
     for (const nd of state.nodes) {
       const [px, py, persp] = toScreen(nd.x, nd.y, nd.z ?? 0);
-      // 缩小时圆点不能跟着消失：半径按 scale^0.6 缩，留 2.2px 下限；再乘近大远小
-      const r = Math.max(2.2, radiusOf(nd) * state.view.scale ** 0.6 * persp);
+      // 缩小时圆点不能消失：半径按 scale^0.6 缩、留 2.2px 下限，再乘近大远小
+      const r = Math.max(2.2, nodeRadius(nd) * state.view.scale ** 0.6 * persp);
       const color = kindColors[nd.kind] || KIND_COLORS.state;
       const superseded = nd.status === 'superseded';
       // 深度雾化：背面（persp<1）变暗，正面更亮 —— 球体纵深的关键线索
-      const nodeFog = Math.max(0.35, Math.min(1, (persp - 0.72) / 0.55));
+      const alpha = nodeAlpha(persp, pal, superseded);
       ctx.beginPath();
-      ctx.globalAlpha = (superseded ? 0.4 : 1) * nodeFog;
-      ctx.fillStyle = color;
+      ctx.globalAlpha = alpha;
+      ctx.fillStyle = nodeFillColor(color, pal);
       ctx.arc(px, py, r, 0, Math.PI * 2);
       ctx.fill();
+      const stroke = nodeStroke(pal);
+      if (stroke && r >= 2.5) {
+        // 浅色底：近白描边把节点从连线里分离出来（深色底不需要，避免发灰）
+        ctx.strokeStyle = stroke.color;
+        ctx.lineWidth = stroke.width;
+        ctx.stroke();
+      }
       if (superseded) {
         // 斜线标记
         ctx.save();
@@ -381,7 +386,7 @@ export async function initGraph({ canvas, detailEl, toolbarEl, apiBase = 'api', 
       if (nd.id === state.selectedId) {
         ctx.beginPath();
         ctx.arc(px, py, r + 4, 0, Math.PI * 2);
-        ctx.strokeStyle = 'rgba(15,23,42,0.65)';
+        ctx.strokeStyle = pal.light ? 'rgba(15,23,42,0.8)' : 'rgba(15,23,42,0.65)';
         ctx.lineWidth = 1;
         ctx.stroke();
       }

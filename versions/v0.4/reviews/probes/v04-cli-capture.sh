@@ -2,7 +2,7 @@
 # v0.4 架构审核探针：真实 CLI 接线。
 # 只操作临时 MEMO_HOME，不碰仓库数据。
 set -u
-NODE=/Users/yeager/.dsh/dsh-runtimes/dsh-primary-runtime/dependencies/node/bin/node
+NODE=~/.dsh/dsh-runtimes/dsh-primary-runtime/dependencies/node/bin/node
 cd "$(dirname "$0")/../.." || exit 1
 export MEMO_HOME=$(mktemp -d /tmp/sedimem-v04-cli-XXXXXX)
 export MEMO_SCOPE=repo:probe

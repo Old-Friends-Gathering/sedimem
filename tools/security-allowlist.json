@@ -1,0 +1,73 @@
+{
+  "//": "安全门禁豁免清单：每一条都必须写 reason（为什么这些字面量是安全的）。只允许测试夹具与审核留证，不允许生产代码。",
+  "entries": [
+    {
+      "rules": [
+        "S2"
+      ],
+      "glob": "versions/*/tests/**",
+      "reason": "脱敏/投毒用例必须包含看起来像凭据的字面量（ghp_/sk-/AKIA/PEM）来验证 redact 与 suspicious 检测；这些都是构造样例，不对应任何真实凭据。"
+    },
+    {
+      "rules": [
+        "S2"
+      ],
+      "glob": "versions/*/reviews/probes/**",
+      "reason": "审核探针脚本复现「凭据是否会明文落盘」，同样需要构造样例；留证文件不进发布产物。"
+    },
+    {
+      "rules": [
+        "S1"
+      ],
+      "glob": "versions/*/tests/**",
+      "reason": "测试需要构造绝对路径样例（scope 解析、路径穿越防护）。"
+    },
+    {
+      "rules": [
+        "S1"
+      ],
+      "glob": "versions/*/reviews/**",
+      "reason": "审核报告引用本机路径作为证据；已把真实用户名替换为占位符，但仍会出现 /Users/<name> 形态。"
+    },
+    {
+      "rules": [
+        "S3"
+      ],
+      "glob": "versions/*/tests/**",
+      "reason": "内网地址（10./192.168./172.16-31.）样例用于验证 internal_host 脱敏；不是本机或公司真实地址。"
+    },
+    {
+      "rules": [
+        "S1"
+      ],
+      "glob": "versions/*/reviews/probes/**",
+      "reason": "审核探针需要在真实路径上复现问题（路径穿越 / scope 解析）；只用于留证，不进产物。"
+    }
+  ],
+  "syntheticSecrets": [
+    {
+      "value": "ghp_aaaa",
+      "reason": "i26 脱敏用例构造的假 PAT（a×36）"
+    },
+    {
+      "value": "ghp_bbbb",
+      "reason": "审核探针 v04-redaction 构造的假 PAT（b×32）"
+    },
+    {
+      "value": "ghp_ABCD",
+      "reason": "i31 表面覆盖用例构造的假 PAT（大写占位）"
+    },
+    {
+      "value": "ghp_abc",
+      "reason": "历史用例构造的假 PAT"
+    },
+    {
+      "value": "-----BEGIN RSA PRIVATE KEY-----",
+      "reason": "i-redact 用例构造的 PEM 头（无密钥体）"
+    },
+    {
+      "value": "-----BEGIN PRIVATE KEY-----",
+      "reason": "同上（无算法前缀）"
+    }
+  ]
+}

@@ -284,3 +284,19 @@ v0.4 先补「可解释的检索」与「界面能搜」，语义道本身是可
 - I25 语义融合与降级、I26 脱敏、I27 分歧、I28 捕获、I29 注入预算、I30 `/api/search` 契约。
 - 单元：`tests/unit/search-view.test.js`（转义）、`tests/unit/hybrid.test.js`（RRF 性质）、
   `tests/unit/embedder.test.js`（假 fetch：超时/维度漂移/未就绪）。
+
+## 15. 浅色外观适配（v0.4.2）
+
+观察台跟随系统外观（`prefers-color-scheme`）。深色底与浅色底对同一套色值的要求不同：
+
+| 元素 | 深色底 | 浅色底（v0.4.2 起） |
+|---|---|---|
+| 节点填充 | kind 原色 | 与黑混合 26% 压暗（`contrastColor(...,node)`） |
+| 节点描边 | 无 | 1.25px 近白描边（把点从浅底里「抠」出来） |
+| 连线 | kind 原色 + 雾化下限 0.12 | 压暗 58% + 雾化下限 0.46 + 线宽 +0.45px |
+| 标签 | `#cfd6e4` | `#1f2430`，superseded 用 `#6b7280` |
+| superseded 节点 | alpha 0.4 | alpha 0.62（浅底要更实） |
+
+实现位置：`ui/palette.js` 的纯函数（`parseColor` / `contrastColor` / `fogAlphaFloor` / `nodeStroke`）+
+`ui/graph-style.js` 的取色函数；`ui/graph.js` 只负责绘制。单测：`tests/unit/palette-contrast.test.js`。
+真实截图：[`docs/shots/graph-light.png`](shots/graph-light.png)。

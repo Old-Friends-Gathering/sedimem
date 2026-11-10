@@ -88,6 +88,25 @@ cd versions/v0.3 && node eval/run.js   # 行为（I1–I12）
 - **CodeQL**（`security-and-quality`）：静态分析，发现注入/原型污染/不安全正则等。
 - **GitHub 原生 secret scanning**（公开仓库免费）：push 时与历史全量扫描，比自研正则更全。
 
+
+### 4.1 允许清单（security-allowlist.json）
+
+有些文件里**必须**出现看起来像凭据/内网地址的字面量：脱敏测试的夹具、投毒用例、审核探针、
+以及审核报告里引用的本机路径。硬删会让测试失去意义，放宽规则又会让门禁形同虚设。
+
+折中：`tools/security-allowlist.json` 显式登记，**每条必须写 `reason`**（缺 reason 不生效）：
+
+| 字段 | 作用 |
+|---|---|
+| `entries[]` | `{rules, glob, reason}`：按规则 + 路径 glob 豁免；`**` 跨目录、`*` 不跨目录 |
+| `syntheticSecrets[]` | `{value, reason}`：登记「已知构造样例」的值前缀，S8（git 历史面）按前缀过滤 |
+
+约束：
+
+- 只允许登记测试与留证目录（`versions/*/tests/**`、`versions/*/reviews/**`），生产代码不得豁免。
+- S8 只过滤**登记过的值**：新提交里出现的凭据仍然失败——豁免的是历史遗留样例，不是未来。
+- 改动本文件属于「改契约」，需在 PR 里说明原因（与阈值变更同流程，见 §六）。
+
 ## 五、流程门禁（issue-link.yml）
 
 | 规则 | 判定 |
@@ -111,7 +130,7 @@ cd versions/v0.3 && node eval/run.js   # 行为（I1–I12）
 
 | 门禁 | 结果 |
 |---|---|
-| 单元 + 注入式 | **384 tests / 370 pass**（`node --test 'tests/**/*.test.js'`） |
+| 单元 + 注入式 | **391 tests / 370 pass**（`node --test 'tests/**/*.test.js'`） |
 | 评测 | **eval I1–I36 全 PASS**（`node eval/run.js`） |
 | 质量 | 9/9；Q5 契约覆盖 **97.6%**（165/169 导出，下限 90%，其余为 UI/内部工具） |
 | 安全 | 9/9（含 S9：src/web 无写接口、只绑回环） |
