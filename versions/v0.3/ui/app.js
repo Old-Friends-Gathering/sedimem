@@ -6,7 +6,7 @@
  */
 import { renderLineChart, fmtPct as pctFmt } from './charts.js';
 
-const API = '/api';
+const API = 'api'; // 文档相对：根路径部署与子路径代理（DSH 插件 iframe）都能解析
 /** 东八区为 +480；-new Date().getTimezoneOffset() 把浏览器时区换成「东为正」分钟数。 */
 const TZ_OFFSET = -new Date().getTimezoneOffset();
 

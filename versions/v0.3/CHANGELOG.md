@@ -1,5 +1,14 @@
 # CHANGELOG · v0.3
 
+## [0.3.5] – 2026-11-10
+
+### Added
+- **DSH 插件 `plugin/dsh-sedimem`**（独立包 v0.1.0）：侧边栏「记忆中心」+ 中列 iframe 整页嵌入观察台。宿主侧优先复用已常驻观察台（`observerUrl`，必须回环），不可达才 spawn 内嵌副本兜底；`api/dsh-sedimem/ui` 前缀反向代理（同源）+ `/api/dsh-sedimem/health`；栅栏与 skill-explorer 同款（回环 socket/Host、无转发头、非跨站）。MCP `memory_*` 链路与三端配置不动。5 条宿主测试（外部纯代理 / 内嵌兜底 / 双栅栏拒绝 / 内嵌副本哈希防漂移）。
+
+### Fixed
+- 观察台 UI 的 API 基址从根绝对 `/api` 改为文档相对 `api`（`ui/app.js`、`ui/graph.js`）：根路径部署行为不变（实测 200），子路径代理（DSH iframe、反代）不再 404。服务端补 `…/ui` → `…/ui/` 301，防相对路径解析到父路径。
+
+
 ## [0.3.4] — 2026-11-10
 
 ### Changed

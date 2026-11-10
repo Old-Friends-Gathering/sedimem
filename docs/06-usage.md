@@ -389,3 +389,7 @@ memo retitle --from-file titles.json   # 用 Agent 产出的标题：[{"id":"01M
 - 回填是**追加补丁行**（`v+1` + `op:'retitle'` 事件），真相层只增不减，原行仍在，可 as-of 回查。
 - 幂等：已有 title 的记录永不覆盖（`--from-file` 给出相同 title 也只算 skipped）。
 - 规则推导只能做到「把 subject 弄成人话」；要真正概括内容，用 `--from-file` 让正在跑的 Agent 读完正文自己写。
+
+## 15. DSH 插件（侧边栏记忆中心）
+
+`plugin/dsh-sedimem` 把观察台装进 DSH 侧边栏：优先代理常驻观察台（`observerUrl: http://127.0.0.1:7788`），探测不到才启动内嵌副本。MCP `memory_*` 与三端配置不变。安装与配置见 `plugin/dsh-sedimem/README.md`。

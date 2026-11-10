@@ -1,0 +1,6 @@
+# sedimem 记忆中心（DSH 宿主插件行）。
+# dshmarket / pnpm 安装后由 bundle.patch 机制应用；手动安装时把这段
+# 合入 $DSH_HOME/profiles/<name>/cordis.patch.yml 即可。
+- insert:
+    - id: dsh-sedimem
+      name: dsh-sedimem
