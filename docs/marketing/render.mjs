@@ -197,3 +197,91 @@ for (const [name, html] of Object.entries(cards)) {
   fs.rmSync(tmp);
 }
 console.log(`TOTAL ${(total / 1024).toFixed(0)} KB`);
+
+// ---------------------------------------------------------------- Twitter / X（1200×675 横图）
+// X 的图片裁切偏好 16:9，这里单独出一套横图，不缩放竖版卡片（文字会糊）。
+
+const TW_W = 1200, TW_H = 675;
+const twDir = path.join(import.meta.dirname, 'img', 'twitter');
+fs.mkdirSync(twDir, { recursive: true });
+
+const twCss = `
+  * { margin:0; padding:0; box-sizing:border-box; }
+  html,body { width:${TW_W}px; height:${TW_H}px; overflow:hidden; }
+  body {
+    font-family: system-ui, -apple-system, 'SF Pro Display', 'PingFang SC', sans-serif;
+    background:#0b1120; color:#e2e8f0; display:flex; flex-direction:column; justify-content:center;
+    padding:56px 64px; position:relative;
+    background-image:
+      radial-gradient(ellipse 800px 500px at 88% -20%, rgba(56,189,248,.16), transparent 60%),
+      radial-gradient(ellipse 600px 420px at -10% 120%, rgba(52,211,153,.12), transparent 60%);
+  }
+  .row { display:flex; align-items:center; gap:14px; }
+  .dot { width:18px; height:18px; border-radius:6px; background:#2dd4bf; }
+  .brand { font-size:26px; font-weight:600; color:#94a3b8; letter-spacing:.02em; }
+  .kicker { font-size:22px; letter-spacing:.22em; text-transform:uppercase; color:#38bdf8; font-weight:600; margin-top:28px; }
+  h1 { font-size:64px; line-height:1.18; margin-top:12px; letter-spacing:-.02em; }
+  .hl { color:#2dd4bf; }
+  .sub { font-size:27px; color:#94a3b8; margin-top:18px; line-height:1.5; }
+  .pills { display:flex; gap:12px; flex-wrap:wrap; margin-top:30px; }
+  .pill { font-size:22px; color:#bfdbfe; border:1px solid rgba(148,163,184,.34); border-radius:999px; padding:9px 18px; background:rgba(30,41,59,.6); }
+  .stats { display:flex; gap:56px; margin-top:34px; }
+  .stat b { font-size:62px; font-weight:700; display:block; }
+  .stat span { font-size:21px; color:#94a3b8; }
+  .foot { position:absolute; left:64px; right:64px; bottom:34px; display:flex; justify-content:space-between;
+          font-size:19px; color:#64748b; }
+`;
+
+function twPage(body, n) {
+  return `<!doctype html><html lang="zh-CN"><head><meta charset="utf-8"><style>${twCss}</style></head>
+<body>${body}<div class="foot"><span>github.com/Old-Friends-Gathering/sedimem</span><span>${n}/3</span></div></body></html>`;
+}
+
+const twCards = {
+  'hook': twPage(`
+    <div class="row"><span class="dot"></span><span class="brand">sedimem</span></div>
+    <div class="kicker">Local-first memory</div>
+    <h1>Your AI forgets you<br>every session. <span class="hl">Mine doesn't.</span></h1>
+    <div class="sub">Append-only truth layer + agent-as-judge dedupe.<br>Runs locally, zero runtime deps, one MCP server for 3 CLIs.</div>
+    <div class="pills"><span class="pill">no cloud</span><span class="pill">no team tier</span><span class="pill">auditable as-of</span></div>
+  `, 1),
+
+  'architecture': twPage(`
+    <div class="row"><span class="dot"></span><span class="brand">sedimem</span></div>
+    <div class="kicker">How it works</div>
+    <h1>Truth layer → derived index → <span class="hl">agent verdict</span></h1>
+    <div class="pills">
+      <span class="pill">append-only JSONL</span>
+      <span class="pill">rebuildable index / brief</span>
+      <span class="pill">the agent you already run is the judge</span>
+      <span class="pill">bi-temporal, never destructive</span>
+    </div>
+    <div class="sub">Duplicates, conflicts and stale facts get flagged, not silently overwritten.</div>
+  `, 2),
+
+  'numbers': twPage(`
+    <div class="row"><span class="dot"></span><span class="brand">sedimem</span></div>
+    <div class="kicker">Self-tested</div>
+    <div class="stats">
+      <div class="stat"><b style="color:#38bdf8;">391</b><span>tests green</span></div>
+      <div class="stat"><b style="color:#34d399;">36</b><span>injection evals</span></div>
+      <div class="stat"><b style="color:#fbbf24;">9+9</b><span>quality + security gates</span></div>
+      <div class="stat"><b style="color:#f472b6;">0</b><span>runtime deps</span></div>
+    </div>
+    <div class="pills"><span class="pill">Node ≥ 22 · node:sqlite</span><span class="pill">coverage 93% / 92%</span></div>
+  `, 3),
+};
+
+for (const [name, html] of Object.entries(twCards)) {
+  const tmp = path.join(twDir, `${name}.html`);
+  fs.writeFileSync(tmp, html);
+  const out = path.join(twDir, `${name}.png`);
+  execFileSync(CHROME, [
+    '--headless=new', '--hide-scrollbars',
+    `--screenshot=${out}`,
+    `--window-size=${TW_W},${TW_H}`,
+    pathToFileURL(tmp).href,
+  ], { stdio: 'pipe' });
+  console.log(`twitter/${name}.png  ${(fs.statSync(out).size / 1024).toFixed(0)} KB`);
+  fs.rmSync(tmp);
+}
