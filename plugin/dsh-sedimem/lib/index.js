@@ -185,15 +185,17 @@ export function apply(ctx, config = {}) {
    *  2. 否则 fallback 到内嵌副本（模式 embedded），spawn 并等 /api/summary 200。
    * @returns {Promise<number>} 观察台端口。
    */
-  function ensureObserver() {
-    if (mode === 'external' && externalPort && probeOk(externalPort)) return Promise.resolve(externalPort);
-    if (mode === 'embedded' && child && child.exitCode === null && !child.killed) return Promise.resolve(port);
+  async function ensureObserver() {
+    // 注意：probeOk 返回 Promise，必须 await（漏掉 = Promise 恒真，死掉的外部观察台永远复用）
+    if (mode === 'external' && externalPort && (await probeOk(externalPort))) return externalPort;
+    if (mode === 'embedded' && child && child.exitCode === null && !child.killed) return port;
     if (starting) return starting;
     starting = (async () => {
       // ① 外部优先（一次探测决定，不反复横跳）
       if (externalPort && await probeOk(externalPort)) {
         mode = 'external';
         log(`using external observer at ${externalUrl}`);
+        starting = null; // 成功即清：外部死掉后下一次调用能重新决策（否则永远拿到旧端口）
         return externalPort;
       }
       // ② 内嵌兜底
@@ -219,6 +221,7 @@ export function apply(ctx, config = {}) {
           port = chosen;
           mode = 'embedded';
           log(`embedded observer ready on 127.0.0.1:${chosen} (scope=${scope ?? 'auto'})`);
+          starting = null; // 成功即清：子进程 exit 回调里也会清，这里兜启动即成功的路径
           return chosen;
         }
         if (Date.now() > deadline) {

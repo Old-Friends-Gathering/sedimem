@@ -209,3 +209,43 @@ test('observerUrl 非回环目标被忽略（回落内嵌，不代理到局域�
     for (const { dispose } of ctx.effects) dispose();
   }
 });
+
+test('外部观察台死掉后自动回落内嵌（await probeOk 回归）', { timeout: 30000 }, async () => {
+  const memoHome = seedMemoHome();
+  const external = spawn(process.execPath, [path.join(pkgRoot, 'lib', 'observer-entry.mjs')], {
+    env: { ...process.env, MEMO_HOME: memoHome, MEMO_PORT: '0', MEMO_SCOPE: 'repo:plugtest' },
+    stdio: ['ignore', 'pipe', 'pipe'],
+  });
+  let externalPort = 0;
+  await new Promise((resolve) => {
+    external.stdout.on('data', (c) => {
+      const m = /"port":(\d+)/.exec(String(c));
+      if (m) { externalPort = Number(m[1]); resolve(); }
+    });
+  });
+
+  const ctx = fakeCtx();
+  apply(ctx, { memoHome, observerUrl: `http://127.0.0.1:${externalPort}` });
+  const server = mountRoutes(ctx);
+  const port = await listen(server);
+  const base = `http://127.0.0.1:${port}`;
+  try {
+    // 第一轮：外部活着 → external
+    let h = await (await fetch(`${base}/api/dsh-sedimem/health`)).json();
+    await fetch(`${base}/api/dsh-sedimem/ui/`); // 触发 ensureObserver
+    h = await (await fetch(`${base}/api/dsh-sedimem/health`)).json();
+    assert.equal(h.mode, 'external');
+
+    // 杀掉外部观察台 → 下一轮请求必须回落 embedded（而不是继续用死端口）
+    external.kill('SIGKILL');
+    await new Promise((r) => setTimeout(r, 300));
+    const page = await fetch(`${base}/api/dsh-sedimem/ui/`);
+    assert.equal(page.status, 200);
+    h = await (await fetch(`${base}/api/dsh-sedimem/health`)).json();
+    assert.equal(h.mode, 'embedded');
+  } finally {
+    server.closeIdleConnections?.();
+    server.close();
+    for (const { dispose } of ctx.effects) dispose();
+  }
+});
