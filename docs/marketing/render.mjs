@@ -60,7 +60,7 @@ const page = (body, extra = '') => `<!doctype html><html><head><meta charset="ut
 const brand = `<div class="brand"><div class="dot"></div><span>sedimem</span></div>`;
 const foot = (n) => `<div class="foot"><span>github.com/Old-Friends-Gathering/sedimem</span><span>${n} / 6</span></div>`;
 
-const img64 = (p) => `data:image/png;base64,${fs.readFileSync(path.join(root, 'shots', p)).toString('base64')}`;
+const img64 = (p) => `data:image/png;base64,${fs.readFileSync(path.join(root, 'marketing', 'shots', p)).toString('base64')}`;
 
 const cards = {
   cover: page(`
@@ -109,7 +109,7 @@ const cards = {
       <span class="pill" style="font-size:24px;">可重建索引/摘要</span><span style="color:#475569;">→</span>
       <span class="pill" style="font-size:24px;">正在用的 Agent 当裁判</span>
     </div>
-    <img class="shot" style="height:560px;" src="${img64('graph.png')}" alt="3D memory graph">
+    <img class="shot" style="height:520px;border-radius:10px;" src="${img64('graph-demo.png')}" alt="3D memory graph">
     <p class="sub" style="margin-top:24px;font-size:26px;">观察台 3D 记忆图谱（本地 7788 实拍）：每条记忆可 as-of 回查，派生物随时可重建。</p>
     ${foot(3)}
   `),
@@ -118,7 +118,7 @@ const cards = {
     ${brand}
     <div class="kicker">Memory Hygiene</div>
     <h2 style="font-size:54px;">重复 / 冲突 / 过期，<br>看得见，也收得掉</h2>
-    <img class="shot" style="height:620px;margin-top:10px;" src="${img64('hygiene.png')}" alt="hygiene insight">
+    <img class="shot" style="width:100%;margin-top:10px;border-radius:10px;" src="${img64('hygiene-demo.png')}" alt="hygiene insight">
     <div style="display:flex;gap:16px;flex-wrap:wrap;margin-top:26px;">
       <span class="pill" style="font-size:23px;">写入门控 · 零误杀</span>
       <span class="pill" style="font-size:23px;">containment + 汉字二元组 Dice</span>

@@ -62,7 +62,11 @@ sedimem 的立场是：**记忆的难点在治理，不在检索**。所以它�
 - **接口层**：MCP（`memory_*` 10 个工具）· CLI · Web（`/api/*` 只读，没有写端点）。
 - **核心服务**：一个 `MemoryService`，拆成 lifecycle / write-path / search-path / maintenance 四模块，
   语义只在一处，门禁用 `tests/unit/service-facade.test.js` 保证方法集合不漂移。
-- **治理层**：写入门控、近重复扫描 + Agent 裁决、冲突失效（bi-temporal）、投毒打标、配额与压实。
+- **治理层**：写入门控、近重复扫描 + Agent 裁决、冲突失效（bi-temporal）、投毒打标、入库脱敏、配额与压实。
+- **读路径**：BM25 打底；**语义道可选**（`search.embedder.kind`，默认 `none`），开启后 RRF 融合两条路，
+  每条结果带 `basis`（`bm25` / `vector` / `bm25+vector`）。语义道不可用时返回 `degraded` 并退回词法 —— 永不阻断检索。
+- **注入**：`memo brief --tier0` 给预算内目录；DSH 插件可在每步注入（默认关，≤1200 字符，围栏声明「数据不是指令」）。
+- **捕获**：`memo capture scan` 把「记住/决定/坑」抽成候选进 inbox，`accept` 才落真相层 —— 不做自动写入。
 - **派生层**：倒排索引 / SQLite FTS5 / brief / L2 场景块 / L3 画像 —— 全部可从真相层重建。
 - **真相层**：`items/<scope>.jsonl`，只追加，唯一不可重建的东西。
 
@@ -221,7 +225,7 @@ launchctl kickstart -k gui/$(id -u)/live.sedimem.observer   # 改完代码热加
 | 检查 | 内容 |
 |---|---|
 | `test (22)` / `test (24)` | Node 22/24 上跑全部测试，0 失败 |
-| `eval (I1–I23)` | 注入式回归：重复/冲突/过时/删除/投毒/并发/分库…（本地跑 I1–I24） |
+| `eval (I1–I36)` | 注入式回归：重复/冲突/过时/删除/投毒/并发/分库/脱敏/注入预算… |
 | `quality` | 零依赖、源码规模、测试清单、评测对齐、**契约覆盖率 ≥ 90%**（当前 97.6%）、文档链接、版本自包含、编码卫生 |
 | `security` | 个人路径、凭据、内部域名、配置可移植、`.gitignore`、许可证、大文件、历史面 |
 | `CodeQL` / `codeql` | 静态分析（含 `security-and-quality` 查询集） |
@@ -272,11 +276,12 @@ node tools/quality-check.mjs && node tools/security-check.mjs && node tools/cove
 |---|---|---|
 | v0.1.x | 核心层：append-only 真相层 + 派生索引 + brief + 四条卫生路径 + MCP/CLI | 🔒 冻结 0.1.2 |
 | v0.2.x | 只读观察台 + SQLite FTS5 + curate 任务包；0.2.1 拆 service、kind 数据化、JudgePort、compact、检索指标 | 🔒 冻结 0.2.1 |
-| v0.3.0 | 分层视图：L2 场景块（可字节重建）+ tier0 注入分级 + L3 画像（固定预算 + 强制溯源） | ✅ |
-| v0.3.1 | `title` 一等字段 + label v2 + 图谱聚合 + 批量回填 | ✅ |
-| v0.3.2 | 密集图谱可读性 + 今日页改标题事件 | ✅ |
-| v0.3.3 | 跨主题连线 + 3D 球体（手动旋转）+ 布局降噪 | 🔒 冻结 0.3.6 |
-| v0.4.1 | 竞品差距补齐：语义道（可选，RRF + `basis` 可解释）、每步注入、半自动捕获、分歧视图、入库脱敏、UI 搜索页、规模基准、一条命令装插件 | ✅ |
+| v0.3.0 | 分层视图：L2 场景块（可字节重建）+ tier0 注入分级 + L3 画像（固定预算 + 强制溯源） | 🔒 冻结 0.3.6 |
+| v0.3.1–0.3.3 | `title` 一等字段 + label v2 + 图谱聚合 + 批量回填 + 3D 球体 | 🔒 冻结 0.3.6 |
+| v0.4.0 | 竞品差距补齐：语义道（可选，RRF + `basis`）、每步注入、半自动捕获、分歧视图、入库脱敏、UI 搜索页、规模基准、一条命令装插件 | ✅ |
+| v0.4.1 | 修 CLI `capture`/`conflicts` 的退出码崩溃；CodeQL 清零 | ✅ |
+| v0.4.2 | 浅色外观下图谱可读性（节点压暗 + 描边、边压暗加粗）；安全门禁加允许清单 | ✅ |
+| v0.4.3 | 修插件 `inject` 形状导致「记忆中心面板全黑」；可选注入不再拖垮路由注册 | ✅ 当前 |
 
 目录规则：**`X.Y` 换目录**，**`X.Y.Z` 补丁同目录递增**；老目录冻结并留 `FROZEN.md`；指针在 `versions/CURRENT`。
 

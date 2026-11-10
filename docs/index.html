@@ -167,6 +167,7 @@
     <a class="lnk" href="#problem">为什么</a>
     <a class="lnk" href="#arch">架构</a>
     <a class="lnk" href="#hygiene">卫生闭环</a>
+    <a class="lnk" href="#new">v0.4 新增</a>
     <a class="lnk" href="#ui">界面</a>
     <a class="lnk" href="#deploy">部署</a>
     <a class="lnk" href="#gates">门禁</a>
@@ -306,6 +307,37 @@ created: 01M7…  <span class="cmt"># 词法抓不住 → 交给 Agent 裁决（
   </div>
 </section>
 
+<!-- ================= v0.4 新增 ================= -->
+<section id="new">
+  <div class="wrap">
+    <div class="sec-head reveal">
+      <div class="kicker">What's new in v0.4</div>
+      <h2>补的是「体验短板」，不是「功能堆料」</h2>
+      <p>竞品对比后按价值排序做的六件事，全部<b>默认关闭或默认保守</b> —— 开了才有，不开零成本。</p>
+    </div>
+    <div class="grid g3">
+      <div class="card reveal"><h3><span class="ico">⇄</span>可选语义道</h3>
+        <p>BM25 打底不变，另开一条向量路（自备 embedding 端点），用 <b>RRF</b> 融合；每条结果带
+        <code>basis</code> 说明凭什么命中。语义道挂了就<b>显式降级</b>回词法，绝不假装「没问题但搜不到」。</p></div>
+      <div class="card reveal"><h3><span class="ico">◨</span>每步注入（默认关）</h3>
+        <p>插件可以把 brief 顶部塞进 system prompt，预算 ≤1200 字符、带 <code>&lt;memory-context&gt;</code>
+        围栏并声明「这是数据不是指令」；正文里的围栏闭合标签会被转义，防提示注入逃逸。</p></div>
+      <div class="card reveal"><h3><span class="ico">✎</span>半自动捕获</h3>
+        <p>从对话里抽「记住 / 决定 / 坑」进 <b>inbox</b>，人工 <code>accept</code> 才落真相层。
+        不做自动写入 —— 自动写入是记忆库腐化的头号原因。</p></div>
+      <div class="card reveal"><h3><span class="ico">⚖</span>分歧视图</h3>
+        <p>同一 slot 里「不可比」的两条会标 <code>disputed</code>，观察台单列；选择赢家是<b>非破坏</b>的：
+        败者转 <code>superseded</code>，真相层一行不少。</p></div>
+      <div class="card reveal"><h3><span class="ico">◍</span>入库脱敏</h3>
+        <p>PAT / JWT / PEM / 内部域名 / 赋值型密码在<b>落盘前</b>遮蔽，再算 <code>contentHash</code>；
+        开关可回退，遮蔽幂等不嵌套。</p></div>
+      <div class="card reveal"><h3><span class="ico">⌕</span>检索页 + 一条命令装插件</h3>
+        <p>观察台新增 <code>#/search</code>：相关度、<code>basis</code>、降级提示都摆出来。
+        DSH 侧边栏「记忆中心」由 <code>dsh-sedimem</code> 插件提供，<code>scripts/install-dsh-plugin.sh</code> 一条命令。</p></div>
+    </div>
+  </div>
+</section>
+
 <!-- ================= 界面 ================= -->
 <section id="ui">
   <div class="wrap">
@@ -344,8 +376,8 @@ export V="versions/$(cat versions/CURRENT)"</pre></div>
       <div class="step reveal"><h3>先确认它自己能跑</h3>
         <div class="code"><div class="bar"><i></i><i></i><i></i><span>shell</span>
           <button class="cp" data-copy="node --test &quot;$V/tests/**/*.test.js&quot; &amp;&amp; node $V/eval/run.js">复制</button></div>
-          <pre>node --test "$V/tests/**/*.test.js"   <span class="cmt"># 288 个用例</span>
-node $V/eval/run.js                  <span class="cmt"># I1–I24 注入式评测</span></pre></div>
+          <pre>node --test "$V/tests/**/*.test.js"   <span class="cmt"># 391 个用例</span>
+node $V/eval/run.js                  <span class="cmt"># I1–I36 注入式评测</span></pre></div>
       </div>
       <div class="step reveal"><h3>接客户端（三选一，或都接）</h3>
         <div class="code"><div class="bar"><i></i><i></i><i></i><span>Claude Code</span>
@@ -357,7 +389,7 @@ node $V/eval/run.js                  <span class="cmt"># I1–I24 注入式评�
           <button class="cp" data-copy="[mcp_servers.memo]">复制</button></div>
           <pre>[mcp_servers.memo]
 command = "/usr/local/bin/node"      <span class="cmt"># which node</span>
-args = ["/path/to/sedimem/versions/v0.3/src/mcp/server.js"]
+args = ["/path/to/sedimem/versions/v0.4/src/mcp/server.js"]
 enabled = true
 [mcp_servers.memo.env]
 MEMO_HOME = "$HOME/.memo"   <span class="cmt"># 换成你的数据目录</span></pre></div>
@@ -435,8 +467,8 @@ open http://127.0.0.1:7788</pre></div>
     </div>
     <div class="grid g3">
       <div class="card reveal"><h3>test (22) / (24)</h3><p>Node 22 与 24 上跑全部测试，0 失败。</p></div>
-      <div class="card reveal"><h3>eval (I1–I23)</h3><p>注入式回归：重复 / 冲突 / 过时 / 删除 / 投毒 / 并发 / 分库 / 拒绝服务…</p></div>
-      <div class="card reveal"><h3>quality</h3><p>零依赖、源码规模、测试清单、评测对齐、<b>契约覆盖 100%</b>、文档链接、版本自包含。</p></div>
+      <div class="card reveal"><h3>eval (I1–I36)</h3><p>注入式回归：重复 / 冲突 / 过时 / 删除 / 投毒 / 并发 / 分库 / 拒绝服务…</p></div>
+      <div class="card reveal"><h3>quality</h3><p>零依赖、源码规模、测试清单、评测对齐、<b>契约覆盖 ≥90%（当前 97.6%）</b>、文档链接、版本自包含。</p></div>
       <div class="card reveal"><h3>security</h3><p>个人路径、凭据、内部域名、配置可移植、许可证、大文件、历史面。</p></div>
       <div class="card reveal"><h3>CodeQL</h3><p>静态分析，含 <code>security-and-quality</code> 查询集；发现过真实堆栈泄露。</p></div>
       <div class="card reveal"><h3>windows-smoke</h3><p>真 <code>windows-latest</code> 上验跨平台文件名与 CLI 路径。</p></div>
@@ -460,8 +492,10 @@ open http://127.0.0.1:7788</pre></div>
       <div class="tl done reveal"><div class="v">v0.1.x · 冻结 0.1.2</div><p>核心层：append-only 真相层 + 派生索引 + brief + 四条卫生路径 + MCP/CLI</p></div>
       <div class="tl done reveal"><div class="v">v0.2.x · 冻结 0.2.1</div><p>只读观察台、SQLite FTS5、curate 任务包；0.2.1 拆 service、kind 数据化、JudgePort、compact、检索指标</p></div>
       <div class="tl done reveal"><div class="v">v0.3.0</div><p>分层视图：L2 场景块（可字节重建）+ tier0 注入分级 + L3 画像（固定预算 + 强制溯源）</p></div>
-      <div class="tl done reveal"><div class="v">v0.3.1 – 0.3.3</div><p><code>title</code> 一等字段与批量回填 · 密集图谱可读性 · 跨主题连线 + 3D 球体手动旋转 + 布局降噪</p></div>
-      <div class="tl reveal"><div class="v">next</div><p>EmbeddingIndex / hybrid 检索（等检索健康指标给出实测痛点）、跨机器同步</p></div>
+      <div class="tl done reveal"><div class="v">v0.3.1 – 0.3.3 · 冻结 0.3.6</div><p><code>title</code> 一等字段与批量回填 · 密集图谱可读性 · 跨主题连线 + 3D 球体手动旋转 + 布局降噪</p></div>
+      <div class="tl done reveal"><div class="v">v0.4.0</div><p>语义道（RRF + <code>basis</code>）· 每步注入 · 半自动捕获 · 分歧视图 · 入库脱敏 · 检索页 · 规模基准 · 插件安装脚本</p></div>
+      <div class="tl done reveal"><div class="v">v0.4.1 – 0.4.3</div><p>CLI 退出码修复 · 浅色外观图谱可读性 · 插件 <code>inject</code> 形状修复（记忆中心面板全黑）</p></div>
+      <div class="tl reveal"><div class="v">next · v0.5</div><p>跨机器同步（冲突可解释）· Windows 兼容性收口 · L3 画像的自动计划</p></div>
     </div>
   </div>
 </section>
