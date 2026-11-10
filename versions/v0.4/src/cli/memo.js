@@ -743,7 +743,11 @@ async function runMigrate(positional, opts) {
 }
 
 try {
-  process.exitCode = await main();
+  // 命令实现里有的分支会 return 出结构化结果（如 capture/conflicts 的 payload），
+  // 那不是退出码——只接受整数，否则保持 0（否则 process.exitCode = {} 会抛
+  // ERR_INVALID_ARG_TYPE，用户看到「memo 失败」但其实命令已经成功）。
+  const code = await main();
+  process.exitCode = Number.isInteger(code) ? code : 0;
 } catch (err) {
   if (err instanceof UsageError) {
     process.stderr.write(`用法错误: ${err.message}\n`);

@@ -1,5 +1,30 @@
 # CHANGELOG · v0.4
 
+## [0.4.1] — 2026-11-10
+
+补丁版：修掉一个会让成功命令看起来「失败」的入口 bug，并把 CodeQL 告警清零。
+
+### Fixed
+
+- **CLI 退出码崩溃**：`memo capture ...`、`memo conflicts` 等分支会把结构化 payload 当作 `main()` 返回值，
+  而入口直接 `process.exitCode = await main()` —— Node 对非数字赋值抛
+  `ERR_INVALID_ARG_TYPE: The "code" argument must be of type number`，于是命令**已经成功**却打印
+  `memo 失败 [...]` 并以 1 退出。现在只接受整数退出码，其余保持 0（`src/cli/memo.js`），
+  并新增回归测试 `tests/unit/cli-exit-code.test.js`（真 spawn CLI）。
+- **CodeQL 新告警**：`inject.js` 的 brief 读取改成「open 句柄 → stat → read」（消除 stat/read 竞态）、
+  `vector-index.js` 的 rewrite 改为「独占临时文件（wx + 0600 + fsync）→ rename」、
+  `embedder.js` 端点 URL 显式校验只允许 http(s) 且有 host。
+
+### Changed
+
+- CodeQL 扫描范围收敛：审核留证脚本 `versions/*/reviews/probes/**` 与插件生成物
+  `plugin/dsh-sedimem/lib/{inject-core,paths-core}.js` 不入扫描（附理由）；
+  `js/file-access-to-http` 对 `embedder.js` 定向排除（端点来自本机 policy 且已收口协议）。
+
+### Tests
+
+- 384 tests（+2 退出码回归）、eval I1–I36 全 PASS、质量 9/9、安全 9/9。
+
 ## [0.4.0] — 2026-11-10
 
 按竞品调研（`docs/research/competitive-dsh-plugins-2026-11.md`）补齐五项「别人有而我们没有」，
