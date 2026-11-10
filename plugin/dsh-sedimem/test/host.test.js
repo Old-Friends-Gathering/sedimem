@@ -196,7 +196,8 @@ test('内嵌模式：外部不可达时 spawn 兜底副本；栅栏拒绝非回�
 
 test('observerUrl 非回环目标被忽略（回落内嵌，不代理到局域网）', { timeout: 30000 }, async () => {
   const ctx = fakeCtx();
-  apply(ctx, { memoHome: seedMemoHome(), observerUrl: 'http://192.168.1.9:7788' });
+  // 8.8.8.8 是公网地址：此处只测「非回环被拒」，不需要它真的可达
+  apply(ctx, { memoHome: seedMemoHome(), observerUrl: 'http://8.8.8.8:7788' });
   const server = mountRoutes(ctx);
   const port = await listen(server);
   try {
