@@ -15,6 +15,7 @@
  */
 
 import { renderToolbar } from './graph-toolbar.js';
+import { uiPalette } from './palette.js';
 import {
   KIND_COLORS, kindColorsFromPolicy, DEFAULT_EDGE_TYPES, OPTIONAL_EDGE_TYPES, EDGE_PREF_KEY, layoutTick,
   MIN_SCALE, MAX_SCALE, ALPHA_MIN,
@@ -281,15 +282,16 @@ export async function initGraph({ canvas, detailEl, toolbarEl, apiBase = 'api', 
       if (hit) continue;
       boxes.push(box);
       ctx.lineWidth = 3;
-      ctx.strokeStyle = 'rgba(11,13,18,0.85)';
+      ctx.strokeStyle = pal.bg === '#11141b' ? 'rgba(11,13,18,0.85)' : 'rgba(255,255,255,0.9)';
       ctx.strokeText(text, x, y);
-      ctx.fillStyle = nd.status === 'superseded' ? '#8b93a3' : '#cfd6e4';
+      ctx.fillStyle = nd.status === 'superseded' ? pal.nodeDim : pal.nodeFg;
       ctx.fillText(text, x, y);
       if (boxes.length >= 240) break; // 上限：再多也没人看得清
     }
   }
 
   function render() {
+    const pal = uiPalette();
     state.frames++;
     // 自动适配：用户未手动缩放/平移前，每 20 帧把布局缩放回画布内，
     // 这样模拟过程中图不会缩成一小团，也不会因为持续外扩而跑出画布。
@@ -395,7 +397,7 @@ export async function initGraph({ canvas, detailEl, toolbarEl, apiBase = 'api', 
       const w = ctx.measureText(text).width;
       ctx.fillStyle = 'rgba(15,23,42,0.06)';
       ctx.fillRect(rect.width - w - 22, 10, w + 14, 24);
-      ctx.fillStyle = '#475569';
+      ctx.fillStyle = pal.label;
       ctx.fillText(text, rect.width - w - 15, 26);
     }
   }

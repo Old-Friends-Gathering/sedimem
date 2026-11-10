@@ -92,8 +92,8 @@ export function renderLineChart(container, opts) {
   });
 
   // 网格 + y 轴刻度（4 档）
-  const grid = svgEl('g', { stroke: '#222836', 'stroke-width': '1' });
-  const ticks = svgEl('g', { fill: '#6b7484', 'font-size': '11' });
+  const grid = svgEl('g', { stroke: 'var(--grid, #222836)', 'stroke-width': '1' });
+  const ticks = svgEl('g', { fill: 'var(--faint, #6b7484)', 'font-size': '11' });
   const tickCount = 4;
   for (let i = 0; i <= tickCount; i++) {
     const v = (vTop / tickCount) * i;
@@ -106,7 +106,7 @@ export function renderLineChart(container, opts) {
   svg.append(grid, ticks);
 
   // x 轴首尾日期
-  const xlab = svgEl('g', { fill: '#6b7484', 'font-size': '11' });
+  const xlab = svgEl('g', { fill: 'var(--faint, #6b7484)', 'font-size': '11' });
   const first = svgEl('text', { x: padL, y: H - 8 });
   first.textContent = series[0].date ?? '';
   const last = svgEl('text', { x: W - padR, y: H - 8, 'text-anchor': 'end' });

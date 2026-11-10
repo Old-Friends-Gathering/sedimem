@@ -1,0 +1,5 @@
+[
+  { "path": "shots/today.png", "caption": "今日变化：今天记住了什么、改了什么" },
+  { "path": "shots/graph.png", "caption": "记忆图谱：3D 可旋转，按主题聚合、按实体连线" },
+  { "path": "shots/hygiene.png", "caption": "卫生洞察：冗余率/冲突率/检索命中率 30 天趋势" }
+]

@@ -1,18 +1,30 @@
-/**
- * style.css —— sedimem 记忆观察台（只读）的深色卡片风样式。
- * 视觉参考 docs/ui-mockup.html：深色面板、徽章、表格、卡片栅格。
+/** style.css —— sedimem 记忆观察台（只读）的卡片风样式。
+ * 跟随系统外观：默认浅色；系统为深色模式时（prefers-color-scheme: dark）
+ * 切回原深色调。画布（图谱/趋势）颜色由 app 侧 palette.js 依据同一媒体查询选择。
  */
 :root{
-  --bg:#0f1115; --panel:#161922; --panel2:#1c2029; --line:#262b36;
-  --fg:#e7e9ee; --dim:#9aa3b2; --faint:#6b7484;
+  --bg:#f5f6f8; --panel:#ffffff; --panel2:#f0f2f5; --line:#dce0e7;
+  --fg:#1f2430; --dim:#5a6474; --faint:#8b93a3;
+  --header-a:#ffffff; --header-b:#f5f6f8;
+  --graph-a:#ffffff; --graph-b:#eef0f4;
+  --node-dim:#5a6474; --node-fg:#1f2430; --grid:#e3e7ee;
   --fact:#5b9cf5; --pref:#c084fc; --decision:#34d399; --gotcha:#fbbf24; --state:#94a3b8;
   --dup:#f97316; --bad:#ef4444; --ok:#22c55e;
+}
+@media (prefers-color-scheme: dark){
+  :root{
+    --bg:#0f1115; --panel:#161922; --panel2:#1c2029; --line:#262b36;
+    --fg:#e7e9ee; --dim:#9aa3b2; --faint:#6b7484;
+    --header-a:#14171f; --header-b:#0f1115;
+    --graph-a:#191d27; --graph-b:#11141b;
+    --node-dim:#8b93a3; --node-fg:#cfd6e4; --grid:#262b36;
+  }
 }
 *{box-sizing:border-box}
 body{margin:0;background:var(--bg);color:var(--fg);
      font:14px/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Hiragino Sans GB",sans-serif}
 header{display:flex;align-items:center;gap:16px;padding:14px 20px;border-bottom:1px solid var(--line);
-       background:linear-gradient(180deg,#14171f,#0f1115)}
+       background:linear-gradient(180deg,var(--header-a),var(--header-b))}
 .brand{font-weight:700;letter-spacing:.5px}
 .brand small{color:var(--faint);font-weight:400;margin-left:8px}
 .scope{margin-left:auto;display:flex;gap:10px;align-items:center}
@@ -40,13 +52,13 @@ td{padding:8px 6px;border-top:1px solid var(--line);vertical-align:top}
 td.t{color:var(--faint);width:78px;white-space:nowrap;font-variant-numeric:tabular-nums}
 td.b{width:78px}
 .badge{display:inline-block;border-radius:6px;padding:1px 7px;font-size:11px;border:1px solid}
-.b-created{color:var(--fact);border-color:#2f4c78;background:#16233a}
-.b-superseded{color:var(--gotcha);border-color:#5a4a1c;background:#2a2410}
-.b-forgotten{color:var(--dim);border-color:#3a404e;background:#20242d}
-.b-merged{color:var(--ok);border-color:#2c5238;background:#122a1b}
-.b-hit{color:var(--state);border-color:#3a4452;background:#1a2130}
+.b-created{color:var(--fact);border-color:color-mix(in srgb,var(--fact) 35%,transparent);background:color-mix(in srgb,var(--fact) 14%,var(--panel))}
+.b-superseded{color:var(--gotcha);border-color:color-mix(in srgb,var(--gotcha) 35%,transparent);background:color-mix(in srgb,var(--gotcha) 14%,var(--panel))}
+.b-forgotten{color:var(--dim);border-color:color-mix(in srgb,var(--dim) 35%,transparent);background:color-mix(in srgb,var(--dim) 14%,var(--panel))}
+.b-merged{color:var(--ok);border-color:color-mix(in srgb,var(--ok) 35%,transparent);background:color-mix(in srgb,var(--ok) 14%,var(--panel))}
+.b-hit{color:var(--state);border-color:color-mix(in srgb,var(--state) 35%,transparent);background:color-mix(in srgb,var(--state) 14%,var(--panel))}
 .reason{color:var(--faint);font-size:12px;margin-top:2px;white-space:pre-wrap}
-.hitrow td{color:var(--faint);font-size:12px;background:#141821}
+.hitrow td{color:var(--faint);font-size:12px;background:color-mix(in srgb,var(--panel2) 70%,var(--bg))}
 .hitrow .hitlist{color:var(--faint);font-size:12px;margin-top:4px;line-height:1.7}
 .datebar{display:flex;gap:8px;align-items:center;margin-bottom:14px}
 .datebar input{background:var(--panel2);border:1px solid var(--line);border-radius:8px;color:var(--fg);
@@ -61,7 +73,7 @@ td.b{width:78px}
 
 /* 图谱页 */
 #graph-toolbar{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px}
-#graph-canvas{display:block;width:100%;height:clamp(420px,62vh,680px);background:radial-gradient(600px 360px at 50% 40%,#191d27,#11141b);
+#graph-canvas{display:block;width:100%;height:clamp(420px,62vh,680px);background:radial-gradient(600px 360px at 50% 40%,var(--graph-a),var(--graph-b));
               border:1px solid var(--line);border-radius:10px;
               cursor:grab;touch-action:none;user-select:none}
 #graph-canvas:active{cursor:grabbing}
@@ -69,13 +81,13 @@ td.b{width:78px}
 .graph-stage{position:relative}
 #graph-detail{background:var(--panel2);border:1px solid var(--line);border-radius:10px;padding:14px;
   position:absolute;top:12px;right:12px;width:300px;max-height:70%;overflow:auto;
-  box-shadow:0 8px 24px rgba(0,0,0,.45);z-index:5;backdrop-filter:blur(4px)}
+  box-shadow:0 8px 24px rgba(0,0,0,.18);z-index:5;backdrop-filter:blur(4px)}
 #graph-detail:has(.dim:only-child){display:none} /* 未选中节点时隐藏空面板 */
 #graph-detail h4{margin:0 0 8px;font-size:13px;color:var(--dim);font-weight:600}
 #graph-detail .kv{display:grid;grid-template-columns:76px 1fr;gap:6px 8px;font-size:12px;margin-bottom:12px}
 #graph-detail dt{color:var(--faint)} #graph-detail dd{margin:0;color:var(--fg)}
-#graph-detail .body{background:#12151d;border:1px solid var(--line);border-radius:8px;padding:10px;
-                    font-size:12px;color:#cfd6e4;white-space:pre-wrap}
+#graph-detail .body{background:var(--panel2);border:1px solid var(--line);border-radius:8px;padding:10px;
+                    font-size:12px;color:var(--node-fg);white-space:pre-wrap}
 .graph-placeholder{color:var(--faint);font-size:13px;padding:40px;text-align:center}
 
 /* 卫生页 */
@@ -84,7 +96,7 @@ td.b{width:78px}
 .cluster .m{color:var(--faint);font-size:12px;margin-bottom:8px}
 .cluster .member{color:var(--fg);font-size:12px;margin:3px 0;white-space:pre-wrap}
 .pair{display:grid;grid-template-columns:1fr 64px 56px 64px;gap:6px;font-size:12px;
-      padding:4px 0;border-top:1px dashed #232833;color:var(--dim)}
+      padding:4px 0;border-top:1px dashed var(--line);color:var(--dim)}
 .pair .strong{color:var(--dup)} .pair .weak{color:var(--faint)}
 .cluster .curate-tip{color:var(--faint);font-size:12px;margin:8px 0 0}
 .legend{display:flex;gap:14px;flex-wrap:wrap;color:var(--faint);font-size:11px;margin-top:10px}
@@ -93,7 +105,7 @@ td.b{width:78px}
 .doctor-row:first-child{border-top:none}
 .doctor-count{color:var(--faint);font-size:12px;margin-top:8px}
 
-.err{color:var(--bad);font-size:13px;background:#2a1416;border:1px solid #5c2b2f;border-radius:8px;padding:10px 12px}
+.err{color:var(--bad);font-size:13px;background:color-mix(in srgb,var(--bad) 12%,var(--panel));border:1px solid color-mix(in srgb,var(--bad) 35%,transparent);border-radius:8px;padding:10px 12px}
 
 /* 清理史文本：最多两行，超出省略（完整内容在记录详情里可查） */
 .hist{display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;
