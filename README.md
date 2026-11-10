@@ -173,6 +173,12 @@ launchctl kickstart -k gui/$(id -u)/live.sedimem.observer   # 改完代码热加
   <sub><b>卫生洞察</b> —— 待裁决候选、30 天清理史、冗余率/冲突率/检索健康趋势、<code>doctor</code> 体检</sub>
 </p>
 
+<p align="center">
+  <img src="docs/shots/search.png" alt="搜索" width="100%">
+  <sub><b>搜索</b> —— 词法打底、语义道可选；每条结果显示相关度与检索依据（<code>bm25</code> / <code>vector</code> / 两路融合），
+  语义道未启用时显式提示「已降级」而不是假装没有结果</sub>
+</p>
+
 ## 命令与工具
 
 <details>
@@ -189,6 +195,9 @@ launchctl kickstart -k gui/$(id -u)/live.sedimem.observer   # 改完代码热加
 | `memo compact` | 物理清理墓碑（唯一物理删入口，`--dry-run` 可预演） |
 | `memo view build \| show \| trace \| l3` | L2 场景块 / L3 画像 / 溯源 |
 | `memo retitle --from-file` | 批量回填标题（追加补丁，真相层不减） |
+| `memo search <q>` / `memo backfill-vectors` | 检索 / 打开语义道后回填向量（`--dry-run` 可预演）|
+| `memo capture scan \| list \| accept \| reject` | 半自动捕获：候选进 inbox，人工确认才入库 |
+| `memo conflicts [resolve]` | 分歧视图：列出某 slot 的争用记录 / 选一个赢家收敛 |
 | `memo serve` / `memo scope` | 只读观察台 / 查看本目录解析出的分库 |
 
 </details>
@@ -267,7 +276,7 @@ node tools/quality-check.mjs && node tools/security-check.mjs && node tools/cove
 | v0.3.1 | `title` 一等字段 + label v2 + 图谱聚合 + 批量回填 | ✅ |
 | v0.3.2 | 密集图谱可读性 + 今日页改标题事件 | ✅ |
 | v0.3.3 | 跨主题连线 + 3D 球体（手动旋转）+ 布局降噪 | 🔒 冻结 0.3.6 |
-| v0.4.0 | 竞品差距补齐：语义道（可选，RRF + `basis` 可解释）、每步注入、半自动捕获、分歧视图、入库脱敏、UI 搜索页、规模基准、一条命令装插件 | ✅ |
+| v0.4.1 | 竞品差距补齐：语义道（可选，RRF + `basis` 可解释）、每步注入、半自动捕获、分歧视图、入库脱敏、UI 搜索页、规模基准、一条命令装插件 | ✅ |
 
 目录规则：**`X.Y` 换目录**，**`X.Y.Z` 补丁同目录递增**；老目录冻结并留 `FROZEN.md`；指针在 `versions/CURRENT`。
 
