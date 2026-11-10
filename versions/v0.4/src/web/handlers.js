@@ -8,7 +8,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { defaultPolicy as POLICY } from '../config/policy.js';
 import { metricsFileName, legacyMetricsFileName } from '../config/paths.js';
-import { listConflicts, resolveConflicts } from '../views/conflicts.js';
+import { listConflicts } from '../views/conflicts.js';
 
 const V0_1_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
 

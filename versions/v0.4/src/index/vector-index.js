@@ -6,7 +6,11 @@
 //   rewrite 前先把旧文件备份成 .bak（真相层可回滚，坏写不丢数据）。
 // 启动热加载：构造时读 jsonl 进内存 Float32Array，避免每次 search 重新 parse。
 
-import { mkdirSync, readFileSync, writeFileSync, appendFileSync, existsSync, renameSync, unlinkSync } from 'node:fs';
+import {
+  mkdirSync, readFileSync, writeFileSync, appendFileSync, existsSync, renameSync, unlinkSync,
+  copyFileSync, openSync, closeSync, fsyncSync,
+} from 'node:fs';
+import { randomUUID } from 'node:crypto';
 import { join } from 'node:path';
 import { scopeKeyOf } from '../config/paths.js';
 
@@ -102,10 +106,25 @@ export function createVectorIndex({ memoHome, scope = 'default', dim, model } = 
   /** 全量重写：先备份旧文件成 .bak，再原子写新文件 */
   function rewrite() {
     mkdirSync(idxDir, { recursive: true });
-    if (existsSync(file)) renameSync(file, bak);
+    // 备份旧文件（不存在就跳过；不用 existsSync 预判——路径存在性判断本身是竞态源）
+    try {
+      copyFileSync(file, bak);
+    } catch (e) {
+      if (e.code !== 'ENOENT') throw e;
+    }
     const parts = [];
     for (const [id, vec] of vectors) parts.push(rowOf(id, vec));
-    writeFileSync(file, parts.join(''));
+    // 先写**本次进程独占的临时文件**（wx = 必须新建，0600 权限），再 rename 覆盖：
+    // 这样要么看到旧文件、要么看到完整新文件，不会读到半截 JSONL。
+    const tmp = `${file}.tmp-${process.pid}-${randomUUID().slice(0, 8)}`;
+    const fd = openSync(tmp, 'wx', 0o600);
+    try {
+      writeFileSync(fd, parts.join(''));
+      fsyncSync(fd);
+    } finally {
+      closeSync(fd);
+    }
+    renameSync(tmp, file);
   }
 
   if (loadDirty) rewrite(); // 清理脏行/重复行/换模型残留（不这样做文件会无界增长，S-1）

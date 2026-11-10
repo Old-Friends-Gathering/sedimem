@@ -55,8 +55,30 @@ function nullEmbedder() {
  * 返回顺序必须与输入一致（按 data[].index 归位，缺 index 按数组顺序）。
  * @param {{url?: string, model?: string, timeoutMs?: number, minScore?: number}} cfg
  */
+/**
+ * 校验 embedding 端点：只允许 http/https 且必须带 host。
+ * 这个值来自本地 policy 文件（可信配置），但仍显式收口——它会被直接用于出网请求，
+ * 允许 `file:`/`data:` 之类协议等于把「配置」变成任意协议客户端（CodeQL
+ * js/file-access-to-http 指的就是这条数据流）。
+ */
+function validatedEndpoint(raw) {
+  let parsed;
+  try {
+    parsed = new URL(String(raw));
+  } catch {
+    throw embedErr(`createEmbedder: search.embedder.url is not a valid URL: ${JSON.stringify(raw)}`, 'E_INVALID_ARG');
+  }
+  if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
+    throw embedErr(`createEmbedder: search.embedder.url must be http(s), got ${parsed.protocol}`, 'E_INVALID_ARG');
+  }
+  if (parsed.hostname === '') {
+    throw embedErr('createEmbedder: search.embedder.url must include a host', 'E_INVALID_ARG');
+  }
+  return parsed.toString();
+}
+
 function httpEmbedder(cfg) {
-  const url = cfg.url ?? '';
+  const url = validatedEndpoint(cfg.url ?? '');
   const model = cfg.model ?? '';
   const timeoutMs = Number(cfg.timeoutMs ?? 3000);
   if (!url || !model) {

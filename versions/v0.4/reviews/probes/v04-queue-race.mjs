@@ -10,6 +10,7 @@ const memoHome = await mkdtemp(path.join(tmpdir(), 'sedimem-v04-race-'));
 const scope = 'repo:probe';
 const inbox = path.join(memoHome, 'inbox');
 const { mkdir } = await import('node:fs/promises');
+void mkdir;
 await mkdir(inbox, { recursive: true });
 
 // 预置 20000 行，放大 read → write 的窗口。

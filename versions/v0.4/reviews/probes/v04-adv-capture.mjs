@@ -5,7 +5,7 @@
 //   4) 并发 accept（两个队列实例）不产生第二条记录（正向确认）
 //   5) 跨线程并发 add：readFileSync→writeFileSync 无锁，丢更新（真实复现）
 // 运行：node reviews/probes/v04-adv-capture.mjs
-import { mkdtemp, readFile, appendFile, mkdir } from 'node:fs/promises';
+import { mkdtemp, appendFile, mkdir } from 'node:fs/promises';
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import { tmpdir } from 'node:os';

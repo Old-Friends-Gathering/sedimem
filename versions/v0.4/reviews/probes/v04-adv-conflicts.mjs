@@ -16,7 +16,6 @@ import { listConflicts, resolveConflicts } from '../../src/views/conflicts.js';
 
 const out = {};
 const tmp = () => mkdtemp(path.join(tmpdir(), 'sedimem-adv-conf-'));
-const iso = (s) => new Date(s).toISOString();
 
 async function seed(scope, records) {
   const memoHome = await tmp();

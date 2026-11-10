@@ -4,7 +4,6 @@
 
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import fsp from 'node:fs/promises';
 import { mkdtempSync, utimesSync, writeFileSync, mkdirSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';

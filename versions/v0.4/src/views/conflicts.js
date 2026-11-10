@@ -166,11 +166,6 @@ export async function resolveConflicts({ service, slot, winnerId, note } = {}) {
     throw invalidArg(`resolveConflicts: winner ${winnerId} is not active (status=${winner.status})`);
   }
 
-  // 落败者：同 slot 的其它 active/disputed 记录（已 superseded 的不再动，保证幂等）
-  const losers = records.filter((r) => r.id !== winnerId
-    && (r.status === 'active' || r.status === 'disputed')
-    && dedupeSlotKey(r) === slot);
-
   // 对抗审核 S-5：两个进程同时 resolve 同一 slot 时，两边都读到「败者仍 active」，
   // 于是各自 apply 一次 → curate_apply 事件翻倍（实测 4 次）。修法是把整段放进 scope 锁，
   // 并在锁内重读（否则锁只保护写、不保护判定所依赖的快照）。
