@@ -26,6 +26,9 @@
   <button id="tab-hygiene">卫生</button>
   <button id="tab-edit">编辑</button>
   <button id="tab-import">导入</button>
+  <button id="tab-session">会话</button>
+  <button id="tab-handoff">交接</button>
+  <button id="tab-settings">设置</button>
 </nav>
 
 <main>
@@ -100,6 +103,27 @@
     <h2>导入记忆</h2>
     <div class="sub">选来源、填路径，先预览（dryRun）确认解析结果，再写入（apply）。</div>
     <div id="import-container"></div>
+  </section>
+
+  <!-- ============ 设置（W8，内容委托 settings-view.js，只读） ============ -->
+  <section id="settings">
+    <h2>设置（只读）</h2>
+    <div class="sub">这个库现在是怎么配置的：版本、写侧契约、检索阈值、kind 注册表与健康数字。</div>
+    <div id="settings-container"></div>
+  </section>
+
+  <!-- ============ 会话（W8，内容委托 session-view.js，只读） ============ -->
+  <section id="session">
+    <h2>会话记忆</h2>
+    <div class="sub">session:* 临时分库的只读浏览；关闭会话走 CLI，本页不提供写操作。</div>
+    <div id="session-container"></div>
+  </section>
+
+  <!-- ============ 交接（W8，内容委托 handoff-view.js，只读） ============ -->
+  <section id="handoff">
+    <h2>交接文档</h2>
+    <div class="sub">主库里 predicate=handoff 的指针记录；正文按文件名检索只读展示。</div>
+    <div id="handoff-container"></div>
   </section>
 </main>
 
