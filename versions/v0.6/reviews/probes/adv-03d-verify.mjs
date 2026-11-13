@@ -1,7 +1,8 @@
 import { mkdtempSync, readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
-const root = '/Users/yeager/work-yeager/ldywoker/sedimem/versions/v0.6/src/';
+// 用相对本文件的路径，别把个人 home 写进仓库（安全门禁 S4）
+const root = new URL('../../src/', import.meta.url).pathname;
 const { createMemoryService } = await import(root + 'api/service.js');
 const { startSession } = await import(root + 'session/lifecycle.js');
 const { sessionCli } = await import(root + 'cli/session.js');

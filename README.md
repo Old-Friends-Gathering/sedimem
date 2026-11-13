@@ -286,7 +286,8 @@ node tools/pages-verify.mjs --attempts 1   # 可选：立刻看一眼线上是�
 | v0.4.3 | 修插件 `inject` 形状导致「记忆中心面板全黑」；可选注入不再拖垮路由注册 | ✅ |
 | v0.4.4 | 新增 Q10 发布面同步门禁：README / 项目站 / CI 检查名三处漂移会直接红 | ✅ |
 | v0.5.0 | 合并后校验线上项目站（`pages-verify`）：Pages 构建没跑完 / 跑挂 / 落后都会自动开 issue | ✅ 已发布 |
-| v0.6.0 | **写侧粒度契约**（300 字软线 / 4000 字硬线报错 / title 建议）、**会话临时库**（`memo session`，close 只晋升 decision+gotcha）、**UI 分库粘性** | ✅ 当前 |
+| v0.6.1 | 修 `long-form` 标签误标（只有超长才打，缺 title 不再误标） | ✅ 当前 |
+| v0.6.0 | **写侧粒度契约**（300 字软线 / 4000 字硬线报错 / title 建议）、**会话临时库**（`memo session`，close 只晋升 decision+gotcha）、**UI 分库粘性** | ✅ 已发布 |
 
 目录规则：**`X.Y` 换目录**，**`X.Y.Z` 补丁同目录递增**；老目录冻结并留 `FROZEN.md`；指针在 `versions/CURRENT`。
 
