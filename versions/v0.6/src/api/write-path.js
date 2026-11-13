@@ -96,7 +96,8 @@ export async function writeRecord(svc, input) {
     { text: writeInput.text, value: writeInput.value, kind: writeInput.kind ?? 'fact', title: writeInput.title },
     svc.policy ?? POLICY,
   );
-  if (warnings.length > 0 && !tags.includes('long-form')) tags.push('long-form');
+  // 只有「太长」才打 long-form；缺 title 属于另一类告警，不该被当成超长记录（0.6.1 修）。
+  if (warnings.some((w) => w.code === 'E_RECORD_LONG') && !tags.includes('long-form')) tags.push('long-form');
 
   const candidate = createRecord({
     ...writeInput,
@@ -192,7 +193,7 @@ export async function supersedeRecord(svc, { oldId, value, text, title, source, 
     { text: body, value: redacted.input.value, kind: old.kind, title: title ?? old.title },
     svc.policy ?? POLICY,
   );
-  if (supWarnings.length > 0 && !supTags.includes('long-form')) supTags.push('long-form');
+  if (supWarnings.some((w) => w.code === 'E_RECORD_LONG') && !supTags.includes('long-form')) supTags.push('long-form');
   const record = createRecord({
     text: body,
     value: redacted.input.value,

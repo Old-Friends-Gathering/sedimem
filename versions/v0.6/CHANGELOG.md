@@ -1,5 +1,14 @@
 # CHANGELOG · v0.6
 
+## [0.6.1] — 2026-11-13
+
+### Fixed
+
+- **`long-form` 标签误标**：0.6.0 的写路径只要出现任意 warning 就打 `long-form`，导致「10 字、只是
+  缺 title」的普通事实也被挂上长文标签（污染 brief 降级与统计）。改为只有 `E_RECORD_LONG`
+  才打，`write` 与 `supersede` 两条路径同时修正。
+- 回归用例：`tests/unit/longform-tag.test.js`（短文本缺 title 不打 / 超长打 / supersede 同规则）。
+
 ## [0.6.0] — 2026-11-13
 
 三条用户抱怨的落地：**记忆点更明确**、**开发临时记忆库**、**切页不丢分库**。
