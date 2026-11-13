@@ -231,11 +231,13 @@ launchctl kickstart -k gui/$(id -u)/live.sedimem.observer   # 改完代码热加
 | `CodeQL` / `codeql` | 静态分析（含 `security-and-quality` 查询集） |
 | `windows-smoke` | 真 `windows-latest` 上验跨平台文件名与 CLI 路径 |
 | `ci-gate` / `issue-link` | 聚合门 + **MR 必须关联 open 的 issue** |
+| `pages-verify` | **合并后**校验线上项目站：GitHub Pages 是否已构建出当前版本（失败自动开 issue；不进分支保护） |
 
 本地跑同一份脚本（提交前先自己过一遍）：
 
 ```bash
 node tools/quality-check.mjs && node tools/security-check.mjs && node tools/coverage-gate.mjs
+node tools/pages-verify.mjs --attempts 1   # 可选：立刻看一眼线上是不是当前版本
 ```
 
 阈值为什么是这个数、谁能改 → [`docs/07`](docs/07-quality-and-security.md)；
@@ -282,7 +284,8 @@ node tools/quality-check.mjs && node tools/security-check.mjs && node tools/cove
 | v0.4.1 | 修 CLI `capture`/`conflicts` 的退出码崩溃；CodeQL 清零 | ✅ |
 | v0.4.2 | 浅色外观下图谱可读性（节点压暗 + 描边、边压暗加粗）；安全门禁加允许清单 | ✅ |
 | v0.4.3 | 修插件 `inject` 形状导致「记忆中心面板全黑」；可选注入不再拖垮路由注册 | ✅ |
-| v0.4.4 | 新增 Q10 发布面同步门禁：README / 项目站 / CI 检查名三处漂移会直接红 | ✅ 当前 |
+| v0.4.4 | 新增 Q10 发布面同步门禁：README / 项目站 / CI 检查名三处漂移会直接红 | ✅ |
+| v0.5.0 | 合并后校验线上项目站（`pages-verify`）：Pages 构建没跑完 / 跑挂 / 落后都会自动开 issue | ✅ 当前 |
 
 目录规则：**`X.Y` 换目录**，**`X.Y.Z` 补丁同目录递增**；老目录冻结并留 `FROZEN.md`；指针在 `versions/CURRENT`。
 

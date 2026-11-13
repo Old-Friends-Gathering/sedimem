@@ -1,0 +1,84 @@
+name: pages-verify
+
+# 合并后校验：GitHub Pages 上的项目站真的更新到当前版本了吗？
+#
+# 为什么单独一个 workflow：
+#   - Q10 只检查**仓库里**的 README / docs/index.html；
+#   - Pages 是合并后由 GitHub 异步构建的，构建失败或落后时仓库全绿、线上旧版；
+#   - 这里在 push 到 main 之后（以及每天一次）抓线上首页比对版本号，
+#     不一致就开一条 issue（同标题已 open 则不重复开），并把 job 标红。
+#
+# 它**不是** PR 门禁：PR 阶段 Pages 还没构建，卡住没有意义。
+
+on:
+  push:
+    branches: [main]
+  schedule:
+    - cron: '17 3 * * *' # 每天 03:17 UTC，防 Pages 长时间回归
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: write
+
+concurrency:
+  group: pages-verify-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  pages-verify:
+    name: pages-verify
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '22'
+
+      - name: 等构建并核对线上版本
+        id: verify
+        continue-on-error: true
+        run: node tools/pages-verify.mjs --json | tee pages-verify.json
+
+      - name: 失败时开 issue（同标题已 open 则跳过）
+        if: steps.verify.outcome == 'failure'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -eu
+          TITLE="pages-verify: 线上项目站与当前版本不一致"
+          OPEN=$(gh issue list --state open --search "$TITLE in:title" --json number --jq 'length')
+          BODY=$(printf '%s\n' \
+            "自动检查失败：\`main\` 合入后 GitHub Pages 上的项目站没有更新到 \`versions/CURRENT\` 的版本。" \
+            "" \
+            "**本次运行**：${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}" \
+            "**检查脚本**：\`node tools/pages-verify.mjs\`（线上首页 + 三张截图）" \
+            "" \
+            "**排查顺序**" \
+            "1. \`gh api repos/${{ github.repository }}/pages\` 看 \`status\` 与 \`source\`（应为 \`main\` + \`/docs\`）；" \
+            "2. 页面是否只服务 \`/docs\`：根 \`README.md\` 不参与站点；" \
+            "3. 版本号是否真的写进了 \`docs/index.html\`（Q10 会拦这个，但可能被跳过）；" \
+            "4. 构建历史：仓库 Settings → Pages 或 \`gh api repos/${{ github.repository }}/pages/builds\`。" \
+            "" \
+            "**详细输出**见本次 job 的 \`pages-verify.json\` artifact。")
+          if [ "$OPEN" != "0" ]; then
+            echo "已有 open issue（$OPEN 条），跳过创建"
+            gh issue comment "$(gh issue list --state open --search "$TITLE in:title" --json number --jq '.[0].number')" --body "$BODY"
+          else
+            gh issue create --title "$TITLE" --body "$BODY" --label "chore" || gh issue create --title "$TITLE" --body "$BODY"
+          fi
+
+      - name: 归档检查结果
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: pages-verify
+          path: pages-verify.json
+          if-no-files-found: warn
+
+      - name: 汇总
+        if: steps.verify.outcome == 'failure'
+        run: |
+          echo "线上项目站未更新到当前版本，详见上面「等构建并核对线上版本」的输出与 pages-verify.json"
+          exit 1

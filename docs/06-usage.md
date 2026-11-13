@@ -404,7 +404,7 @@ memo retitle --from-file titles.json   # 用 Agent 产出的标题：[{"id":"01M
 要开语义道，给一个 OpenAI 兼容的 embedding 端点：
 
 ```json
-// versions/v0.4/config/policy.json 的 search 段
+// versions/v0.5/config/policy.json 的 search 段
 "search": {
   "embedder": {
     "kind": "http",
