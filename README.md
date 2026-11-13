@@ -113,7 +113,7 @@ NODE=$(command -v node)
 V=versions/$(cat versions/CURRENT)          # 当前版本目录由指针决定
 
 $NODE --test "$V/tests/**/*.test.js"        # 483 个测试（单元 + 注入式回归 + 架构断言）
-$NODE $V/eval/run.js                         # I1–I47 注入式评测，结果写 $V/eval/results/
+$NODE $V/eval/run.js                         # I1–I50 注入式评测，结果写 $V/eval/results/
 $NODE $V/src/cli/memo.js --help              # CLI 入口
 $NODE $V/src/mcp/server.js                   # MCP server（stdio）
 ```
@@ -231,7 +231,7 @@ launchctl kickstart -k gui/$(id -u)/live.sedimem.observer   # 改完代码热加
 | 检查 | 内容 |
 |---|---|
 | `test (22)` / `test (24)` | Node 22/24 上跑全部测试，0 失败 |
-| `eval (I1–I47)` | 注入式回归：重复/冲突/过时/删除/投毒/并发/分库/脱敏/注入预算… |
+| `eval (I1–I50)` | 注入式回归：重复/冲突/过时/删除/投毒/并发/分库/脱敏/注入预算… |
 | `quality` | 零依赖、源码规模、测试清单、评测对齐、**契约覆盖率 ≥ 90%**（当前 93.6%）、文档链接、版本自包含、编码卫生 |
 | `security` | 个人路径、凭据、内部域名、配置可移植、`.gitignore`、许可证、大文件、历史面 |
 | `CodeQL` / `codeql` | 静态分析（含 `security-and-quality` 查询集） |
@@ -292,7 +292,7 @@ node tools/pages-verify.mjs --attempts 1   # 可选：立刻看一眼线上是�
 | v0.4.3 | 修插件 `inject` 形状导致「记忆中心面板全黑」；可选注入不再拖垮路由注册 | ✅ |
 | v0.4.4 | 新增 Q10 发布面同步门禁：README / 项目站 / CI 检查名三处漂移会直接红 | ✅ |
 | v0.5.0 | 合并后校验线上项目站（`pages-verify`）：Pages 构建没跑完 / 跑挂 / 落后都会自动开 issue | ✅ 已发布 |
-| **v1.0.0** | 2026-11-14 | ✅ 重构 + 文档治理 + LLM 总结层 + 记忆中心九页重做 |
+| **v1.0.0** | 2026-11-14 | 🚧 进行中：重构 + 文档治理 + LLM 总结层 + 记忆中心重做 |
 
 | v0.6.2 | 修 CLI `--scope` 静默失效（`memo write --scope session:*` 曾写进主库） | ✅ 当前 |
 | v0.6.1 | 修 `long-form` 标签误标（只有超长才打，缺 title 不再误标） | ✅ 已发布 |
