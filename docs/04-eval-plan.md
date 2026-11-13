@@ -1,9 +1,9 @@
 # 04 · 评测方案（eval）
 
 > doc-kind: contract
-> doc-version: 0.6
+> doc-version: 1.0
 > verified-at: 2026-11-14
-> verified-against: versions/CURRENT（v0.6 / 0.6.2）
+> verified-against: versions/CURRENT（v1.0 / 1.0.0）
 
 
 ## 1. 三层，缺一不可

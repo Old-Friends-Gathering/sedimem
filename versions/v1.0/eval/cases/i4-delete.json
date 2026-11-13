@@ -1,0 +1,10 @@
+{
+  "id": "I4",
+  "name": "delete",
+  "desc": "forget 后立即查与 reindex 后查都查不到；真相层只追加墓碑",
+  "subject": "temp.note",
+  "predicate": "content",
+  "value": "scratch-42",
+  "text": "临时便签 scratch-42，验证删除路径",
+  "query": "scratch-42"
+}

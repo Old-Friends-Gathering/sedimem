@@ -3,9 +3,9 @@
 # sedimem
 
 > doc-kind: manual
-> doc-version: 0.6
+> doc-version: 1.0
 > verified-at: 2026-11-14
-> verified-against: versions/CURRENT（v0.6 / 0.6.2）
+> verified-against: versions/CURRENT（v1.0 / 1.0.0）
 
 
 **记忆不是攒得越多越好 —— 它该像地层一样沉积、可回溯、会收敛。**
@@ -20,7 +20,7 @@
 [![license: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 ![node](https://img.shields.io/badge/node-%E2%89%A522-3c873a)
 ![deps](https://img.shields.io/badge/runtime%20deps-0-brightgreen)
-![tests](https://img.shields.io/badge/tests-471-brightgreen)
+![tests](https://img.shields.io/badge/tests-483-brightgreen)
 ![eval](https://img.shields.io/badge/injection%20eval-I1%E2%80%93I24-blueviolet)
 
 **[🌐 图文版项目站](https://old-friends-gathering.github.io/sedimem/)** · [快速开始](#快速开始) · [架构](#架构) · [三端接入](#三端接入dsh--codex--claude) · [部署](#部署常驻观察台与-nightly) · [设计决策](#设计决策为什么这么做) · [文档](#文档地图)
@@ -112,7 +112,7 @@ git clone https://github.com/Old-Friends-Gathering/sedimem && cd sedimem
 NODE=$(command -v node)
 V=versions/$(cat versions/CURRENT)          # 当前版本目录由指针决定
 
-$NODE --test "$V/tests/**/*.test.js"        # 471 个测试（单元 + 注入式回归）
+$NODE --test "$V/tests/**/*.test.js"        # 483 个测试（单元 + 注入式回归 + 架构断言）
 $NODE $V/eval/run.js                         # I1–I40 注入式评测，结果写 $V/eval/results/
 $NODE $V/src/cli/memo.js --help              # CLI 入口
 $NODE $V/src/mcp/server.js                   # MCP server（stdio）
@@ -133,9 +133,9 @@ MCP 是唯一的接缝。三端各自配一条 stdio server，指向**同一个*
 
 | 客户端 | 配在哪 | 模板 |
 |---|---|---|
-| DSH | `~/.dsh/profiles/<profile>/cordis.patch.yml` 的 `- insert:` 条目 | [`configs/dsh-cordis.patch.yml`](versions/v0.6/configs/dsh-cordis.patch.yml) |
-| Codex CLI | `~/.codex/config.toml` 的 `[mcp_servers.memo]` | [`configs/codex-config.toml`](versions/v0.6/configs/codex-config.toml) |
-| Claude Code | `claude mcp add --scope user memo …` | [`configs/claude-mcp.sh`](versions/v0.6/configs/claude-mcp.sh) |
+| DSH | `~/.dsh/profiles/<profile>/cordis.patch.yml` 的 `- insert:` 条目 | [`configs/dsh-cordis.patch.yml`](versions/v1.0/configs/dsh-cordis.patch.yml) |
+| Codex CLI | `~/.codex/config.toml` 的 `[mcp_servers.memo]` | [`configs/codex-config.toml`](versions/v1.0/configs/codex-config.toml) |
+| Claude Code | `claude mcp add --scope user memo …` | [`configs/claude-mcp.sh`](versions/v1.0/configs/claude-mcp.sh) |
 
 一键自检（写盐值 → 另一个进程召回 → 用召回值作答）：
 
@@ -156,7 +156,7 @@ $NODE $V/src/cli/memo.js serve --port 7788
 $NODE $V/src/cli/nightly.js
 ```
 
-macOS 上建议用 launchd 常驻（模板见 [`configs/launchd/`](versions/v0.6/configs/launchd/)），
+macOS 上建议用 launchd 常驻（模板见 [`configs/launchd/`](versions/v1.0/configs/launchd/)），
 入口统一走 [`scripts/sedimem-run.sh`](scripts/sedimem-run.sh) —— 它读 `versions/CURRENT`，
 所以**换大版本只改指针，plist 与 crontab 都不用碰**：
 
@@ -292,6 +292,8 @@ node tools/pages-verify.mjs --attempts 1   # 可选：立刻看一眼线上是�
 | v0.4.3 | 修插件 `inject` 形状导致「记忆中心面板全黑」；可选注入不再拖垮路由注册 | ✅ |
 | v0.4.4 | 新增 Q10 发布面同步门禁：README / 项目站 / CI 检查名三处漂移会直接红 | ✅ |
 | v0.5.0 | 合并后校验线上项目站（`pages-verify`）：Pages 构建没跑完 / 跑挂 / 落后都会自动开 issue | ✅ 已发布 |
+| **v1.0.0** | 2026-11-14 | 🚧 进行中：重构 + 文档治理 + LLM 总结层 + 记忆中心重做 |
+
 | v0.6.2 | 修 CLI `--scope` 静默失效（`memo write --scope session:*` 曾写进主库） | ✅ 当前 |
 | v0.6.1 | 修 `long-form` 标签误标（只有超长才打，缺 title 不再误标） | ✅ 已发布 |
 | v0.6.0 | **写侧粒度契约**（300 字软线 / 4000 字硬线报错 / title 建议）、**会话临时库**（`memo session`，close 只晋升 decision+gotcha）、**UI 分库粘性** | ✅ 已发布 |

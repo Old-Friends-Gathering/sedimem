@@ -1,9 +1,9 @@
 # 03 · 可演化性与版本管理
 
 > doc-kind: manual
-> doc-version: 0.6
+> doc-version: 1.0
 > verified-at: 2026-11-14
-> verified-against: versions/CURRENT（v0.6 / 0.6.2）
+> verified-against: versions/CURRENT（v1.0 / 1.0.0）
 
 ## 1. 为什么 v0.1 必须「笨」
 
@@ -11,7 +11,7 @@ v0.1 刻意用最笨的实现（纯 JS 倒排索引、规则化裁决、无 embe
 
 ## 2. 扩展点（新增能力只加适配器，不改 core）
 
-下表「所在文件」均相对 `versions/CURRENT` 指向的版本目录（现为 `versions/v0.6/src/`）：
+下表「所在文件」均相对 `versions/CURRENT` 指向的版本目录（现为 `versions/v1.0/src/`）：
 
 | Port | 状态 | 所在文件 | 说明 | 切换方式 |
 |---|---|---|---|---|
@@ -73,21 +73,21 @@ v0.1 刻意用最笨的实现（纯 JS 倒排索引、规则化裁决、无 embe
 > **扩展点验证结论（v0.2.1 实测）**：IndexPort 真的只在一处注入就能换后端——`src/api/service.js` 只改了
 > import（`versions/v0.2/src/api/service.js:10`）+ 一行 `createIndex({...})` 调用
 > （`versions/v0.2/src/api/service.js:53`），无任何 `if (impl === 'sqlite')` 分支散落；
-> 两种后端同一批查询结果对齐见 [`docs/02` 附录 A](02-data-model-and-contract.md) 与 `versions/v0.6/tests/injection/i16-index-parity.test.js`。
+> 两种后端同一批查询结果对齐见 [`docs/02` 附录 A](02-data-model-and-contract.md) 与 `versions/v1.0/tests/injection/i16-index-parity.test.js`。
 
 > 为什么 Web UI 排第一：不是因为"好看"，而是**没有观察面时卫生指标只是数字**——`dup_ratio` 涨了却看不出是哪几条在重复。它把 v0.1 已有的数据（events / metrics / dedupeScan）变成可诊断的界面；其它候选的收益判断都依赖它。
 
 ### 5.1 v0.6 候选落地情况（2026-11-13，v0.6.0 已发布）
 
-[`plans/v0.6-memory-quality-and-session.md`](plans/v0.6-memory-quality-and-session.md) 的候选全部落地，见 [`../versions/v0.6/docs/DELTA.md`](../versions/v0.6/docs/DELTA.md)：
+[`plans/v0.6-memory-quality-and-session.md`](plans/v0.6-memory-quality-and-session.md) 的候选全部落地，见 [`../versions/v1.0/docs/DELTA.md`](../versions/v1.0/docs/DELTA.md)：
 
-- ✅ **方向 A 写侧粒度契约**（300 字软线 / 4000 字硬线报错 / title 先警告后强制）——`versions/v0.6/src/core/record.js`、`config/policy.json` 的 `write` 段；
-- ✅ **方向 B 会话临时记忆库**（`session:<id>` scope、五命令五工具、8 段 checkpoint、close 只晋升 decision/gotcha）——`versions/v0.6/src/session/*`；
-- ✅ **方向 C UI 分库粘性**（`resolveScope` 四级回落 + `hrefFor` 统一出口 + localStorage 粘性）——`versions/v0.6/ui/scope.js`；
-- ✅ **数学三条**（`calibrateDecay` 只报告不自动改 policy / 滞回双阈值 / brief·checkpoint 字符数进 metrics）——`versions/v0.6/src/cli/nightly.js`；
+- ✅ **方向 A 写侧粒度契约**（300 字软线 / 4000 字硬线报错 / title 先警告后强制）——`versions/v1.0/src/core/record.js`、`config/policy.json` 的 `write` 段；
+- ✅ **方向 B 会话临时记忆库**（`session:<id>` scope、五命令五工具、8 段 checkpoint、close 只晋升 decision/gotcha）——`versions/v1.0/src/session/*`；
+- ✅ **方向 C UI 分库粘性**（`resolveScope` 四级回落 + `hrefFor` 统一出口 + localStorage 粘性）——`versions/v1.0/ui/scope.js`；
+- ✅ **数学三条**（`calibrateDecay` 只报告不自动改 policy / 滞回双阈值 / brief·checkpoint 字符数进 metrics）——`versions/v1.0/src/cli/nightly.js`；
 - ✅ **门禁**：Q11 写侧粒度与会话库契约；eval I37–I40；`versions/v0.5` 冻结在 0.5.0。
 
-未做（有意留到 v0.6.1+）：titleEnforce 默认开启、CLAUDE.md 导入器、会话库 UI 投影、语义道进 nightly——入口见 `versions/v0.6/docs/DELTA.md` 末节。
+未做（有意留到 v0.6.1+）：titleEnforce 默认开启、CLAUDE.md 导入器、会话库 UI 投影、语义道进 nightly——入口见 `versions/v1.0/docs/DELTA.md` 末节。
 
 ## 6. 「记忆库本身也要能优化」
 

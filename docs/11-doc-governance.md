@@ -1,9 +1,9 @@
 # 11 · 文档治理契约
 
 > doc-kind: contract
-> doc-version: 0.6
+> doc-version: 1.0
 > verified-at: 2026-11-14
-> verified-against: versions/CURRENT（v0.6 / 0.6.2）
+> verified-against: versions/CURRENT（v1.0 / 1.0.0）
 
 ## 一、为什么有这篇：现状证据
 
@@ -32,9 +32,9 @@
 
 ```markdown
 > doc-kind: contract | manual | history
-> doc-version: 0.6
+> doc-version: 1.0
 > verified-at: 2026-11-14
-> verified-against: versions/CURRENT（v0.6 / 0.6.2）
+> verified-against: versions/CURRENT（v1.0 / 1.0.0）
 ```
 
 逐行解释：

@@ -1,9 +1,9 @@
 # 06 · 使用与运维（memo）
 
 > doc-kind: manual
-> doc-version: 0.6
+> doc-version: 1.0
 > verified-at: 2026-11-14
-> verified-against: versions/CURRENT（v0.6 / 0.6.2）
+> verified-against: versions/CURRENT（v1.0 / 1.0.0）
 
 > 当前版本 = **v0.6**（由仓库根的 `versions/CURRENT` 指向）。下文所有命令都从仓库根
 > 用 `cd versions/$(cat versions/CURRENT)` 进入当前版本目录后执行，**不写死任何 v0.x 路径**。
@@ -537,7 +537,7 @@ MCP 侧一一对应五个工具：`memory_session_start / checkpoint / status / 
   "intent": "完成 sedimem v0.6.0 的文档收尾",
   "concepts": ["写侧粒度契约", "session scope", "UI 分库粘性"],
   "files": ["docs/06-usage.md", "docs/07-quality-and-security.md"],
-  "errorsAndFixes": ["Q6 报死链 → 修正 versions/v0.6 相对路径"],
+  "errorsAndFixes": ["Q6 报死链 → 修正版本目录相对路径"],
   "pendingJobs": ["ACCEPTANCE.md 判定段待 Lead 复核"],
   "currentState": "五份文档已改完，等 quality-check 全绿",
   "nextSteps": ["跑 node tools/quality-check.mjs", "跑 447 用例全量测试"],
@@ -593,7 +593,7 @@ close 做四件事，顺序固定：
 
 ## 18. v0.4–v0.6 新增命令速查（当前版本目录下执行）
 
-先 `cd versions/$(cat versions/CURRENT)`（当前 = v0.6）再复制以下命令：
+先 `cd versions/$(cat versions/CURRENT)`（当前 = v1.0）再复制以下命令：
 
 | 命令 | 作用 | 详见 |
 |---|---|---|
