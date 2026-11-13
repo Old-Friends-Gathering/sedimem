@@ -1,5 +1,18 @@
 # CHANGELOG · v0.6
 
+## [0.6.2] — 2026-11-13
+
+### Fixed
+
+- **CLI `--scope` 静默失效（严重）**：0.6.0/0.6.1 的所有命令都走 `loadService()`，而它只按
+  cwd / `MEMO_SCOPE` 解析分库、从不读 `--scope`。后果：`memo write --scope session:<id>`
+  实际写进主库 —— 会话库写入错位、`session` 禁 `fact` 的门禁被绕过、`session close`
+  报告「晋升 0 条 / tombstone 0 条」（数据留在了主库）。
+  修法：`main()` 把解析后的选项挂到模块级 `CURRENT_OPTS`，`loadService(serviceOpts())`
+  统一透传字符串型 `--scope`，与 `MEMO_SCOPE` 同优先级。
+- 回归用例：`tests/unit/cli-scope.test.js`（真 spawn：写进 session 库 / 文件层面核对 /
+  fact 被拒 / close 后主库能搜到）。
+
 ## [0.6.1] — 2026-11-13
 
 ### Fixed
