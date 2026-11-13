@@ -18,3 +18,7 @@ versions/*/eval/results/tmp-*
 # 本地密钥/环境变量（永不入库）
 .env
 .env.*
+
+# 防止 shell 重定向/临时输出误入仓库（2026-11-14 事故：#145 混入 versions/v0.6/mcp===）
+*===
+*.tmp-*
