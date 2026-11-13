@@ -1,4 +1,4 @@
-// ⚠️ 自动生成：由 versions/v0.5/src/config/paths.js 复制而来，勿手改（改权威实现后重跑 scripts/sync-plugin.sh）。
+// ⚠️ 自动生成：由 versions/v1.0/src/config/paths.js 复制而来，勿手改（改权威实现后重跑 scripts/sync-plugin.sh）。
 // config/paths.js — 派生层路径与命名的单一来源（契约：docs/02 §3.11 裁决 39）
 // 为什么单独一个模块：metrics 文件名规则原先在 nightly.js（写侧 3 处）与 web/handlers.js（读侧 1 处）
 // 各写一遍正则，改名漂移会让趋势图静默缺数。这里把「scope → scopeKey → 文件名」收敛到一处。

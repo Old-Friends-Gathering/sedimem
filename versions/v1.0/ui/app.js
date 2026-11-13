@@ -478,9 +478,17 @@ async function loadImport() {
   importMounted = { scope };
 }
 
+/* W8：会话 / 交接页统一懒加载（只读，无需记忆挂载状态） */
+async function loadLazyView(name) {
+  const mod = await import(`./${name}-view.js`).catch(() => null);
+  const box = document.getElementById(`${name}-container`);
+  if (mod && typeof mod.mount === 'function') await mod.mount({ container: box, apiGet: api });
+  else box.replaceChildren(el('p', 'dim', `${name}-view.js 未加载，刷新页面重试。`));
+}
+
 /* ---------------- 路由 ---------------- */
 
-const ROUTES = ['today', 'graph', 'search', 'hygiene', 'edit', 'import'];
+const ROUTES = ['today', 'graph', 'search', 'hygiene', 'edit', 'import', 'settings', 'session', 'handoff'];
 
 function currentRoute() {
   // 只取 path 部分：`#/graph?scope=repo:x` 的路由是 graph，不是 "graph?scope=repo:x"
@@ -499,6 +507,8 @@ async function render() {
   else if (route === 'search') await loadSearch();
   else if (route === 'edit') await loadEdit();
   else if (route === 'import') await loadImport();
+  else if (route === 'settings') await loadLazyView('settings');
+  else if (route === 'session' || route === 'handoff') await loadLazyView(route);
   else await loadHygiene();
 }
 
