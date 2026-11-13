@@ -6,7 +6,9 @@ import { renderBrief } from '../../src/render/brief.js';
 function rec(i, text) {
   return {
     id: `01M6T8M0J8MCSRHGB0DCGVVBJ${String(i).padStart(2, '0')}`,
-    kind: 'fact', subject: 'text', predicate: 'text', value: text, text,
+    // W1：无 title 的 brief 行首是 subject · predicate（不再用 text 全文），
+    // 这里让 subject/predicate 与 text 同长，保持「长记录触发字符上限」的测试语义不变
+    kind: 'fact', subject: text, predicate: text, value: text, text,
     status: 'active', validTo: null, validFrom: '2026-11-01T00:00:00.000Z',
     createdAt: `2026-11-01T00:00:0${i % 10}.000Z`, hits: 0, tags: [],
     source: { agent: 'test' }, contentHash: 'sha256:x', confidence: 0.8, v: 1, privacy: 'private',

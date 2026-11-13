@@ -46,7 +46,8 @@ test('I1 重复：同一事实 5 种措辞写 5 次，只留 1 条 active', asyn
     assert.equal(search.items[0].record.value, CASE.value);
 
     const brief = await svc.brief();
-    const hitLines = brief.split('\n').filter((l) => l.includes(CASE.value));
+    // W1：无 title 的 brief 行首是 `subject · predicate`（正文/值靠 memory_search 下钻），按 subject 计行
+    const hitLines = brief.split('\n').filter((l) => l.includes(CASE.subject) && l.includes(CASE.predicate));
     assert.equal(hitLines.length, 1, `brief 中该事实只出现 1 行，实际 ${hitLines.length} 行`);
   } finally {
     if (svc) await svc.close().catch(() => {});

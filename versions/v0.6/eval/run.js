@@ -98,6 +98,10 @@ const CASE_FILES = [
   ['I34', 'i34-capture-queue-safety.test.js'],
   ['I35', 'i35-vector-model-and-incremental.test.js'],
   ['I36', 'i36-curate-tombstone-guard.test.js'],
+  ['I37', 'i37-brevity-contract.test.js'],
+  ['I38', 'i38-session-lifecycle.test.js'],
+  ['I39', 'i39-session-isolation.test.js'],
+  ['I40', 'i40-scope-stickiness.test.js'],
 ];
 
 function runCase(id, file) {

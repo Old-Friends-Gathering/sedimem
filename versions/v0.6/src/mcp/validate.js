@@ -46,6 +46,10 @@ function validateValue(path, schema, value, errors) {
 }
 
 function validateObject(path, schema, obj, errors) {
+  // 自由形状对象（会话工具引入）：schema 只声明 type:'object' 而不列 properties/required 时，
+  // 视为透传——键的内容交给业务层校验（如 parseDshSummary/normalizeCheckpoint），
+  // 这里仍保证「它确实是个对象」（validateValue 的 type 检查已先行）。
+  if (!schema.properties && !schema.required) return;
   const props = schema.properties || {};
   for (const key of Object.keys(obj)) {
     if (!(key in props)) {

@@ -56,12 +56,12 @@ cd versions/v0.3 && node eval/run.js   # 行为（I1–I12）
 
 阈值贴着基线设置，意味着**新增未覆盖代码会直接卡住**——这是故意的：先写测试再实现（TDD）。
 
-## 三、质量门禁（quality-check.mjs，10 项）
+## 三、质量门禁（quality-check.mjs，11 项）
 
 | ID | 检查 | 判定 | 为什么这条值得占一个门禁 |
 |---|---|---|---|
 | Q1 | 零运行时依赖 | `dependencies/devDependencies/peerDependencies/optionalDependencies` 全空；`type=module`；有 `engines.node`；`src/` 里无外部 `import` | 便携性是本项目的前提（三端装得上、无需联网装包）。想引库必须先改架构文档 |
-| Q2 | 源码规模 | 单文件 **≤ 900 行**；`src` 总量 **≤ 8000 行**（当前 4660） | 防上帝模块。`api/service.js` 868 行已登记 v0.2 拆分 |
+| Q2 | 源码规模 | 单文件 **≤ 900 行**；`src` 总量 **≤ 13000 行**（v0.6 从 12000 调高：新增 session 模块 `src/session/*` 约 450 行 + `cli/session` 130 行 + 写侧契约约 60 行；单文件硬线不动） | 防上帝模块。`api/service.js` 868 行已登记 v0.2 拆分 |
 | Q3 | 测试清单 | 测试文件 ≥ 8；`tests/unit` 与 `tests/injection` 都非空 | 防"只有单元测试没有行为测试"或反之 |
 | Q4 | 评测对齐 | `eval/run.js` 里声明的每个 I 用例都要有注入测试文件；被引用的 `eval/cases/*.json` 必须存在 | 防"删了用例只留 runner 还显示全绿" |
 | Q5 | 契约覆盖 | `src/` 每个 `export` 必须出现在 `docs/`（不含 research）中；**≥ 90%** | 防"导出即隐形契约"。内部工具写进 docs/02 §3.8，对外 API 写正文 |
@@ -70,6 +70,7 @@ cd versions/v0.3 && node eval/run.js   # 行为（I1–I12）
 | Q8 | 编码卫生 | 无 CRLF；文件末尾有换行 | 纯机械项，零争议，成本近乎为零 |
 | Q9 | Web UI 层边界 | `ui/**` 与 `src/web/**` 不得 import `../hygiene/`、`../storage/`、`../index/`；`ui/**` 无 `http(s)://` 外链、无 `innerHTML/outerHTML/insertAdjacentHTML` 拼数据、无 `eval(`/`new Function(`（行级白名单 `// q9-allow: <理由>`，无理由即失败）；**零构建**（`ui/` 内无 `package.json`/锁文件/`node_modules`/`dist`/`build`）；**单文件 ≤600 行、`ui/` 总量 ≤2500 行**；HTML 的 `<script src>`/`<link href>` 只允许相对路径；`src/web/static.js` 存在且只服务 ui 目录 | Web 层是只读投影（docs/08 契约），越界 import 或 HTML 拼接会破坏"读不到、改不了、注入不进"三条安全底线 |
 | Q10 | 发布面同步 | README 版本表含当前 `vX.Y.Z`；`docs/index.html` 含当前 `X.Y.Z`；`ci.yml` 的 `eval (I1–IN)` 中 N 等于 `eval/run.js` 的用例数 | 发布面是对外唯一入口，落后等于对外撒谎；CI 检查名不同步会让 PR 永远等一个不存在的检查 |
+| Q11 | 写侧粒度与会话库契约 | `config/policy.json` 必须有 `write` 段且 `textHardMaxChars`/`valueRecommendChars`/`titleRequiredKinds` 合法；`src/core/record.js` 无 `MAX_TEXT` 静默截断；session 写路径有 kind 校验（`E_SCRATCH_KIND_FORBIDDEN` 禁 fact）；eval 在册 I37–I39 | 这两条契约最容易被后续改动悄悄退化（把硬上限改回静默截断、把 session 的 fact 禁令删掉），必须机械钉住 |
 
 ## 四、安全门禁（security-check.mjs，9 项）
 
@@ -143,21 +144,22 @@ Pages 构建是异步的（实测 2–5 分钟），脚本默认重试 20×15s�
   指标发生漂移就更新本文件（指标漂移本身就是信号，不要静默改阈值让数字好看）。
 - **禁止**：删除检查项、加 `// q-check-ignore` 式逃逸、把失败改成 warning 了事。
 
-## 七、当前基线（2026-11-10 实测，v0.4.0）
+## 七、当前基线（2026-11-13 实测，v0.6.0）
 
 | 门禁 | 结果 |
 |---|---|
-| 单元 + 注入式 | **391 tests / 370 pass**（`node --test 'tests/**/*.test.js'`） |
-| 评测 | **eval I1–I36 全 PASS**（`node eval/run.js`） |
-| 质量 | 9/9；Q5 契约覆盖 **97.6%**（165/169 导出，下限 90%，其余为 UI/内部工具） |
+| 单元 + 注入式 | **447 tests pass**（`node --test 'tests/**/*.test.js'`） |
+| 评测 | **eval I1–I40 全 PASS**（`node eval/run.js`） |
+| 质量 | **11/11**（含 Q11 写侧粒度与会话库契约） |
 | 安全 | 9/9（含 S9：src/web 无写接口、只绑回环） |
-| 覆盖率 | lines 93.37% / branches 81.14% / functions 92.57%（阈值 lines ≥ 85% / branches ≥ 70% / functions ≥ 90%） |
-| Windows | `tools/windows-smoke.mjs` 6 项全 PASS（`windows-latest` job 见 §一.1） |
+| 覆盖率 | lines 约 93.x% / branches 约 8x% / **functions 92.31%（实测）**（阈值 lines ≥ 85% / branches ≥ 70% / functions ≥ 90%） |
+| Windows | `tools/windows-smoke.mjs` 全 PASS（`windows-latest` job 见 §一.1） |
 | 平台侧 | secret scanning ✅ / push protection ✅ / dependabot security updates ✅（见 §八） |
 
-> Q2 单文件上限仍是 900 行；源码总量上限在 v0.4 从 9000 调到 **12000**（新增语义道 / 捕获 / 分歧 /
-> 注入 / 脱敏 / 搜索页共 8 个模块约 1450 行）。放宽的是总量，不是单文件——理由是「宁要多个职责单一的小文件，
-> 不要一个变大的文件」。
+> Q2 单文件上限仍是 900 行；源码总量上限的变动史：v0.4 从 9000 调到 12000（新增语义道 / 捕获 /
+> 分歧 / 注入 / 脱敏 / 搜索页共 8 个模块约 1450 行），v0.6 从 12000 调到 **13000**（新增会话临时库
+> `src/session/*` 约 450 行、`cli/session` 130 行、`core/record` 写侧契约约 60 行）。
+> 放宽的始终是总量，不是单文件——理由是「宁要多个职责单一的小文件，不要一个变大的文件」。
 
 ### 覆盖率为何 exclude `src/cli/memo.js`
 

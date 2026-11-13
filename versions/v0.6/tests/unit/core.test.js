@@ -146,10 +146,11 @@ describe('core/record', () => {
     assert.ok(v.ok, `默认记录应合法：${JSON.stringify(v.errors)}`);
   });
 
-  test('createRecord：text 超长截断并打 truncated 标签', () => {
-    const r = createRecord({ ...baseInput, text: 'x'.repeat(5000) }, { clock });
-    assert.ok(r.text.length <= 4000, `截断后 <=4000，实际 ${r.text.length}`);
-    assert.ok(r.tags.includes('truncated'), '应打 tags:["truncated"]');
+  test('createRecord：text 超硬上限报错（W1 不再静默截断）', () => {
+    assert.throws(
+      () => createRecord({ ...baseInput, text: 'x'.repeat(5000) }, { clock }),
+      (e) => e.code === 'E_INVALID_RECORD' && /textHardMaxChars/.test(e.message),
+    );
   });
 
   test('validateRecord：逐条不变式', () => {

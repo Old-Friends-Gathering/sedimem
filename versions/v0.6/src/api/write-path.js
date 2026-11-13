@@ -1,7 +1,7 @@
 // api/write-path.js — 写路径承接模块（车道 A，issue #32）
 // write/supersede/forget/enforceQuota 的原方法体搬到此，this → svc，语义零改动。
 
-import { createRecord, validateRecord, withPatch } from '../core/record.js';
+import { createRecord, validateRecord, withPatch, recordWarnings } from '../core/record.js';
 import { withLock } from '../storage/lock.js';
 import { decideWrite } from '../hygiene/write-gate.js';
 import { detectSuspicious } from '../hygiene/suspicious.js';
@@ -9,6 +9,9 @@ import { redactText } from '../hygiene/redact.js';
 import { defaultPolicy as POLICY } from '../config/policy.js';
 // 错误工厂从 service.js 反向引用（错误文本被测试断言，必须单一来源）。
 import { invalid, notFound } from './service.js';
+// session 库写入门禁（v0.6 修复：之前 assertWritableKind 写了但没人调用，fact 仍能落临时库）。
+// lifecycle.js 只静态依赖 core/config，不依赖 api/*，此处静态 import 无循环。
+import { assertWritableKind } from '../session/lifecycle.js';
 
 
 /**
@@ -55,6 +58,8 @@ export async function writeRecord(svc, input) {
   if (!input || typeof input.text !== 'string' || input.text.length === 0) {
     throw invalid('write: input.text (non-empty string) is required');
   }
+  // 写入门禁：session 临时库禁 fact（kind 缺省与 createRecord/recordWarnings 一致按 'fact'）
+  assertWritableKind(svc.scope, input.kind ?? 'fact');
   // 投毒防线：可疑输入打标（I5）——写入成功但不进 brief。
   // 检测来自 hygiene/suspicious.js（归一化 + 启发式），pattern 单一来源 POLICY.suspiciousPatterns；
   // 启发式开关 POLICY.suspiciousHeuristics（缺省全 true）。
@@ -74,6 +79,14 @@ export async function writeRecord(svc, input) {
     if (!tags.includes(tag)) tags.push(tag);
   }
 
+  // W1 写侧粒度契约：告警不打断写入，只打 long-form 标记并在返回值里透出，
+  // 供调用方决定是否拆条重写。放在 redactInput/detectSuspicious 之后，不改变原顺序。
+  const warnings = recordWarnings(
+    { text: writeInput.text, value: writeInput.value, kind: writeInput.kind ?? 'fact', title: writeInput.title },
+    svc.policy ?? POLICY,
+  );
+  if (warnings.length > 0 && !tags.includes('long-form')) tags.push('long-form');
+
   const candidate = createRecord({
     ...writeInput,
     tags,
@@ -81,7 +94,7 @@ export async function writeRecord(svc, input) {
     value: writeInput.value ?? writeInput.text,
     subject: input.subject ?? 'text',
     predicate: input.predicate ?? 'text',
-  }, { clock: svc.clock });
+  }, { clock: svc.clock, policy: svc.policy ?? POLICY });
 
   // 裁决 13（阻断项）：「增量重读 → 判定 → 追加」必须在同一把 scope 锁的临界区内完成，
   // 判定不得基于进程内陈旧快照。锁内追加/事件走 store 的 Immediate（无锁）变体。
@@ -105,13 +118,13 @@ export async function writeRecord(svc, input) {
         case 'created': {
           await svc._commit(record, 'write', { action: gate.action, reason: gate.reason });
           await svc.enforceQuota();
-          return { action: gate.action, record };
+          return { action: gate.action, record, warnings };
         }
         case 'noop_duplicate':
         case 'noop_same_value': {
           // 不写真相层；只写审计事件（每次写操作必返回 action —— hook 静默失败防线）
           await svc._event('write', record.id, { action: gate.action, reason: gate.reason });
-          return { action: gate.action, record };
+          return { action: gate.action, record, warnings };
         }
         case 'supersede': {
           if (!gate.superseded) throw invalid('write: supersede without superseded record');
@@ -126,11 +139,11 @@ export async function writeRecord(svc, input) {
                 validTo: gate.superseded.validTo ?? handoff,
               });
           await svc._commit(closedOld, 'supersede', { reason: gate.reason, by: record.id });
-          return { action: gate.action, record, supersededId: closedOld.id };
+          return { action: gate.action, record, supersededId: closedOld.id, warnings };
         }
         case 'disputed': {
           await svc._commit(record, 'write', { action: gate.action, reason: gate.reason });
-          return { action: gate.action, record };
+          return { action: gate.action, record, warnings };
         }
         default:
           throw invalid(`write: unknown decideWrite action ${JSON.stringify(gate.action)}`);

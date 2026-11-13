@@ -114,5 +114,39 @@
     "maxItems": 50,
     "maxLineChars": 400,
     "inboxDir": "inbox"
+  },
+  "write": {
+    "titleRequiredKinds": [
+      "fact",
+      "pref",
+      "decision",
+      "gotcha"
+    ],
+    "valueRecommendChars": 300,
+    "textHardMaxChars": 4000,
+    "longFormTag": "long-form",
+    "titleEnforce": false
+  },
+  "session": {
+    "hintTokens": 30000,
+    "ttlMs": 604800000,
+    "promoteKinds": [
+      "decision",
+      "gotcha"
+    ],
+    "handoffDir": "handoffs",
+    "sweepOlderThanMs": 1209600000,
+    "autoWatch": false
+  },
+  "math": {
+    "calibrateDecay": {
+      "enabled": true,
+      "minSamples": 50,
+      "reportOnly": true
+    },
+    "hysteresis": {
+      "enterRatio": 0.8,
+      "exitRatio": 0.6
+    }
   }
 }

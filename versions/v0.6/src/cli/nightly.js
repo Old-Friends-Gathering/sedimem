@@ -17,6 +17,7 @@ import process from 'node:process';
 import path from 'node:path';
 import os from 'node:os';
 import fsp from 'node:fs/promises';
+import { pathToFileURL } from 'node:url';
 import { metricsFileName, briefFileName } from '../config/paths.js';
 
 const USAGE = `nightly —— memo 确定性夜间整合
@@ -130,6 +131,108 @@ async function computeSearchMetrics(service, date) {
   };
 }
 
+// ─── 数学/金融纯函数（W4：只报表，绝不写 policy）──────────────────────────
+// 三个函数都是纯函数：同输入必同输出、零副作用，单测直接 import 本文件
+// （因此文件末尾的 main() 执行加了 isMain 守卫，import 不会再触发 CLI 跑批）。
+
+/** math 段兜底：policy.json 缺 math/子键时使用这些默认值（纪律：不改 policy.json）。 */
+const MATH_DEFAULTS = Object.freeze({
+  calibrateDecay: Object.freeze({ enabled: true, minSamples: 50, reportOnly: true }),
+  hysteresis: Object.freeze({ enterRatio: 0.8, exitRatio: 0.6 }),
+});
+
+/** 取 policy.math.calibrateDecay.minSamples，缺段/缺键/非数值兜底到默认值。 */
+function minSamplesOf(policy) {
+  const v = policy?.math?.calibrateDecay?.minSamples;
+  return typeof v === 'number' && Number.isFinite(v) ? v : MATH_DEFAULTS.calibrateDecay.minSamples;
+}
+
+/** 取 policy.math.hysteresis.<键>，缺段/缺键/非数值兜底到默认值。 */
+function hysteresisOpt(policy, key) {
+  const v = policy?.math?.hysteresis?.[key];
+  return typeof v === 'number' && Number.isFinite(v) ? v : MATH_DEFAULTS.hysteresis[key];
+}
+
+/**
+ * 生存分析式半衰期估计（W4 任务 1：**只报告**，绝不写 policy）。
+ * 对每个 kind：取 status==='superseded' 且 validFrom/validTo 可解析的记录，
+ * 计算存活时长 (validTo - validFrom) 毫秒；样本数 < minSamples（默认 50）→
+ * 返回 { note:'insufficient-samples', medianMs:null, suggestedHalfLifeMs:null }；
+ * 够样本 → 建议半衰期 = round(中位数 × ln2)（口径按任务契约固定：×0.693）。
+ * 结果只落 metrics.decayCalibration，**绝不回写 policy**（reportOnly 语义）。
+ * @param {{records:Array, policy?:object, now?:number|string}} args
+ * @returns {Array<{kind:string,samples:number,medianMs:number|null,suggestedHalfLifeMs:number|null,note?:string}>}
+ */
+export function calibrateDecay({ records, policy, now } = {}) {
+  if (!Array.isArray(records)) {
+    const err = new Error('calibrateDecay: records must be an array');
+    err.code = 'E_INVALID_ARG';
+    throw err;
+  }
+  const minSamples = minSamplesOf(policy);
+  // 按 kind 分桶：只看已被 superseded 的记录（active 记录的存活时长还没结束，属删失样本）
+  const byKind = new Map();
+  for (const r of records) {
+    if (!r || r.status !== 'superseded') continue;
+    const from = Date.parse(r.validFrom ?? '');
+    const to = Date.parse(r.validTo ?? '');
+    // 非法/非正时长（时钟回拨、手工修数据）不进样本，避免污染中位数
+    if (!Number.isFinite(from) || !Number.isFinite(to) || to - from <= 0) continue;
+    const kind = String(r.kind ?? 'unknown');
+    if (!byKind.has(kind)) byKind.set(kind, []);
+    byKind.get(kind).push(to - from);
+  }
+  const out = [];
+  for (const [kind, durations] of byKind) {
+    if (durations.length < minSamples) {
+      out.push({ kind, samples: durations.length, medianMs: null, suggestedHalfLifeMs: null, note: 'insufficient-samples' });
+      continue;
+    }
+    const sorted = [...durations].sort((a, b) => a - b);
+    const mid = sorted.length >> 1;
+    // 偶数个样本取中间两数的均值（标准中位数定义）
+    const medianMs = sorted.length % 2 === 1 ? sorted[mid] : (sorted[mid - 1] + sorted[mid]) / 2;
+    // 指数衰减分布的经验近似：中位数 × ln2 ≈ 建议半衰期（口径按任务契约固定为 ×0.693）
+    out.push({ kind, samples: sorted.length, medianMs, suggestedHalfLifeMs: Math.round(medianMs * 0.693) });
+  }
+  return out;
+}
+
+/**
+ * 滞回开关（W4 任务 2：纯函数，不接插件）。
+ * ratio ≥ enterRatio（默认 0.8）→ 'on'；ratio ≤ exitRatio（默认 0.6）→ 'off'；
+ * 中间保持 prev（默认 'off'）。用于「会话 token 用满提示」的防抖：
+ * 单阈值开关在阈值附近会来回抖动，双阈值滞回消除抖动。
+ * @param {{ratio:number, prev?:string, policy?:object}} args
+ * @returns {'on'|'off'}
+ */
+export function hysteresisState({ ratio, prev, policy } = {}) {
+  if (typeof ratio !== 'number' || !Number.isFinite(ratio)) {
+    const err = new Error('hysteresisState: ratio must be a finite number');
+    err.code = 'E_INVALID_ARG';
+    throw err;
+  }
+  const enter = hysteresisOpt(policy, 'enterRatio');
+  const exit = hysteresisOpt(policy, 'exitRatio');
+  if (ratio >= enter) return 'on';
+  if (ratio <= exit) return 'off';
+  return prev === 'on' ? 'on' : 'off'; // 中间带保持原状态；prev 缺省视为 'off'
+}
+
+/**
+ * 注入足迹统计（W4 任务 3：为将来 R(D) 曲线留数据）。
+ * brief/tier0 均按「字符数 = String.length（含换行）、行数 = split('\n').length」计；
+ * null/undefined 计 0。
+ * @param {{brief?:string|null, tier0?:string|null}} args
+ * @returns {{briefChars:number,briefLines:number,tier0Chars:number,tier0Lines:number}}
+ */
+export function tokenFootprint({ brief, tier0 } = {}) {
+  const count = (s) => (typeof s === 'string' ? { chars: s.length, lines: s.split('\n').length } : { chars: 0, lines: 0 });
+  const b = count(brief);
+  const t = count(tier0);
+  return { briefChars: b.chars, briefLines: b.lines, tier0Chars: t.chars, tier0Lines: t.lines };
+}
+
 async function main() {
   const argv = process.argv.slice(2);
   if (argv.includes('--help') || argv.includes('-h')) {
@@ -187,6 +290,20 @@ async function main() {
       await fsp.writeFile(briefPath, brief.endsWith('\n') ? brief : brief + '\n');
     }
 
+    // 4b) 注入足迹（W4 任务 3）：brief + tier0 目录的字符/行数，
+    //     为将来 R(D)（检索质量-预算）曲线留数据。tier0 用 renderTier0 纯渲染（只读）。
+    const { renderTier0 } = await import('../render/tier0.js');
+    const tier0Text = renderTier0(records, { policy, now: Date.now() }).text;
+    const footprint = tokenFootprint({ brief, tier0: tier0Text });
+
+    // 4c) 半衰期校准（W4 任务 1）：生存分析式估计，**只报告**——
+    //     结果落 metrics.decayCalibration，绝不写 policy（math.calibrateDecay.reportOnly）。
+    //     enabled=false 时跳过计算（math 段缺失视为启用，默认值兜底）。
+    const calibEnabled = policy?.math?.calibrateDecay?.enabled !== false;
+    const decayCalibration = calibEnabled
+      ? calibrateDecay({ records, policy, now: Date.now() })
+      : [];
+
     // 6) 去重候选簇（裁决 23：只打印摘要，不自动裁决；--dry-run 同样可见。
     //    dedupeScan 只读，安全；API 未就绪时降级为提示，不阻断其余整合步骤。）
     if (typeof service.dedupeScan === 'function') {
@@ -230,6 +347,12 @@ async function main() {
       evictedCount: Array.isArray(plan.evicted) ? plan.evicted.length : plan.evicted,
       hitsFlushed: plan.hitsFlushed,
       dedupeCandidates: plan.dedupe ? plan.dedupe.clusters : 0, // 裁决 23：候选簇数量（不自动裁决）
+      // W4 数学/金融三条（只报表）：注入足迹 + 半衰期校准
+      briefChars: footprint.briefChars,
+      briefLines: footprint.briefLines,
+      tier0Chars: footprint.tier0Chars,
+      tier0Lines: footprint.tier0Lines,
+      decayCalibration,
       ...searchMetrics,
     };
 
@@ -258,6 +381,10 @@ async function main() {
           `  配额淘汰: ${plan.metrics.evictedCount} 条（service.enforceQuota，墓碑 tags:['quota']，maxActive=${policy?.quota?.maxActive}）\n` +
           `  hits 落盘: ${plan.hitsFlushed} 条（service.flushHits）\n` +
           `  brief: ${plan.briefLines} 行 → ${plan.briefPath}\n` +
+          `  注入足迹: brief=${footprint.briefChars}字符/${footprint.briefLines}行 tier0=${footprint.tier0Chars}字符/${footprint.tier0Lines}行\n` +
+          (decayCalibration.length > 0
+            ? `  半衰期校准(只报告): ${decayCalibration.map((c) => `${c.kind}:n=${c.samples}${c.medianMs == null ? '(样本不足)' : `→${c.suggestedHalfLifeMs}ms`}`).join('  ')}\n`
+            : `  半衰期校准(只报告): 未计算（math.calibrateDecay.enabled=false 或无 superseded 样本）\n`) +
           `  metrics: active=${plan.metrics.active} dupRatio=${plan.metrics.dupRatio} conflictRate=${plan.metrics.conflictRate} hitsFlushed=${plan.metrics.hitsFlushed} searchCount=${plan.metrics.searchCount}\n` +
           (plan.dedupe
             ? `  去重候选: ${plan.dedupe.clusters} 簇（threshold=${plan.dedupe.threshold}，不自动裁决，裁决 23）\n` +
@@ -276,7 +403,13 @@ async function main() {
   }
 }
 
-main().catch((err) => {
-  process.stderr.write(`nightly 失败 [${err.code ?? 'E_UNKNOWN'}]: ${err.message}\n`);
-  process.exit(1);
-});
+// isMain 守卫：单测 import 本文件的纯函数（calibrateDecay 等）时不得触发 CLI 跑批。
+const isMain = process.argv[1]
+  && import.meta.url === pathToFileURL(path.resolve(process.argv[1])).href;
+
+if (isMain) {
+  main().catch((err) => {
+    process.stderr.write(`nightly 失败 [${err.code ?? 'E_UNKNOWN'}]: ${err.message}\n`);
+    process.exit(1);
+  });
+}

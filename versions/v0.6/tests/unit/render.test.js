@@ -18,9 +18,10 @@ function rec(over = {}, ms = T0) {
 
 describe('render/brief', () => {
   const records = [
-    rec({ text: '事实甲', kind: 'fact', hits: 3 }),
-    rec({ text: '决策乙：用 JSONL', kind: 'decision', hits: 0 }),
-    rec({ text: '偏好丙：默认中文', kind: 'pref', hits: 1 }),
+    // W1：brief 行首取 title，无 title 走 subject · predicate；fixture 补 title 保持断言语义
+    rec({ text: '事实甲', kind: 'fact', hits: 3, title: '事实甲' }),
+    rec({ text: '决策乙：用 JSONL', kind: 'decision', hits: 0, title: '决策乙' }),
+    rec({ text: '偏好丙：默认中文', kind: 'pref', hits: 1, title: '偏好丙' }),
     rec({ text: '被取代丁', kind: 'fact', status: 'superseded', validTo: clock.now(), hits: 9 }),
     rec({ text: '墓碑戊', kind: 'fact', status: 'tombstoned', hits: 9 }),
   ];

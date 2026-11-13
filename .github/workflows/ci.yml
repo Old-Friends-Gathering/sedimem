@@ -53,7 +53,7 @@ jobs:
         run: node tools/windows-smoke.mjs
 
   eval:
-    name: eval (I1–I36)
+    name: eval (I1–I40)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7

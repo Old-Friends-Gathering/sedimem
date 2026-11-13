@@ -1,4 +1,50 @@
-# CHANGELOG · v0.5
+# CHANGELOG · v0.6
+
+## [0.6.0] — 2026-11-13
+
+三条用户抱怨的落地：**记忆点更明确**、**开发临时记忆库**、**切页不丢分库**。
+
+### Added
+
+- **写侧粒度契约**（方向 A）
+  - `policy.write` 段：`textHardMaxChars=4000` / `valueRecommendChars=300` /
+    `titleRequiredKinds` / `titleEnforce=false` / `longFormTag=long-form`。
+  - `createRecord` 超硬上限**报错**（`E_INVALID_RECORD`，附 `truncateTo` 建议），不再静默截断——
+    以前 4000 字以上的输入会被悄悄切掉并打 `truncated` 标签，调用方以为写全了。
+  - `recordWarnings(record, policy)`：`E_RECORD_LONG` 带 `splitSuggestion`（≤3 段、可直接重放成多条）、
+    `E_TITLE_MISSING`（默认只警告；`write.titleEnforce=true` 时硬拒）。
+  - `service.write()` 返回值新增 `warnings: []`（向后兼容），出现 `E_RECORD_LONG` 时打 `long-form` 标签。
+  - brief 渲染：结构化记录行首优先 `title`，无 title 用 `subject · predicate`，不再糊整段正文。
+- **会话临时记忆库**（方向 B）
+  - `session:<id>` scope：`memo session start|checkpoint|status|close|sweep`，
+    MCP 侧对应 `memory_session_start|checkpoint|status|close|sweep` 五个工具。
+  - 8 段 checkpoint（intent/concepts/files/errorsAndFixes/pendingJobs/currentState/nextSteps/criticalContext），
+    `--from-summary` 可直接吃 DSH `compaction/summary` 事件。
+  - `close`：只把 `decision`/`gotcha` 晋升回主库（`meta.parentScope`，带 `from-session:<id>` 标签），
+    其余 tombstone，交接文档写 `<memoHome>/handoffs/<id>.md`，重复 close 幂等。
+  - session 库**禁止写 `fact`**（`E_SCRATCH_KIND_FORBIDDEN`）。
+- **UI 分库粘性**（方向 C）
+  - `ui/scope.js`：`resolveScope()` 四级回落（hash > localStorage > 服务端默认 > 首个可用）、
+    `hrefFor()` 统一生成带 `?scope=` 的内部链接。
+  - 切 tab / 搜索 / 图谱跳转都不再丢分库；选中的分库持久化在 `localStorage['sedimem.scope']`。
+- **评测**：I37 粒度契约、I38 会话生命周期、I39 会话隔离、I40 分库粘性（共 40 个注入用例）。
+- **门禁**：Q11「写侧粒度与会话库契约」（policy.write 可配置 / 无静默截断 / session 禁 fact / I37–I39 在册）。
+
+### Changed
+
+- `versions/v0.6` 新建，`versions/v0.5` 冻结在 0.5.0（含 `FROZEN.md`）。
+- `ci.yml` 的 eval job 名 `eval (I1–I36)` → `eval (I1–I40)`（分支保护 required checks 已同步）。
+- Q2 源码总量上限 12000 → 13000（新增 `src/session/*` 约 450 行、`cli/session` 130 行；
+  单文件 900 行硬线不动）。
+- 文档：`docs/02` §3.17 新增裁决 71–76 与第十五轮导出登记；`docs/06` 增 §17 会话库用法；
+  `docs/07` 门禁表加 Q11；README 与项目站同步 v0.6.0。
+
+### Known limits
+
+- `titleEnforce` 默认 false（避免破坏现有三端写入），要硬约束需显式开启。
+- 会话库的 checkpoint 由 agent 或人写，**不做自动总结**（用户明确要求手动触发）。
+- 语义检索仍需自备 embedding 端点（v0.4 起可选、默认关闭）。
+
 
 ## [0.5.0] — 2026-11-13
 

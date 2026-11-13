@@ -1,0 +1,10 @@
+{
+  "id": "I38",
+  "name": "会话库全生命周期",
+  "expects": [
+    "start 记住 parentScope",
+    "close 晋升 decision/gotcha 到主库",
+    "交接文档六节齐全",
+    "重复 close 幂等"
+  ]
+}

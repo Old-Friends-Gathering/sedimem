@@ -142,10 +142,12 @@ function lineFor(record, suspicious) {
     return `- [suspicious withheld]（id ${record.id}）`;
   }
   const asOf = String(record.validFrom ?? '').slice(0, 10) || 'unknown';
-  // 裁决 59：有 title 就用 title 当行首（更短、更能扫），正文靠 memory_search / memory_get 下钻。
-  // 没有 title 的旧记录保持原样（正文全文），避免回填前 brief 丢掉信息。
+  // W1 写侧粒度契约：行首优先 title；无 title 用 `subject · predicate`（结构化三元组），
+  // 不再用 text 全文兜底——长文进 brief 只会挤掉别的行，正文靠 memory_search / memory_get 下钻。
   const title = typeof record.title === 'string' ? record.title.trim() : '';
-  const head = title !== '' ? title : String(record.text ?? '');
+  const head = title !== ''
+    ? title
+    : `${String(record.subject ?? '')} · ${String(record.predicate ?? '')}`.trim();
   return `- [${record.kind}] ${head}  (as of ${asOf})`;
 }
 

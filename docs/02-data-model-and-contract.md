@@ -841,3 +841,27 @@ v0.4 的取舍依据是竞品调研（`docs/research/competitive-dsh-plugins-202
 | 68 | **自由文本不构成 slot 分歧**：`subject`/`predicate` 都是默认 `text` 的记录只能经 `dedupeScan` + Agent 裁决处理；`/api/conflicts` 与 `resolveConflicts` 都必须拒绝把它当 slot | `src/hygiene/conflict.js: isUnstructured`、`src/views/conflicts.js` | `i33-conflicts-scope` |
 | 69 | **派生结构要自我修复**：向量行带 `model`/`dim`，加载时不匹配即跳过并清理重写文件；`IndexPort.add` 必须同时接受 `add(record)` 与 `add(id, record)`；`curateApply` 拒绝 `tombstoned` 记录（裁决不能撤销删除） | `src/index/vector-index.js`、`src/index/hybrid-index.js`、`src/api/maintenance.js: applyIdsDecision` | `i35`、`i36` |
 | 70 | **队列是并发安全的状态流**：inbox 的读改写必须在同步互斥锁内（`mkdir` 原子排他、陈旧锁 10s 接管、5s 超时），写入走「临时文件 + rename」；单行坏 JSON 不得阻断 add/list/accept，坏行数经 `lastCorrupt` 暴露 | `src/capture/queue.js` | `i34-capture-queue-safety` |
+
+### 3.17 第十五轮裁决（v0.6：写侧粒度 + 会话库 + 分库粘性，71–76）
+
+| # | 裁决 | 落地位置 | 守住它的测试 |
+| --- | --- | --- | --- |
+| 71 | **一条记录 = 一个可判断的事实**：超 `write.textHardMaxChars`（默认 4000）**报错**，绝不静默截断（截断会把不可恢复的信息丢进真相层，还让调用方误以为写全了） | `src/core/record.js: createRecord` | `i37-brevity-contract` |
+| 72 | **软线只警告**：`text`/`value` 超 `write.valueRecommendChars`（默认 300）时写入照常成功，但返回 `warnings[E_RECORD_LONG]`（带可直接重放的 `splitSuggestion`，≤3 段）并打 `long-form` 标签 | `src/core/record.js: recordWarnings`、`src/api/write-path.js` | `i37-brevity-contract` |
+| 73 | **title 先警告后强制**：`kind ∈ write.titleRequiredKinds` 缺 title → 默认 `E_TITLE_MISSING` 警告；`write.titleEnforce=true` 时才硬拒（破坏性变更留给部署方显式开启） | `src/core/record.js`、`config/policy.json: write.titleEnforce` | `i37-brevity-contract` |
+| 74 | **临时库是「可丢弃的中间层」**：`session:<id>` 库**禁止写 `fact`**（`E_SCRATCH_KIND_FORBIDDEN`，因为 fact 不会被晋升、只会随库 tombstone）；`close` 只把 `decision`/`gotcha` 晋升回 `meta.parentScope` 主库，其余 tombstone，交接文档写 `<memoHome>/handoffs/<id>.md`，重复 close 幂等 | `src/session/{lifecycle,checkpoint,handoff}.js`、`src/cli/session.js`、`src/api/write-path.js` | `i38-session-lifecycle`、`i39-session-isolation` |
+| 75 | **完全手动**：不自动建库、不自动压缩、不自动 close；`session.hintTokens`（默认 30000）**只用于提示**，`memo session sweep` 只报告僵尸会话不删 | `config/policy.json: session`、`src/session/lifecycle.js: sweepSessions` | 单元测试 + `docs/06` §17 |
+| 76 | **分库是全局状态而非页面参数**：UI 读侧四级回落（hash > localStorage > 服务端默认 > 首个可用），所有内部跳转必须走 `hrefFor()` 带 `?scope=`；服务端 `/api/scopes` 是可用分库的唯一真相 | `ui/scope.js`、`ui/app.js`、`src/web/handlers.js` | `i40-scope-stickiness` |
+
+### 第十五轮导出登记（裁决 71–76）
+
+| 模块 | 导出 |
+|---|---|
+| `src/core/record.js` | `recordWarnings` |
+| `src/session/lifecycle.js` | `SESSION_PREFIX` `createSessionId` `isSessionScope` `assertWritableKind` `startSession` `sessionStatus` `sweepSessions` |
+| `src/session/checkpoint.js` | `CHECKPOINT_SECTIONS` `ARRAY_SECTIONS` `normalizeCheckpoint` `parseDshSummary` `writeCheckpoint` |
+| `src/session/handoff.js` | `renderHandoff` `writeHandoff` |
+| `src/cli/session.js` | `sessionCli` `PROMOTE_KINDS` |
+| `src/index/vector-index.js` | `decodeVector` |
+| `src/render/inject.js` | `FENCE_OPEN` `FENCE_CLOSE` `DATA_NOT_INSTRUCTION` |
+| `ui/scope.js` | `SCOPE_PATTERN` `resolveScope` `hrefFor` |

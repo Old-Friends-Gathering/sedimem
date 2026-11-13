@@ -41,6 +41,11 @@ const USAGE = `memo —— 本地跨会话记忆系统 v0.1
   memo curate apply <batchId> --decisions <file|->
   memo dedupe scan [--threshold 0.45] [--dice 0.15] [--limit 50] [--json]   # 只读：近重复候选簇（裁决 22/23/26）
   memo dedupe apply --file decisions.json                     # decisions.json: {batchId?, decisions:[{ids:[...]|pairIndex, decision, note}]}
+  memo session start --title "..." [--repo <path>]              # 建临时会话库 session:<id>（v0.6）
+  memo session checkpoint [--scope s] [--file ck.json] [--from-summary sum.json]
+  memo session status [--scope s] [--json]
+  memo session close [--scope s]                                # 晋升 decision/gotcha + 交接文档 + 其余墓碑
+  memo session sweep [--older-than 14d] [--json]                # 只报告僵尸会话，不删
   memo migrate dsh-memory [--db path]
   memo serve [--port N] [--no-ui]                             # 只读 Web UI/API（默认 127.0.0.1:7788；--no-ui 只提供 API）
 
@@ -716,6 +721,23 @@ async function main() {
           if (r.slots.length > 0) process.stdout.write('  用 memo conflicts resolve --slot <key> --winner <id> 裁决\n');
         }
         return 0;
+      } finally {
+        await service.close();
+      }
+    }
+    case 'session': {
+      const { sessionCli } = await import('./session.js');
+      const service = await loadService();
+      try {
+        // sessionCli 自己解析 argv（与 --scope/--file 等混排更稳），这里把原始参数整段交出去
+        const res = await sessionCli(argv.slice(1), {
+          service,
+          memoHome: resolveMemoHome(),
+          clock: service.clock,
+          json: asJson,
+          out: (line) => process.stdout.write(`${line}\n`),
+        });
+        return typeof res === 'number' ? res : 0;
       } finally {
         await service.close();
       }

@@ -6,6 +6,7 @@
  */
 import { renderLineChart, fmtPct as pctFmt } from './charts.js';
 import { renderSearchResults } from './search-view.js';
+import { resolveScope, hrefFor as buildHref } from './scope.js';
 
 const API = 'api'; // 文档相对：根路径部署与子路径代理（DSH 插件 iframe）都能解析
 /** 东八区为 +480；-new Date().getTimezoneOffset() 把浏览器时区换成「东为正」分钟数。 */
@@ -13,11 +14,15 @@ const TZ_OFFSET = -new Date().getTimezoneOffset();
 
 /* ---------------- 小工具 ---------------- */
 
-/** 取接口数据；ok:false 或网络错误统一抛 Error(code+message)。 */
 /** 当前观察的分库（?scope=repo:xxx）；空串表示用服务端启动时解析出的那个。 */
 function currentScope() {
   const m = /(?:^|[?&])scope=([^&]+)/.exec(location.hash.split('?')[1] ?? '');
   return m ? decodeURIComponent(m[1]) : '';
+}
+
+/** 统一出口：内部跳转必须带当前 scope（W4：裸 '#/'+route 会丢 ?scope=）。 */
+function hrefFor(route, extra = {}) {
+  return buildHref(route, { scope: currentScope(), ...extra });
 }
 
 async function api(path) {
@@ -461,8 +466,7 @@ function bindSearchControls() {
     if (ev.key !== 'Enter') return;
     const v = ev.target.value.trim();
     if (!v) return;
-    const sc = currentScope();
-    location.hash = `#/search?q=${encodeURIComponent(v)}${sc ? `&scope=${encodeURIComponent(sc)}` : ''}`;
+    location.hash = hrefFor('search', { q: v });
   });
 }
 
@@ -478,10 +482,9 @@ function watchGraphDetail() {
     const id = window.__sedimemGraphState?.selectedId;
     if (!id) return; // 未选中（占位文案）不加链接
     if (detail.lastElementChild?.classList?.contains('graph-search-link')) return; // 已加过（自身触发）
-    const sc = currentScope();
     const p = el('p', 'graph-search-link');
     const a = el('a', '', '在搜索中查看');
-    a.href = `#/search?q=${encodeURIComponent(id)}${sc ? `&scope=${encodeURIComponent(sc)}` : ''}`;
+    a.href = hrefFor('search', { q: id });
     p.append(a);
     detail.append(p);
   });
@@ -516,13 +519,37 @@ window.addEventListener('hashchange', () => {
   loadScopes(); // 分库可能被切换：刷新下拉的选中项与计数
   render();
 });
-for (const r of ROUTES) {
-  document.getElementById(`tab-${r}`).addEventListener('click', () => { location.hash = `#/${r}`; });
-}
+// W4：经 hrefFor 携带当前 scope（裸 '#/'+r 会丢 ?scope=，切页后分库漂回默认）
+for (const r of ROUTES) document.getElementById(`tab-${r}`).addEventListener('click', () => { location.hash = hrefFor(r); });
 
 /* ---------------- 分库切换 ---------------- */
 
-/** 拉分库列表并渲染顶栏下拉；切换后把 scope 写进 hash 并发起重渲染。 */
+// localStorage 键：记住上次观察的分库（回落只 warn 一次）
+const SCOPE_STORAGE_KEY = 'sedimem.scope';
+let storedScopeWarned = false, stickyDone = false; // 回落 warn 一次 + 首次粘性合成只跑一次
+function readStoredScope() { try { return localStorage.getItem(SCOPE_STORAGE_KEY) ?? ''; } catch { return ''; } }
+function writeStoredScope(scope) { try { localStorage.setItem(SCOPE_STORAGE_KEY, scope); } catch { /* 隐私模式写不进就算了 */ } }
+
+/** 首次加载的粘性合成（W4）：hash + localStorage + /api/scopes 服务端默认 → resolveScope；
+ *  结果与 hash 不一致时重写当前页 hash（保留 q=）；本地记忆非法/不存在 → 回落一次只 warn 一次。 */
+function reconcileScope({ scopes }) {
+  const list = Array.isArray(scopes) ? scopes : [];
+  const available = list.map((s) => s.scope).filter(Boolean);
+  const serverDefault = list.find((s) => s.current)?.scope ?? '';
+  const stored = readStoredScope();
+  const r = resolveScope({ hashScope: currentScope(), storedScope: stored, serverDefault, available });
+  if (stored && r.source !== 'stored' && !storedScopeWarned) {
+    console.warn(`sedimem: 本地记忆的分库 ${stored} 无效（${r.fallbackReason ?? 'unknown'}），已回落到 ${r.scope || '默认库'}`);
+    storedScopeWarned = true;
+  }
+  writeStoredScope(r.scope);
+  if (r.scope && r.scope !== currentScope()) {
+    const q = currentQuery(); // 搜索页：重写 hash 不能把搜索词弄丢
+    location.hash = hrefFor(currentRoute(), { ...(q ? { q } : {}), scope: r.scope });
+  }
+}
+
+/** 拉分库列表并渲染顶栏下拉；首次加载先做粘性合成。 */
 async function loadScopes() {
   let data;
   try {
@@ -530,6 +557,7 @@ async function loadScopes() {
   } catch {
     return; // 列表拿不到不影响主流程（下拉保持默认）
   }
+  if (!stickyDone) { stickyDone = true; reconcileScope(data); }
   renderScopePicker(data.scopes);
 }
 
@@ -555,10 +583,10 @@ function renderScopePicker(scopes) {
     sel.append(opt);
   }
   sel.addEventListener('change', () => {
-    const route = currentRoute();
-    location.hash = `#/${route}?scope=${encodeURIComponent(sel.value)}`;
-  });
-  box.append(sel);
+    // W4：切分库只重载当前页（保留路由），scope 进 hash + localStorage 双写实现粘性
+    writeStoredScope(sel.value);
+    location.hash = hrefFor(currentRoute(), { scope: sel.value });
+  });  box.append(sel);
 }
 
 /* ---------------- 启动 ---------------- */
@@ -566,7 +594,6 @@ function renderScopePicker(scopes) {
 bindTodayControls();
 bindSearchControls();
 watchGraphDetail();
-loadScopes();
-loadSummary();
-if (!location.hash) location.hash = '#/today';
+loadScopes(); loadSummary();
+if (!location.hash) location.hash = hrefFor('today');
 render();
