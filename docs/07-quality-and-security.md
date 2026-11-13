@@ -1,9 +1,9 @@
 # 质量与安全指标（门禁规范）
 
 > doc-kind: contract
-> doc-version: 0.6
+> doc-version: 1.0
 > verified-at: 2026-11-14
-> verified-against: versions/CURRENT（v0.6 / 0.6.2）
+> verified-against: versions/CURRENT（v1.0 / 1.0.0）
 
 本文件是**门禁的权威说明**：每一项指标怎么算、阈值多少、失败时怎么处理、谁能改阈值。
 脚本是实现，本文件是契约——两者不一致时以本文件为准，并提 issue 修脚本。
@@ -23,7 +23,7 @@ cd "$(cat versions/CURRENT)" && node eval/run.js   # 行为（I1–I40）
 
 | 项 | 指标 | 阈值 | 失败含义 |
 |---|---|---|---|
-| `test (22)` / `test (24)` | `node --test 'tests/**/*.test.js'` | **0 失败**（2026-11-13 实测 471 用例） | 行为回归，或测试自身有竞态（历史上 I8 就因此偶发红，已修根因） |
+| `test (22)` / `test (24)` | `node --test 'tests/**/*.test.js'` | **0 失败**（2026-11-13 实测 483 用例） | 行为回归，或测试自身有竞态（历史上 I8 就因此偶发红，已修根因） |
 | `eval (I1–I40)` | `eval/run.js` 退出码 | **全 PASS**（最近一次见 `eval/results/LATEST.json`） | 注入式行为契约破了：重复/冲突/过时/删除/投毒/配额/改写/并发/时区/遮蔽/裁决回路/中文改写等 40 条 |
 | `windows-smoke` | `node tools/windows-smoke.mjs`（`windows-latest`） | **全部 PASS** | Windows 真相层文件名 / 分库枚举 / `compact` / `nightly` 之一回归（见 §一.1） |
 | 关键指标 | `dupRatio` / `conflictRate` | `dupRatio = 0`；`conflictRate` 只允许由**真冲突用例**产生 | 冗余或冲突治理失效 |
@@ -156,7 +156,7 @@ Pages 构建是异步的（实测 2–5 分钟），脚本默认重试 20×15s�
 
 | 门禁 | 结果 |
 |---|---|
-| 单元 + 注入式 | **471 tests pass**（`node --test 'tests/**/*.test.js'`） |
+| 单元 + 注入式 | **483 tests pass**（`node --test 'tests/**/*.test.js'`） |
 | 评测 | **eval I1–I40 全 PASS**（`node eval/run.js`；最近一次结果归档于 `eval/results/LATEST.json`，2026-11-13T11:25Z，40/40 通过） |
 | 质量 | **11/11**（Q1–Q11，含 Q11 写侧粒度与会话库契约） |
 | 安全 | 9/9（含 S9：src/web 无写接口、只绑回环） |

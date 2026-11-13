@@ -873,9 +873,9 @@ v0.4 的取舍依据是竞品调研（`docs/research/competitive-dsh-plugins-202
 ## 附录 A · SQLite FTS5 后端（history）
 
 > doc-kind: history
-> doc-version: 0.6
+> doc-version: 1.0
 > verified-at: 2026-11-14
-> verified-against: versions/CURRENT（v0.6 / 0.6.2）
+> verified-against: versions/CURRENT（v1.0 / 1.0.0）
 
 > 源自原 原 docs/09（SQLite FTS5 索引，v0.2.1-A，issue #20）。**已由 v0.2 起代码实现，本附录不再更新**；
 > 实现见 `src/index/sqlite-index.js`、`src/index/create-index.js`，切换与排障见 `docs/06` §8。
@@ -898,9 +898,9 @@ v0.4 的取舍依据是竞品调研（`docs/research/competitive-dsh-plugins-202
 ## 附录 B · curate 自动裁决（history）
 
 > doc-kind: history
-> doc-version: 0.6
+> doc-version: 1.0
 > verified-at: 2026-11-14
-> verified-against: versions/CURRENT（v0.6 / 0.6.2）
+> verified-against: versions/CURRENT（v1.0 / 1.0.0）
 
 > 源自原 原 docs/10（curate 自动裁决，v0.2.1-B，issue #21）。**已由 v0.2 起代码实现，本附录不再更新**；
 > 实现见 `src/cli/curate.js` 与 `service.curateApply()`，用法见 `docs/06` §9–§10。
@@ -917,3 +917,17 @@ v0.4 的取舍依据是竞品调研（`docs/research/competitive-dsh-plugins-202
 - **与 MCP 一致**：`memory_dedupe_scan`/`memory_curate(apply)` 与 CLI 同一份 `service.dedupeScan()`/`curateApply()`
   数据与语义，pairs 不二次计算。单命令 `memo curate auto` 用确定性 `ruleJudge`（strong 比 hits，其余 keep_both，宁漏不误杀）。
 - **测试**：单测 `tests/unit/curate-prompt.test.js`、注入用例 I17（裁决收敛 + 二次 apply `applied 0`）。
+### §3.18 v1.0 W0/W1 契约（裁决 78–82）
+
+v1.0 是重构版本，**行为不改，只改结构与文档**。以下五条是 W0（文档治理）与 W1（依赖解耦）的硬约定。
+
+| # | 裁决 | 落地 |
+|---|---|---|
+| 78 | **文档跟版本走是门禁，不是纪律** | `tools/docs-drift-check.mjs` + Q14 六条 R1–R6；豁免走 `tools/docs-drift-allowlist.json`（`reason` + `until` 必填，过期直接红） |
+| 79 | **契约文档三分类**：contract / manual / history | 头部四行元信息（`doc-kind` / `doc-version` / `verified-at` / `verified-against`）；`doc-version` 见 `versions/CURRENT` 的 X.Y；history 类（如 docs/02 附录 A/B）只冻结不更新 |
+| 80 | **错误工厂单点**：`src/core/errors.js` | `invalid → E_INVALID_RECORD`、`notFound → E_NOT_FOUND`、`invalidArg → E_INVALID_ARG`；api 承接模块不得再 import `api/service.js`（service 只做 re-export 兼容） |
+| 81 | **分层边界是断言**：`tests/unit/arch-boundaries.test.js` | 五条：src 无环、web 不依赖 mcp/cli、mcp 不依赖 cli/storage、session 不依赖 mcp/api-service、api 拆分模块不（直接或间接）回依赖 service；解析器在 `tests/support/arch-graph.js`，其自身攻击面由 `tests/unit/arch-parser.test.js` 守着 |
+| 82 | **解析器必须抓三种引入形式**：`from '…'`、副作用 `import '…'`、动态 `import('…')` | 同时必须剔注释、抹非 spec 字符串、解析绝对路径与 package self-reference；任何一条缺失都算「断言纸糊」，按 BLOCKING 处理 |
+
+**为什么 session 生命周期不自己 new service**：`api/write-path → session/lifecycle → api/service` 会成环。`startSession()` 改为接收 `serviceFactory`（CLI / MCP 各自注入），`src/session/**` 对 `api/service.js` 零依赖——这条由裁决 81 的第四条守住。
+

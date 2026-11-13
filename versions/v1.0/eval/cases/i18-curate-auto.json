@@ -1,0 +1,11 @@
+{
+  "id": "I18",
+  "name": "i18-curate-auto",
+  "desc": "curateAuto 自动裁决闭环（docs/02 §3.13 裁决 50）：3 组中文同义改写（6 条，均为 strong 候选）→ curateAuto({dryRun}) 只出决策不落盘 → 正式跑 dedupeScan → ruleJudge（strong+同 slot，hits 打平走 createdAt）→ curateApply 非破坏落盘；断言 active 收敛 ≤3、真相层行数只增不减、重跑 applied=0（幂等）、dryRun 前后文件字节不变。证明「扫描 → 默认裁决器 → 落盘 → 幂等」整链无人值守可跑。",
+  "groups": [
+    ["部署脚本在 scripts/deploy.sh", "上线脚本位于 scripts/deploy.sh"],
+    ["缓存命中率低于 60% 要报警", "缓存命中率不足 60% 时触发告警"],
+    ["数据库连接池上限是 20", "数据库连接池最大 20 个连接"]
+  ],
+  "expected": { "maxActiveAfter": 3, "idempotentApplied": 0, "dryRunNoWrite": true }
+}

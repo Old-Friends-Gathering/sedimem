@@ -1,9 +1,9 @@
 # 08 · Web UI（记忆观察台）—— v0.6 现状
 
 > doc-kind: contract
-> doc-version: 0.6
+> doc-version: 1.0
 > verified-at: 2026-11-14
-> verified-against: versions/CURRENT（v0.6 / 0.6.2）
+> verified-against: versions/CURRENT（v1.0 / 1.0.0）
 
 > 本文件是 Web UI 的**设计契约**，描述 v0.6 的现状：页面规格、只读 HTTP 接口、图谱语义、
 > 安全边界、门禁增项。§1–§11 为 v0.2 定稿的核心契约（至今有效，实现与本文件不一致时以本文件为准，

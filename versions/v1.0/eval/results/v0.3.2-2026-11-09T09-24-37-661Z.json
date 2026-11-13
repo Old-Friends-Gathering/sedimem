@@ -1,0 +1,194 @@
+{
+  "version": "0.3.2",
+  "ts": "2026-11-09T09:24:37.662Z",
+  "cases": [
+    {
+      "id": "I1",
+      "pass": true,
+      "ms": 85,
+      "detail": "ok"
+    },
+    {
+      "id": "I2",
+      "pass": true,
+      "ms": 74,
+      "detail": "ok"
+    },
+    {
+      "id": "I3",
+      "pass": true,
+      "ms": 76,
+      "detail": "ok"
+    },
+    {
+      "id": "I4",
+      "pass": true,
+      "ms": 74,
+      "detail": "ok"
+    },
+    {
+      "id": "I5",
+      "pass": true,
+      "ms": 71,
+      "detail": "ok"
+    },
+    {
+      "id": "I6",
+      "pass": true,
+      "ms": 112,
+      "detail": "ok"
+    },
+    {
+      "id": "I7",
+      "pass": true,
+      "ms": 123,
+      "detail": "ok"
+    },
+    {
+      "id": "I8",
+      "pass": true,
+      "ms": 273,
+      "detail": "ok"
+    },
+    {
+      "id": "I9",
+      "pass": true,
+      "ms": 76,
+      "detail": "ok"
+    },
+    {
+      "id": "I10",
+      "pass": true,
+      "ms": 76,
+      "detail": "ok"
+    },
+    {
+      "id": "I11",
+      "pass": true,
+      "ms": 86,
+      "detail": "ok"
+    },
+    {
+      "id": "I12",
+      "pass": true,
+      "ms": 89,
+      "detail": "ok"
+    },
+    {
+      "id": "I13",
+      "pass": true,
+      "ms": 95,
+      "detail": "ok"
+    },
+    {
+      "id": "I14",
+      "pass": false,
+      "ms": 111,
+      "detail": "  AssertionError [ERR_ASSERTION]: 图谱节点 AGG:cache.alert 必须存在于 status:\"all\" 快照 |       at TestContext.<anonymous> (file://<repo>/versions/v0.3/tests/injection/i14-cross-section.test.js:105:14) |       at process.processTicksAndRejections (node:internal/process/task_queues:104:5) |       at async Test.run (node:internal/test_runner/test:1409:7) |       at async startSubtestAfterBootstrap (node:internal/test_runner/harness:387:3) { |     generatedMessage: false, | "
+    },
+    {
+      "id": "I15",
+      "pass": true,
+      "ms": 149,
+      "detail": "ok"
+    },
+    {
+      "id": "I16",
+      "pass": true,
+      "ms": 104,
+      "detail": "ok"
+    },
+    {
+      "id": "I17",
+      "pass": true,
+      "ms": 88,
+      "detail": "ok"
+    },
+    {
+      "id": "I18",
+      "pass": true,
+      "ms": 81,
+      "detail": "ok"
+    },
+    {
+      "id": "I19",
+      "pass": true,
+      "ms": 97,
+      "detail": "ok"
+    },
+    {
+      "id": "I20",
+      "pass": true,
+      "ms": 162,
+      "detail": "ok"
+    },
+    {
+      "id": "I21",
+      "pass": true,
+      "ms": 404,
+      "detail": "ok"
+    },
+    {
+      "id": "I22",
+      "pass": true,
+      "ms": 316,
+      "detail": "ok"
+    },
+    {
+      "id": "I23",
+      "pass": true,
+      "ms": 107,
+      "detail": "ok"
+    },
+    {
+      "id": "I24",
+      "pass": true,
+      "ms": 112,
+      "detail": "ok"
+    }
+  ],
+  "metrics": {
+    "active": 3,
+    "dupRatio": 0,
+    "conflictRate": 0,
+    "unitCost": 12.667,
+    "nearDupBlocked": 19,
+    "disputedAfterCurate": 0,
+    "dedupeClusters": 1,
+    "agentMerged": 5,
+    "agentLoopActive": 1,
+    "gate": {
+      "dupRatio": true,
+      "conflictRate": true,
+      "disputedCountI7": true,
+      "dedupeClustersFound": true,
+      "agentLoopConverged": true
+    }
+  },
+  "bench": {
+    "n1000": {
+      "write": {
+        "p50": 0.8880420000000413,
+        "p95": 1.3655829999997877,
+        "n": 1000
+      },
+      "search": {
+        "p50": 0.5562079999999696,
+        "p95": 0.8281660000002375,
+        "n": 200
+      }
+    },
+    "n5000": {
+      "write": {
+        "p50": 2.9257920000000013,
+        "p95": 5.443333999999595,
+        "n": 5000
+      },
+      "search": {
+        "p50": 1.7851670000018203,
+        "p95": 2.693250000000262,
+        "n": 200
+      }
+    }
+  }
+}
