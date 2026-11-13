@@ -100,3 +100,85 @@ test('主库 scope 写 fact 不受门禁影响', async () => {
     rmSync(memoHome, { recursive: true, force: true });
   }
 });
+
+// —— v0.6 审核写侧阻断项修复（B-01 / B2+S-01 / S-03）——
+import { normalizeTitle, validateRecord } from '../../src/core/record.js';
+
+test('B-01：value 超 write.valueHardMaxChars（默认 2000）→ E_INVALID_RECORD', () => {
+  const long = 'v'.repeat(2001);
+  assert.throws(
+    () => createRecord({ text: '短文本', value: long, kind: 'fact', source: { agent: 'test' } }),
+    (e) => e.code === 'E_INVALID_RECORD' && /valueHardMaxChars/.test(e.message),
+  );
+  // 恰好 2000 不报错
+  const ok = createRecord({ text: '短文本', value: 'v'.repeat(2000), kind: 'fact', source: { agent: 'test' } });
+  assert.equal(ok.value.length, 2000);
+  // validateRecord 同样卡 value 面（B-01 + arch ④：上限读 policy 且只能调小）
+  const vBad = validateRecord({ ...ok, value: 'v'.repeat(2001) });
+  assert.equal(vBad.ok, false);
+  assert.ok(vBad.errors.some((e) => e.includes('value: length')));
+  // policy 调小生效、调大被内建天花板 2000 压回
+  const tighter = { ...defaultPolicy, write: { ...(defaultPolicy.write ?? {}), valueHardMaxChars: 100 } };
+  assert.throws(
+    () => createRecord({ text: '短文本', value: 'v'.repeat(101), kind: 'fact', source: { agent: 'test' } }, { policy: tighter }),
+    (e) => e.code === 'E_INVALID_RECORD',
+  );
+  const looser = { ...defaultPolicy, write: { ...(defaultPolicy.write ?? {}), valueHardMaxChars: 99999 } };
+  assert.throws(
+    () => createRecord({ text: '短文本', value: 'v'.repeat(2001), kind: 'fact', source: { agent: 'test' } }, { policy: looser }),
+    (e) => e.code === 'E_INVALID_RECORD' && /2000/.test(e.message),
+  );
+});
+
+test('B2/S-01：supersede 继承旧记录 title 并透传 policy', async () => {
+  const memoHome = mkdtempSync(join(tmpdir(), 'memo-wc-sup-'));
+  const svc = await createMemoryService({ memoHome, scope: 'repo:wc-sup', clock });
+  try {
+    const w = await svc.write({ text: 'v1 灰度 10%', title: '灰度比例', kind: 'decision', source: { agent: 'test' } });
+    const r = await svc.supersede({ oldId: w.record.id, value: 'v2 灰度 50%', source: { agent: 'test' } });
+    assert.equal(r.record.title, '灰度比例', '未传 title 时应继承旧记录 title');
+    // 显式传 title 则以新值为准
+    const r2 = await svc.supersede({ oldId: r.record.id, value: 'v3 灰度 100%', title: '灰度全量', source: { agent: 'test' } });
+    assert.equal(r2.record.title, '灰度全量');
+  } finally {
+    await svc.close();
+    rmSync(memoHome, { recursive: true, force: true });
+  }
+});
+
+test('B2/S-01：supersede 超长 value 打 long-form 标记并返回 warnings', async () => {
+  const memoHome = mkdtempSync(join(tmpdir(), 'memo-wc-sup2-'));
+  const svc = await createMemoryService({ memoHome, scope: 'repo:wc-sup2', clock });
+  try {
+    const w = await svc.write({ text: 'v1 短', title: '主题', kind: 'fact', source: { agent: 'test' } });
+    const r = await svc.supersede({ oldId: w.record.id, value: 'x'.repeat(400), source: { agent: 'test' } });
+    assert.ok(r.record.tags.includes('long-form'), '超 valueRecommendChars 应打 long-form');
+    assert.ok(Array.isArray(r.warnings) && r.warnings.some((x) => x.code === 'E_RECORD_LONG'));
+    // 契约透传：自定义更严 policy 下 supersede 也被硬限拦截
+    const strict = JSON.parse(JSON.stringify(defaultPolicy));
+    strict.write = { ...(strict.write ?? {}), textHardMaxChars: 50 };
+    const memoHome2 = mkdtempSync(join(tmpdir(), 'memo-wc-sup3-'));
+    const svc2 = await createMemoryService({ memoHome: memoHome2, scope: 'repo:wc-sup3', clock, policy: strict });
+    try {
+      const w2 = await svc2.write({ text: 'seed', title: 't', kind: 'fact', source: { agent: 'test' } });
+      await assert.rejects(
+        () => svc2.supersede({ oldId: w2.record.id, value: 'y'.repeat(300), source: { agent: 'test' } }),
+        (e) => e.code === 'E_INVALID_RECORD' && /valueHardMaxChars|textHardMaxChars/.test(e.message),
+      );
+    } finally {
+      await svc2.close();
+      rmSync(memoHome2, { recursive: true, force: true });
+    }
+  } finally {
+    await svc.close();
+    rmSync(memoHome, { recursive: true, force: true });
+  }
+});
+
+test('S-03：title 中零宽/方向控制字符被剔除后再折空白', () => {
+  // 零宽空格 + 双向覆盖控制：视觉上与干净标题无法区分，必须剔除
+  assert.equal(normalizeTitle('灰\u200B度\u202E比例\uFEFF'), '灰度比例');
+  assert.equal(normalizeTitle('a\u2060\n\u200Db'), 'a b');
+  // 干净标题不受影响
+  assert.equal(normalizeTitle('正常标题'), '正常标题');
+});

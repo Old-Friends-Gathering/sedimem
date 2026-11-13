@@ -9,7 +9,7 @@ import { createMemoryService } from '../../src/api/service.js';
 import { createClock } from '../../src/core/clock.js';
 import {
   SESSION_PREFIX, createSessionId, isSessionScope, assertWritableKind,
-  startSession, sessionStatus, sweepSessions,
+  startSession, sessionStatus, sweepSessions, writeSessionRegistry,
 } from '../../src/session/lifecycle.js';
 
 // 固定时钟：2026-11-13T10:30 UTC
@@ -105,16 +105,11 @@ describe('session/lifecycle', () => {
       const old = await startSession({ service: svc, title: '老会话', clock: oldClock });
       // 一个刚开的 open session（不该命中）
       const freshSession = await startSession({ service: svc, title: '新会话', clock });
-      // closed 的老 session（不该命中）：手动把 meta 置 closed
+      // closed 的老 session（不该命中）：置 closed 走登记文件（B-02 后状态真相源；
+      // 记忆流里的 meta 普通写入已被 E_SESSION_META_PROTECTED 禁止）
       const closed = await startSession({ service: svc, title: '已关', clock: oldClock });
-      const csvc = await createMemoryService({ memoHome, scope: closed.scope, clock });
-      try {
-        const meta = { ...closed.meta, status: 'closed' };
-        await csvc.write({
-          text: 'closed', kind: 'state', subject: 'session', predicate: 'meta',
-          value: JSON.stringify(meta), source: { agent: 'test' },
-        });
-      } finally { await csvc.close(); }
+      writeSessionRegistry(memoHome, closed.scope,
+        { ...closed.meta, status: 'closed' });
 
       const result = sweepSessions({
         memoHome, olderThanMs: 14 * 86_400_000, clock,

@@ -16,6 +16,8 @@ export const AGENT_PATTERN = /^[a-z0-9][a-z0-9._-]{0,31}$/;
 // 写侧粒度契约（W1）：超硬上限不再静默截断，而是报错让调用方自己拆。
 // 默认值仅作 policy 缺 write 段时的兜底；真相单一来源是 config/policy.json 的 write 段。
 export const MAX_TEXT = 4000;
+// B-01（adv）：value 面此前无上限，结构化长文绕过 text 契约。默认硬上限 2000。
+export const MAX_VALUE = 2000;
 const DEFAULT_VALUE_RECOMMEND_CHARS = 300;
 const DEFAULT_TITLE_REQUIRED_KINDS = ['fact', 'pref', 'decision', 'gotcha'];
 // 标题长度（issue #61 / 裁决 59）：图谱与 brief 都要靠它，太长等于没标题。
@@ -26,10 +28,22 @@ function writePolicyOf(policy) {
   const w = (policy && typeof policy.write === 'object' && !Array.isArray(policy.write)) ? policy.write : {};
   return {
     textHardMaxChars: Number.isFinite(w.textHardMaxChars) && w.textHardMaxChars > 0 ? w.textHardMaxChars : MAX_TEXT,
+    // B-01：value 面硬上限（缺键兜底 2000）。arch 严重项 ④：上限只能调小不能调大，
+    // 所以实际生效值 = min(policy 值, 内建天花板 MAX_TEXT / MAX_VALUE)。
+    valueHardMaxChars: Number.isFinite(w.valueHardMaxChars) && w.valueHardMaxChars > 0 ? w.valueHardMaxChars : MAX_VALUE,
     valueRecommendChars: Number.isFinite(w.valueRecommendChars) && w.valueRecommendChars > 0 ? w.valueRecommendChars : DEFAULT_VALUE_RECOMMEND_CHARS,
     titleRequiredKinds: Array.isArray(w.titleRequiredKinds) ? w.titleRequiredKinds : DEFAULT_TITLE_REQUIRED_KINDS,
     // 是否**强制**（false = 只给 E_TITLE_MISSING 警告，v0.6 默认；v0.7 可翻成 true）
     titleEnforce: w.titleEnforce === true,
+  };
+}
+
+// arch 严重项 ④：写侧硬上限只能调小不能调大——policy 值超过内建天花板时按天花板算。
+export function effectiveWriteCaps(policy) {
+  const wp = writePolicyOf(policy);
+  return {
+    text: Math.min(wp.textHardMaxChars, MAX_TEXT),
+    value: Math.min(wp.valueHardMaxChars, MAX_VALUE),
   };
 }
 
@@ -40,7 +54,10 @@ function writePolicyOf(policy) {
  * @returns {string}
  */
 export function normalizeTitle(raw) {
-  const oneLine = String(raw ?? '').replace(/\s+/g, ' ').trim();
+  // S-03（adv）：先剔除零宽与方向控制字符——它们不占视觉宽度但会让不同标题在
+  // 图谱/brief 里看起来相同实则不同（spoof），且能藏 prompt 注入痕迹。先删再折空白。
+  const stripped = String(raw ?? '').replace(/[\u200B-\u200F\u202A-\u202E\u2060\uFEFF]/g, '');
+  const oneLine = stripped.replace(/\s+/g, ' ').trim();
   if (oneLine === '') return '';
   return oneLine.length > MAX_TITLE ? `${oneLine.slice(0, MAX_TITLE - 1)}…` : oneLine;
 }
@@ -61,12 +78,22 @@ export function createRecord(input, deps = {}) {
     throw invalid(`createRecord: input must be an object, got ${typeof input}`);
   }
   const text = String(input.text ?? '');
+  const value = String(input.value ?? text);
   const tags = Array.isArray(input.tags) ? [...input.tags] : [];
   // W1：超硬上限报错而非静默截断——截断会把不可恢复的信息丢进真相层，还让调用方误以为写全了。
-  if (text.length > wp.textHardMaxChars) {
+  // arch 严重项 ④：生效上限 = min(policy 值, 内建天花板)，只能调小不能调大。
+  const caps = effectiveWriteCaps(deps?.policy ?? defaultPolicy);
+  if (text.length > caps.text) {
     throw invalid(
-      `createRecord: text length ${text.length} exceeds write.textHardMaxChars=${wp.textHardMaxChars}`
-      + `（请拆成多条记录再写，可先截取前 ${wp.textHardMaxChars} 字定位主题：text.slice(0, ${wp.textHardMaxChars})）`,
+      `createRecord: text length ${text.length} exceeds write.textHardMaxChars=${caps.text}`
+      + `（请拆成多条记录再写，可先截取前 ${caps.text} 字定位主题：text.slice(0, ${caps.text})）`,
+    );
+  }
+  // B-01（adv）：value 面同样硬限——此前结构化长文全从 value 绕过 text 契约。
+  if (value.length > caps.value) {
+    throw invalid(
+      `createRecord: value length ${value.length} exceeds write.valueHardMaxChars=${caps.value}`
+      + `（value 应是可扫读的结构化值，请改写更短的 value 或拆成多条记录）`,
     );
   }
   const finalText = text;
@@ -98,7 +125,7 @@ export function createRecord(input, deps = {}) {
     kind: input.kind ?? 'fact',
     subject: String(input.subject ?? 'text'),
     predicate: String(input.predicate ?? 'text'),
-    value: String(input.value ?? finalText),
+    value,
     text: finalText,
     validFrom: input.validFrom ?? clock.now(),
     validTo: input.validTo ?? null,
@@ -108,7 +135,7 @@ export function createRecord(input, deps = {}) {
     supersedes: input.supersedes ?? null,
     confidence: input.confidence ?? 0.8,
     source,
-    contentHash: input.contentHash ?? contentHash({ text: finalText, subject: input.subject, predicate: input.predicate, value: input.value ?? finalText }),
+    contentHash: input.contentHash ?? contentHash({ text: finalText, subject: input.subject, predicate: input.predicate, value }),
     hits: input.hits ?? 0,
     privacy: input.privacy ?? 'private',
     // L3 溯源（issue #52 / 裁决 54）：只有「派生于其它记录」的记录才带；
@@ -128,9 +155,11 @@ export function createRecord(input, deps = {}) {
  * 逐条校验不变式（docs/02 §2）。返回 {ok, errors[]}，不抛错。
  * @param {MemoryRecord} r
  * @param {Iterable<string>} [kinds] 合法 kind 集合，缺省回落 defaultPolicy.kinds
+ * @param {object} [policy] 写侧硬上限来源，缺省回落 defaultPolicy（arch 严重项 ④：读 policy 且只能调小）
  */
-export function validateRecord(r, kinds = kindNames(defaultPolicy)) {
+export function validateRecord(r, kinds = kindNames(defaultPolicy), policy = defaultPolicy) {
   const kindList = [...kinds];
+  const caps = effectiveWriteCaps(policy);
   const errors = [];
   if (!r || typeof r !== 'object') return { ok: false, errors: ['record: not an object'] };
   if (!isId(r.id)) errors.push(`id: invalid ULID ${JSON.stringify(r.id)}`);
@@ -149,7 +178,12 @@ export function validateRecord(r, kinds = kindNames(defaultPolicy)) {
     errors.push(`confidence: must be in [0,1], got ${r.confidence}`);
   }
   if (typeof r.text !== 'string' || r.text.length === 0) errors.push('text: must be non-empty');
-  if (r.text.length > MAX_TEXT) errors.push(`text: length ${r.text.length} exceeds ${MAX_TEXT}`);
+  // arch 严重项 ④：硬上限从 policy 读（生效值 = min(policy, 内建天花板)），不再硬编码 4000。
+  if (r.text.length > caps.text) errors.push(`text: length ${r.text.length} exceeds ${caps.text}`);
+  // B-01（adv）：value 面同样硬校验，堵住「结构化长文绕过 text 契约」的旁路。
+  if (typeof r.value === 'string' && r.value.length > caps.value) {
+    errors.push(`value: length ${r.value.length} exceeds ${caps.value}`);
+  }
   if (!kindList.includes(r.kind)) errors.push(`kind: must be one of ${kindList.join('|')}, got ${r.kind}`);
   if (!STATUSES.has(r.status)) errors.push(`status: must be one of ${[...STATUSES].join('|')}, got ${r.status}`);
   if (typeof r.hits !== 'number' || r.hits < 0) errors.push(`hits: must be >= 0, got ${r.hits}`);

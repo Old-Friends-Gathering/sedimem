@@ -62,7 +62,8 @@ function renderLine(r) {
  * @param {number} maxChars 预算（最终 text.length 上限）
  * @returns {string} 围栏包裹后的完整注入文本
  */
-function neutraliseFence(line) {
+// 导出供 render/brief.js 复用（S-04：brief 每行同规则转义围栏，规则单一来源）。
+export function neutraliseFence(line) {
   // 对抗审核 B2：记忆正文里的 `</memory-context>` 能提前闭合围栏、把后面的行顶到围栏外。
   // 处理方式是**转义尖括号**（不是删除——删掉会让文本语义变化，转义后仍可读）。
   return line.replace(/<\/memory-context>/gi, '&lt;/memory-context&gt;').replace(/<memory-context>/gi, '&lt;memory-context&gt;');

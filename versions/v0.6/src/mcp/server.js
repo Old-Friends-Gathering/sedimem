@@ -17,7 +17,10 @@ import {
   writeScopeOverride,
 } from './scope-state.js';
 // 会话工具（v0.6 W2）：MCP 侧直接复用 session 数据层与 CLI 的晋升白名单，入口层只做参数校验
-import { isSessionScope, startSession, sessionStatus, sweepSessions } from '../session/lifecycle.js';
+import {
+  isSessionScope, startSession, sessionStatus, sweepSessions,
+  resolveParentScope, updateSessionRegistry,
+} from '../session/lifecycle.js';
 import { normalizeCheckpoint, parseDshSummary, writeCheckpoint } from '../session/checkpoint.js';
 import { renderHandoff, writeHandoff } from '../session/handoff.js';
 import { PROMOTE_KINDS } from '../cli/session.js';
@@ -540,10 +543,11 @@ async function openSessionService(scope, state) {
   return { svc: await createMemoryService({ memoHome: MEMO_HOME, scope }), owned: true };
 }
 
-/** close 的晋升目标：meta.parentScope（v0.6 close 契约，startSession 写入时生效）>
- *  start 时记住的主库 > 当前 scope（非 session 时）> 按 cwd/env 重新解析 */
+/** close 的晋升目标：登记文件 sessions/<id>.json（B-02 后的真相源）> meta 回落（仅非 session 型
+ *  且匹配 SCOPE_PATTERN）> start 时记住的主库 > 当前 scope（非 session 时）> 按 cwd/env 重新解析 */
 async function mainScopeFor(state, sessionScope, meta) {
-  if (meta && typeof meta.parentScope === 'string' && meta.parentScope !== '') return meta.parentScope;
+  const { parentScope } = resolveParentScope(MEMO_HOME, sessionScope, meta);
+  if (parentScope) return parentScope;
   if (sessionOrigins.has(sessionScope)) return sessionOrigins.get(sessionScope);
   if (!isSessionScope(state.scope)) return state.scope;
   const { resolveScope } = await import('../core/scope.js');
@@ -571,6 +575,12 @@ async function closeSessionTool(a, state) {
     }
 
     const mainScope = await mainScopeFor(state, scope, status.meta);
+    // 对抗 B1/B-02：晋升目标为空或仍是 session 型（session-in-session）→ 拒绝，与 CLI 对齐
+    if (!mainScope || isSessionScope(mainScope)) {
+      throw ecode('E_INVALID_ARG',
+        `session ${sessionId} 的晋升目标无效（${JSON.stringify(mainScope)}）；` +
+        `请用绑定主库（repo:/dir:）的服务执行 session start 后重试`);
+    }
     const main = await getService(mainScope); // 晋升目标主库（真实 service，可 write）
     const records = [...svc._records.values()].filter((r) => r.status === 'active');
 
@@ -635,7 +645,10 @@ async function closeSessionTool(a, state) {
       predicate: 'meta',
       value: JSON.stringify(closedMeta),
       source: { agent: 'cli' },
+      _sessionInternal: true, // lifecycle 内部写 meta 旁路（E_SESSION_META_PROTECTED 不拦）
     });
+    // 登记文件同步置 closed（状态真相源；B-03：此后该 scope 写入被拒）
+    updateSessionRegistry(MEMO_HOME, scope, { status: 'closed', closedAt: closedMeta.closedAt });
     let forgotten = 0;
     for (const r of svc._records.values()) {
       if (r.status !== 'active') continue;

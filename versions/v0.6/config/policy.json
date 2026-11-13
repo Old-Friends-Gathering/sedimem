@@ -124,6 +124,7 @@
     ],
     "valueRecommendChars": 300,
     "textHardMaxChars": 4000,
+    "valueHardMaxChars": 2000,
     "longFormTag": "long-form",
     "titleEnforce": false
   },

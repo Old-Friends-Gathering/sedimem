@@ -10,8 +10,8 @@ import { defaultPolicy as POLICY } from '../config/policy.js';
 // 错误工厂从 service.js 反向引用（错误文本被测试断言，必须单一来源）。
 import { invalid, notFound } from './service.js';
 // session 库写入门禁（v0.6 修复：之前 assertWritableKind 写了但没人调用，fact 仍能落临时库）。
-// lifecycle.js 只静态依赖 core/config，不依赖 api/*，此处静态 import 无循环。
-import { assertWritableKind } from '../session/lifecycle.js';
+// lifecycle.js 只静态依赖 core/config/mcp-常量，不依赖 api/*，此处静态 import 无循环。
+import { assertWritableKind, assertSessionOpen } from '../session/lifecycle.js';
 
 
 /**
@@ -58,8 +58,19 @@ export async function writeRecord(svc, input) {
   if (!input || typeof input.text !== 'string' || input.text.length === 0) {
     throw invalid('write: input.text (non-empty string) is required');
   }
-  // 写入门禁：session 临时库禁 fact（kind 缺省与 createRecord/recordWarnings 一致按 'fact'）
-  assertWritableKind(svc.scope, input.kind ?? 'fact');
+  // 内部旁路标记（session lifecycle 写 meta 用，对抗 B-02）：剥离后不再进入记录本体；
+  // 普通调用方传了也只当普通写（meta 门禁不放行）
+  const internal = input._sessionInternal === true;
+  if (internal) {
+    input = { ...input };
+    delete input._sessionInternal;
+  }
+  // 写入门禁：session 临时库禁 fact（kind 缺省与 createRecord/recordWarnings 一致按 'fact'）；
+  // 且禁止普通写入 session meta（E_SESSION_META_PROTECTED）
+  assertWritableKind(svc.scope, input.kind ?? 'fact', { internal, input });
+  // B-03：session 状态为 closed 时拒绝写入（状态以 sessions/<id>.json 为准，缺失按 open；
+  // 非 session scope 该检查为 no-op）
+  assertSessionOpen(svc.memoHome, svc.scope);
   // 投毒防线：可疑输入打标（I5）——写入成功但不进 brief。
   // 检测来自 hygiene/suspicious.js（归一化 + 启发式），pattern 单一来源 POLICY.suspiciousPatterns；
   // 启发式开关 POLICY.suspiciousHeuristics（缺省全 true）。
@@ -111,7 +122,7 @@ export async function writeRecord(svc, input) {
       const gate = decideWrite(candidate, candidates, { clock: svc.clock });
       if (!gate || !gate.action) throw invalid('write: decideWrite returned no action');
       const record = gate.record ?? candidate;
-      const vv = validateRecord(record);
+      const vv = validateRecord(record, undefined, svc.policy ?? POLICY);
       if (!vv.ok) throw invalid(`write: gate produced invalid record: ${vv.errors.join('; ')}`);
 
       switch (gate.action) {
@@ -155,7 +166,7 @@ export async function writeRecord(svc, input) {
 }
 
 /** 人工 supersede：新记录 + 旧记录追加 superseded 版本 */
-export async function supersedeRecord(svc, { oldId, value, text, source, reason }) {
+export async function supersedeRecord(svc, { oldId, value, text, title, source, reason }) {
   svc._ensureOpen();
   const old = svc._records.get(oldId);
   if (!old) throw notFound(`supersede: record ${oldId} not found`);
@@ -175,9 +186,19 @@ export async function supersedeRecord(svc, { oldId, value, text, source, reason 
   }
   const supVerdict = detectSuspicious(body, POLICY.suspiciousPatterns, { heuristics: POLICY.suspiciousHeuristics });
   if (supVerdict.suspicious && !supTags.includes('suspicious')) supTags.push('suspicious');
+  // B2/S-01（arch + adv）：supersede 是独立写路径，必须与 writeRecord 同契约——
+  // 跑 W1 粒度告警并按结果打 long-form 标记，不能静默落超长记录。
+  const supWarnings = recordWarnings(
+    { text: body, value: redacted.input.value, kind: old.kind, title: title ?? old.title },
+    svc.policy ?? POLICY,
+  );
+  if (supWarnings.length > 0 && !supTags.includes('long-form')) supTags.push('long-form');
   const record = createRecord({
     text: body,
     value: redacted.input.value,
+    // S-01：新记录没传 title 时继承旧记录 title——supersede 是「改值」不是「换主题」，
+    // 丢 title 会让图谱/brief 上这条线索断头。
+    title: title ?? old.title,
     subject: old.subject,
     predicate: old.predicate,
     kind: old.kind,
@@ -187,11 +208,13 @@ export async function supersedeRecord(svc, { oldId, value, text, source, reason 
     tags: supTags,
     privacy: old.privacy,
     supersedes: oldId,
-  }, { clock: svc.clock });
+    // B2：把 svc 的 clock 与 policy 传进 createRecord，否则自定义 policy
+    // （textHardMaxChars / titleEnforce 等）在 supersede 路径整体失效。
+  }, { clock: svc.clock, policy: svc.policy ?? POLICY });
   await svc._commit(record, 'write', { action: 'supersede', reason: reason ?? 'manual' });
   const closed = withPatch(old, { status: 'superseded', validTo: svc._nowIso() });
   await svc._commit(closed, 'supersede', { reason: reason ?? 'manual', by: record.id });
-  return { record };
+  return { record, warnings: supWarnings };
 }
 
 /** 删除：只写墓碑；mode='purge' 额外打 tags:['purge']，物理删由 service.compact 负责（裁决 51） */

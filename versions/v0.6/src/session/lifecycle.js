@@ -4,10 +4,12 @@
 // 本模块只做数据层，不自动触发（不做自动建库/自动压缩/自动关闭）。
 
 import { randomBytes } from 'node:crypto';
-import { readdirSync, readFileSync, existsSync } from 'node:fs';
+import { readdirSync, readFileSync, existsSync, mkdirSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { systemClock } from '../core/clock.js';
 import { itemsFileName, scopeFromItemsFileName } from '../config/paths.js';
+// 只取形状常量，scope-state.js 无反向依赖（无循环）
+import { SCOPE_PATTERN } from '../mcp/scope-state.js';
 
 /** session scope 前缀 */
 export const SESSION_PREFIX = 'session:';
@@ -46,16 +48,97 @@ export function isSessionScope(scope) {
 }
 
 /**
- * 写入门禁：session scope 下禁 fact（E_SCRATCH_KIND_FORBIDDEN）。
- * 其余 kind 不拦——close 时按白名单 {decision, gotcha} 晋升，白名单外的自然随库丢弃。
+ * 写入门禁：session scope 下禁 fact（E_SCRATCH_KIND_FORBIDDEN）；
+ * 且禁止普通写入 subject=session & predicate=meta（E_SESSION_META_PROTECTED，对抗审核 B-02：
+ * 伪造 meta 可把 close 晋升重定向到任意库——meta 真相移到记忆流之外后，
+ * 记忆流里的 meta 只允许 lifecycle 内部写，走 opts.internal 旁路）。
  * @param {string} scope
  * @param {string} kind
+ * @param {{internal?: boolean, input?: object}} [opts] internal=true 为 lifecycle 自身写 meta 的旁路
  */
-export function assertWritableKind(scope, kind) {
-  if (isSessionScope(scope) && SCRATCH_FORBIDDEN_KINDS.has(kind)) {
+export function assertWritableKind(scope, kind, opts = {}) {
+  if (!isSessionScope(scope)) return;
+  if (!opts.internal && opts.input
+    && opts.input.subject === 'session' && opts.input.predicate === 'meta') {
+    throw err('E_SESSION_META_PROTECTED',
+      `session meta（subject=session & predicate=meta）是生命周期内部记录，普通写入被禁止` +
+      `（防伪造 meta 重定向晋升目标）；请通过 session start / close 管理。`);
+  }
+  if (SCRATCH_FORBIDDEN_KINDS.has(kind)) {
     throw err('E_SCRATCH_KIND_FORBIDDEN',
       `session scope (${scope}) 下禁止写 kind=${kind}：临时库里的 fact 不会被晋升，` +
       `close 时只保留 decision/gotcha。要写长期事实请写主库。`);
+  }
+}
+
+// ===== 会话登记文件（真相在记忆流之外，对抗 B-02 / B-03）=====
+// startSession 写 meta 的同时写 <memoHome>/sessions/<id>.json；close / status 以该文件为准，
+// 文件缺失才回落 meta（回落时只接受非 session 型且匹配 SCOPE_PATTERN 的 parentScope）。
+// meta 仍在记忆流里保留（brief/图谱可见 session 骨架），但不再是晋升目标的真相源。
+
+/** 登记文件路径：<memoHome>/sessions/<sessionId>.json */
+export function sessionRegistryPath(memoHome, sessionId) {
+  return path.join(memoHome, 'sessions', `${sessionId}.json`);
+}
+
+/** 读登记文件；scope 非 session / 文件缺失 / 损坏 → null（缺失按 open 处理） */
+export function readSessionRegistry(memoHome, scope) {
+  if (!isSessionScope(scope)) return null;
+  try {
+    const parsed = JSON.parse(
+      readFileSync(sessionRegistryPath(memoHome, scope.slice(SESSION_PREFIX.length)), 'utf8'),
+    );
+    return parsed && typeof parsed === 'object' ? parsed : null;
+  } catch {
+    return null;
+  }
+}
+
+/** 写/覆盖登记文件（startSession 与 close 用） */
+export function writeSessionRegistry(memoHome, scope, data) {
+  if (!isSessionScope(scope)) {
+    throw err('E_INVALID_ARG', `writeSessionRegistry: scope 必须是 ${SESSION_PREFIX}<id>，收到 ${JSON.stringify(scope)}`);
+  }
+  const file = sessionRegistryPath(memoHome, scope.slice(SESSION_PREFIX.length));
+  mkdirSync(path.dirname(file), { recursive: true });
+  writeFileSync(file, JSON.stringify(data, null, 2) + '\n');
+  return file;
+}
+
+/** 增量更新登记文件（如 close 置 status='closed'）；无登记文件 → 返回 null 不新建 */
+export function updateSessionRegistry(memoHome, scope, patch) {
+  const cur = readSessionRegistry(memoHome, scope);
+  if (!cur) return null;
+  return writeSessionRegistry(memoHome, scope, { ...cur, ...patch });
+}
+
+/**
+ * 解析 close 的晋升目标（parentScope）：登记文件优先；文件缺失回落 meta，
+ * 回落时只接受非 session 型且匹配 SCOPE_PATTERN 的 parentScope（对抗 B-02 重定向）。
+ * @returns {{parentScope: string|null, source: 'registry'|'meta-fallback'|'none'}}
+ */
+export function resolveParentScope(memoHome, scope, meta) {
+  const reg = readSessionRegistry(memoHome, scope);
+  if (reg && typeof reg.parentScope === 'string' && SCOPE_PATTERN.test(reg.parentScope)) {
+    return { parentScope: reg.parentScope, source: 'registry' };
+  }
+  const ps = meta?.parentScope;
+  if (typeof ps === 'string' && !isSessionScope(ps) && SCOPE_PATTERN.test(ps)) {
+    return { parentScope: ps, source: 'meta-fallback' };
+  }
+  return { parentScope: null, source: 'none' };
+}
+
+/**
+ * 写路径门禁（B-03）：session 状态为 closed 时拒绝写入（E_SESSION_CLOSED）。
+ * 状态以 sessions/<id>.json 为准，缺失则按 open（兼容修复前创建的 session）。
+ */
+export function assertSessionOpen(memoHome, scope) {
+  const reg = readSessionRegistry(memoHome, scope);
+  if (reg && reg.status === 'closed') {
+    throw err('E_SESSION_CLOSED',
+      `session ${scope} 已关闭，不再接受写入；被 close 后写入的记录既不会晋升也不会被清理。` +
+      `请重新 session start 开新会话临时库。`);
   }
 }
 
@@ -101,12 +184,17 @@ export async function startSession({ service, title, repo, clock = systemClock, 
     throw err('E_INVALID_ARG',
       `startSession: sessionScope 必须形如 ${SESSION_PREFIX}<id>，收到 ${JSON.stringify(sessionScope)}`);
   }
-  // 显式 sessionScope 优先；否则：已绑定 session scope 沿用（测试/二次进入），再否则生成新 id
-  const reuse = !sessionScope && isSessionScope(service.scope);
-  const id = sessionScope ? sessionScope.slice(SESSION_PREFIX.length)
-    : reuse ? service.scope.slice(SESSION_PREFIX.length) : createSessionId(clock);
+  // 对抗审核 B1（session-in-session 静默丢数据）：入口 service 绑定的是 session scope 时，
+  // parentScope 会指向 session 自身，close 晋升写回自身后被 tombstone 循环当场丢弃。
+  // 直接拒绝——要求用绑定主库（repo:/dir:）的服务执行 session start。
+  if (isSessionScope(service.scope)) {
+    throw err('E_INVALID_ARG',
+      `startSession: 入口 service 绑定的是 session scope (${service.scope})，不能作为晋升目标；` +
+      `请用绑定主库（repo:/dir:）的服务执行 session start`);
+  }
+  const id = sessionScope ? sessionScope.slice(SESSION_PREFIX.length) : createSessionId(clock);
   const scope = SESSION_PREFIX + id;
-  const svc = reuse ? service : await openSessionService(service.memoHome, scope, clock);
+  const svc = await openSessionService(service.memoHome, scope, clock);
   // 晋升目标：调用方保证 service 绑主库；记录进 meta，close 时反查
   const parentScope = service.scope;
   const startedAt = clock.now();
@@ -127,9 +215,20 @@ export async function startSession({ service, title, repo, clock = systemClock, 
       predicate: 'meta',
       value: JSON.stringify(meta),
       source: { agent: 'cli' },
+      _sessionInternal: true, // 内部旁路：meta 只允许 lifecycle 写（E_SESSION_META_PROTECTED）
+    });
+    // 真相源（B-02）：parentScope/status 写进记忆流之外的登记文件，close 以此为准
+    writeSessionRegistry(service.memoHome, scope, {
+      id,
+      parentScope,
+      title: title ?? '',
+      startedAt,
+      cwd: process.cwd(),
+      repo: repo ?? null,
+      status: 'open',
     });
   } finally {
-    if (!reuse) await svc.close();
+    await svc.close();
   }
   return { scope, meta, parentScope };
 }
@@ -148,6 +247,10 @@ export function sessionStatus({ service }) {
   }
   const records = [...service._records.values()];
   const meta = readMetaFrom(records);
+  // 状态以登记文件为准（B-03：别的进程 close 过，这里不能仍显示 open）；缺失回落 meta
+  const registry = readSessionRegistry(service.memoHome, service.scope);
+  // 计数口径保持「非 tombstoned」（含被 supersede 的历史版本，即 checkpoint 次数）；
+  // brief 渲染面只有 1 条 active（writeCheckpoint 保证，arch S1 修复）
   const checkpoints = records.filter(
     (r) => r.subject === 'session' && r.predicate === 'checkpoint' && r.status !== 'tombstoned',
   );
@@ -166,7 +269,7 @@ export function sessionStatus({ service }) {
     checkpoints: checkpoints.length,
     facts: facts.length,
     lastCheckpointAt,
-    status: meta ? meta.status : 'unknown',
+    status: registry?.status ?? (meta ? meta.status : 'unknown'),
   };
 }
 
@@ -192,6 +295,21 @@ export function sweepSessions({ service, memoHome, olderThanMs, clock = systemCl
     const scope = scopeFromItemsFileName(name);
     if (!scope || !isSessionScope(scope)) continue;
     scanned++;
+    // 登记文件优先（B-02/B-03 后的真相源）；缺失才回落记忆流里的 meta
+    const registry = readSessionRegistry(home, scope);
+    if (registry) {
+      if (registry.status !== 'open' || !registry.startedAt) continue;
+      const ageMs = nowMs - Date.parse(registry.startedAt);
+      if (!Number.isFinite(ageMs) || ageMs < olderThanMs) continue;
+      candidates.push({
+        scope,
+        sessionId: registry.id ?? scope.slice(SESSION_PREFIX.length),
+        title: registry.title ?? '',
+        startedAt: registry.startedAt,
+        ageMs,
+      });
+      continue;
+    }
     // 逐行找最后一个 meta 版本（同 id 最后一行胜出，但 meta 可能被 supersede 出新 id；
     // 取 createdAt 最大的那条）
     let last = null;

@@ -3,9 +3,9 @@
 // 我们只提供模板校验、DSH 摘要解析和追加落盘三个动作。
 
 import { systemClock } from '../core/clock.js';
-import { createRecord } from '../core/record.js';
+import { createRecord, withPatch } from '../core/record.js';
 import { withLock } from '../storage/lock.js';
-import { assertWritableKind, isSessionScope } from './lifecycle.js';
+import { assertWritableKind, assertSessionOpen, isSessionScope } from './lifecycle.js';
 
 /** 8 段 checkpoint 的段名（冻结清单，顺序即渲染顺序） */
 export const CHECKPOINT_SECTIONS = [
@@ -15,6 +15,10 @@ export const CHECKPOINT_SECTIONS = [
 
 /** 数组型段：其余（intent/currentState/criticalContext）是字符串 */
 export const ARRAY_SECTIONS = new Set(['concepts', 'files', 'errorsAndFixes', 'pendingJobs', 'nextSteps']);
+
+/** 体积上限（对抗审核 B-01 checkpoint 面）：每段 ≤2000 字、8 段合计 ≤8000 字 */
+export const CHECKPOINT_SECTION_MAX_CHARS = 2000;
+export const CHECKPOINT_TOTAL_MAX_CHARS = 8000;
 
 function err(code, msg) {
   const e = new Error(msg);
@@ -58,6 +62,24 @@ export function normalizeCheckpoint(input) {
   }
   if (errors.length > 0) {
     throw err('E_INVALID_ARG', `normalizeCheckpoint: 段类型错误 — ${errors.join('; ')}`);
+  }
+  // 体积上限（对抗审核 B-01 checkpoint 面）：checkpoint 走 _commit 不经 write 门禁，
+  // 超长 value 会绕过粒度契约无限落盘；这里在入口硬拦，报错指明是哪一段超了。
+  const overs = [];
+  let total = 0;
+  for (const section of CHECKPOINT_SECTIONS) {
+    const len = ARRAY_SECTIONS.has(section) ? out[section].join('').length : out[section].length;
+    total += len;
+    if (len > CHECKPOINT_SECTION_MAX_CHARS) {
+      overs.push(`${section}: ${len} 字 > ${CHECKPOINT_SECTION_MAX_CHARS}`);
+    }
+  }
+  if (overs.length > 0) {
+    throw err('E_INVALID_ARG', `normalizeCheckpoint: 段超限 — ${overs.join('; ')}`);
+  }
+  if (total > CHECKPOINT_TOTAL_MAX_CHARS) {
+    throw err('E_INVALID_ARG',
+      `normalizeCheckpoint: 8 段合计 ${total} 字 > ${CHECKPOINT_TOTAL_MAX_CHARS}，请精简后再写`);
   }
   return out;
 }
@@ -118,6 +140,8 @@ export async function writeCheckpoint({ service, scope, checkpoint, compactionId
   }
   const normalized = normalizeCheckpoint(checkpoint);
   assertWritableKind(targetScope, 'state'); // 恒过，仅保形式一致（checkpoint 是 state）
+  // B-03：closed 的 session 不再接受 checkpoint（否则永不晋升也永不清理）
+  assertSessionOpen(service.memoHome, targetScope);
   const recordedAt = clock.now();
   const value = JSON.stringify({
     ...normalized,
@@ -136,14 +160,30 @@ export async function writeCheckpoint({ service, scope, checkpoint, compactionId
     scope: service.scope,
     source: { agent: 'cli' },
   }, { clock: service.clock });
+  let supersededCount = 0;
   await withLock(service.memoHome, async () => {
     service._inScopeLock = true;
     try {
       await service._refreshIncremental();
+      // arch 严重项 S1（checkpoint 不关旧版本）：追加新 checkpoint 前，把既有 active 的
+      // checkpoint 记录 supersede（status='superseded' + validTo=新记录.validFrom），
+      // 保证同 slot 只有 1 条 active，brief 不被 N 行重复 checkpoint 淹没。
+      const prevActive = [...service._records.values()].filter(
+        (r) => r.subject === 'session' && r.predicate === 'checkpoint' && r.status === 'active',
+      );
       await service._commit(record, 'write', { action: 'checkpoint', reason: 'session-checkpoint-append' });
+      for (const prev of prevActive) {
+        const closedPrev = withPatch(prev, {
+          status: 'superseded',
+          validTo: prev.validTo ?? record.validFrom ?? service._nowIso(),
+        });
+        await service._commit(closedPrev, 'supersede',
+          { reason: 'session-checkpoint-superseded', by: record.id });
+      }
+      supersededCount = prevActive.length;
     } finally {
       service._inScopeLock = false;
     }
   });
-  return { action: 'created', record, checkpoint: normalized };
+  return { action: 'created', record, checkpoint: normalized, supersededCount };
 }

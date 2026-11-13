@@ -8,6 +8,7 @@ import { systemClock } from '../core/clock.js';
 import {
   SESSION_PREFIX, createSessionId, isSessionScope,
   startSession, sessionStatus, sweepSessions,
+  resolveParentScope, updateSessionRegistry,
 } from '../session/lifecycle.js';
 import { normalizeCheckpoint, parseDshSummary, writeCheckpoint } from '../session/checkpoint.js';
 import { renderHandoff, writeHandoff } from '../session/handoff.js';
@@ -191,10 +192,12 @@ export async function sessionCli(args, { service, memoHome, clock = systemClock,
           return emit(`session ${sessionId} 已关闭（幂等，无动作）\n`,
             { scope, alreadyClosed: true, status });
         }
-        const parentScope = status.meta?.parentScope;
-        if (!parentScope || isSessionScope(parentScope)) {
+        // 晋升目标以登记文件（sessions/<id>.json，start 时写、记忆流之外）为准，缺失才回落 meta
+        //（回落时只接受非 session 型且匹配 SCOPE_PATTERN 的 parentScope，对抗 B-02 重定向）
+        const { parentScope, source } = resolveParentScope(memoHome, scope, status.meta);
+        if (!parentScope) {
           throw err('E_INVALID_ARG',
-            `session ${sessionId} 的 meta 缺少有效的 parentScope（主库 scope），无法安全晋升；` +
+            `session ${sessionId} 缺少有效的 parentScope（主库 scope，来源=${source}），无法安全晋升；` +
               `请用 start 重开 session 或手动迁移记录。`);
         }
         main = service.scope === parentScope ? service
@@ -257,7 +260,7 @@ export async function sessionCli(args, { service, memoHome, clock = systemClock,
         const markdown = renderHandoff({ sessionId, meta, checkpoint, promoted, pending: [] });
         const handoffPath = writeHandoff({ memoHome, sessionId, markdown });
 
-        // ④ meta 置 closed（同 slot 新值 → write 门禁走 supersede），其余记录 tombstone
+        // ④ meta 置 closed（同 slot 新值 → write 门禁走 supersede；内部旁路写 meta），其余记录 tombstone
         const closedMeta = { ...meta, status: 'closed', closedAt: clock.now() };
         await svc.write({
           text: `session ${sessionId} 关闭`,
@@ -266,7 +269,10 @@ export async function sessionCli(args, { service, memoHome, clock = systemClock,
           predicate: 'meta',
           value: JSON.stringify(closedMeta),
           source: { agent: 'cli' },
+          _sessionInternal: true, // lifecycle 内部写 meta 旁路（E_SESSION_META_PROTECTED 不拦）
         });
+        // 登记文件同步置 closed（close/status 的状态真相源；B-03：此后该 scope 写入被拒）
+        updateSessionRegistry(memoHome, scope, { status: 'closed', closedAt: closedMeta.closedAt });
         let forgotten = 0;
         for (const r of svc._records.values()) {
           if (r.status !== 'active') continue;

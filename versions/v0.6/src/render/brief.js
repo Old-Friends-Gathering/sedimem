@@ -9,6 +9,10 @@
 
 import { readFileSync } from 'node:fs';
 import { detectSuspicious } from '../hygiene/suspicious.js';
+// S-04（adv）：brief 输出的每行若含 <memory-context> / </memory-context> 会被宿主
+// 当成围栏边界提前闭合注入围栏。转义规则与 inject.js 单一来源（inject.js 只依赖
+// config/paths，不反向依赖本文件，无循环依赖）。
+import { neutraliseFence } from './inject.js';
 
 // 策略单一来源（裁决 20）：优先 src/config/policy.js 的 loadPolicy()，缺失时回退读 config/policy.json。
 async function loadPolicySafe() {
@@ -106,7 +110,8 @@ function renderFlat({ scope, records, lines = 80, dedupeCandidates }) {
 
   const all = [...header, ...body];
   if (footer) all.push(footer);
-  const flat = (rows) => clampChars(rows.join('\n'), POLICY?.brief?.totalChars ?? DEFAULT_TOTAL_CHARS, rows);
+  // S-04：逐行转义围栏标记（含 title/正文带进来的），再进字符裁剪。
+  const flat = (rows) => clampChars(rows.map(neutraliseFence).join('\n'), POLICY?.brief?.totalChars ?? DEFAULT_TOTAL_CHARS, rows);
   if (all.length <= lines) return flat(all);
 
   const budget = footer ? lines - 1 : lines; // 截断时给末节留 1 行
@@ -274,7 +279,8 @@ function renderLayered({ scope, records, lines = 80, dedupeCandidates, policy, b
       if (withMarkers && g.dropped > 0) parts.push(`…略去 ${g.dropped} 条`);
     }
     if (footer) parts.push(footer);
-    return parts.join('\n');
+    // S-04：分层路径同样逐行转义围栏标记。
+    return parts.map(neutraliseFence).join('\n');
   };
 
   // 剩余量（层内预算外 + 已被砍的都不再回流）只减不增，循环必然终止。
