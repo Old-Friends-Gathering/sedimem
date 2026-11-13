@@ -108,6 +108,7 @@ const CASE_FILES = [
   ['I44', 'i44-llm-truth-guard.test.js'],
   ['I45', 'i45-derive-outbox.test.js'],
   ['I46', 'i46-backward-compat.test.js'],
+  ['I47', 'i47-write-api.test.js'],
 ];
 
 function runCase(id, file) {

@@ -961,3 +961,52 @@ v1.0 是重构版本，**行为不改，只改结构与文档**。以下五条�
 
 `derivedFor(id, validFrom)`、`drainDerive({limit})`、`enqueueDeriveFor(record)`、`rebuildDerived()`；构造参数新增 `llmPort`（测试可注入假端口）。
 
+### §3.20 W5 拆分后的内部导出登记（v1.0 W5）
+
+拆分只搬不改语义（裁决 48 的延续）：以下 handler 从入口文件搬到 `commands/`、`web/api/`、`mcp/*` 后，
+导出名与签名保持不变，供入口分发与测试直接 import。
+
+| 模块 | 导出 |
+|---|---|
+| `src/cli/commands/shared.js` | `UsageError` `parseArgs` `requireOpt` `setCurrentOpts` `serviceOpts` `loadService` `printJson` `printRecord` `parseAgent` `parseNumber` |
+| `src/cli/commands/memory.js` | `cmdWrite` `cmdSearch` `cmdBrief` `cmdGet` `cmdSupersede` `cmdForget` `withStats` `cmdScope` `cmdDoctor` |
+| `src/cli/commands/hygiene.js` | `cmdDedupe` `cmdCurate` `cmdRetitle` |
+| `src/cli/commands/ops.js` | `cmdServe` `cmdMigrate` `cmdConflicts` `cmdBackfillVectors` |
+| `src/web/api/shared.js` | `intArg` `parseTzOffset` `parseDateArg` `validDate` `makeLabel` `dayWindow` `todayInTz` `dateShift` `decisionKey` `recordIndex` `readMetrics` `appVersion` `MERGE_OPS` |
+| `src/web/api/read.js` | `apiSummary` `apiBrief` `apiRecords` `apiGraph` `apiTimeline` |
+| `src/web/api/search.js` | `apiSearch` |
+| `src/web/api/hygiene.js` | `apiHygiene` `apiConflicts` |
+| `src/web/api/today.js` | `apiToday` `toTimelineRows` `countActions` |
+| `src/mcp/tools.js` | `MEMORY_TOOL_DEFS` `TOOL_DEFS` `TOOLS_BY_NAME` `MAX_LINE_BYTES` `INSTRUCTIONS` `SERVER_INFO` `normalizeSource` |
+| `src/mcp/session-tools.js` | `SESSION_TOOL_DEFS` `MEMO_HOME` `getService` `closeAllServices` `makeServiceFacade` `initConnScope` `scopeToolHandler` `openSessionService` `mainScopeFor` `closeSessionTool` |
+
+拆分判据（Q5/Q2 之外的人工判据）：入口文件只保留「入口职责」（参数解析、分发、协议循环、错误映射）；
+实现细节全部在子模块；每个新文件 ≤ 400 行；无新增 import 环（`tests/unit/arch-boundaries.test.js` 守）。
+
+### §3.21 人类写入口与导入器（v1.0 W7，裁决 89–92）
+
+89. **默认只读，写能力必须显式开启**：`memo serve` 不传 `--write`、且 `MEMO_WRITE !== '1'` 时，
+    `POST /api/write|supersede|forget` 一律 403 `E_READONLY`；UI 顶栏显示「只读」时提交按钮 disabled。
+90. **写一律是 append + supersede，永不原地改**：`/api/supersede` 必须携带 `ifMatch`（旧记录 `validFrom`），
+    与当前记录不符 → 409 `E_CONFLICT` 且不落盘；不存在「覆盖写」这种操作。
+91. **同源校验**：请求带 `Origin`/`Referer` 时，host 必须是 loopback 且端口等于本服务端口，否则 403 `E_BAD_ORIGIN`；
+    这是本地服务防 CSRF 的唯一有效手段（不能只靠「绑 127.0.0.1」）。
+92. **审计不可省**：每次成功写入追加 `ui_edit` 事件（`detail:{action, reason}`）；导入追加 `import` 事件
+    （`detail:{src, path, sha256}`）。事件是「谁在什么时候改了记忆」的唯一真相。
+
+**导入器（`memo import <src> <path>`）**：`agents|basic-memory|obsidian|mem0|cline`，**默认 dry-run**
+（只解析 + 报 `{parsed, byKind}`），`--apply` 才写；解析器是纯函数（`src/cli/import-parsers.js`），
+可单测；重复导入靠 `service.write` 的 `noop_same_value` 天然幂等。
+
+第十一轮导出登记（W7）：
+
+| 模块 | 导出 |
+|---|---|
+| `src/web/api/write.js` | `apiWrite` `apiSupersede` `apiForget` `WRITE_PATHS` `isWriteEnabled` `checkOrigin` |
+| `src/cli/import-parsers.js` | `parseAgents` `parseBasicMemory` `parseObsidian` `parseMem0` `parseCline` `PARSERS` `slugify` |
+| `src/cli/import.js` | `cmdImport` `IMPORT_SOURCES` |
+| `ui/api.js` | `API` `TZ_OFFSET` `api` `apiPost` `currentScope` `hrefFor` |
+| `ui/dom.js` | `el` `localDateStr` |
+| `ui/edit-view.js` | `mountEditView` `buildSupersedePayload` `buildWritePayload` `canSubmit` `formIsDirty` `readOnlyFromSummary` `renderEditForm` `renderRecordList` |
+| `ui/import-view.js` | `mountImportView` `renderImportPreview` `renderImportApplied` `importQuery` `SOURCES` |
+

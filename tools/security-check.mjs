@@ -177,9 +177,11 @@ async function s8GitHistorySecrets() {
   record('S8', 'git 历史面扫描（当前提交）', hits.length === 0, hits.slice(0, 5));
 }
 
-// ── S9 部署面安全（Web 只读服务） ──────────────────────────────────
-// 裁决来源：docs/08-web-ui.md、docs/02 §3.9。Web 层必须：默认回环绑定、无写端点、
-// 前端只 fetch /api 相对路径、生成物不入库。
+// ── S9 部署面安全（Web 默认只读 + 单一受控写入口） ─────────────────
+// 裁决来源：docs/08-web-ui.md、docs/02 §3.9/§3.21。Web 层必须：默认回环绑定、
+// **默认只读**、写能力只允许集中在 `src/web/api/write.js` 一个文件（且必须带
+// E_READONLY / E_BAD_ORIGIN 两道闸）、前端只 fetch 相对路径、生成物不入库。
+// v1.0 W7 之前是全禁写调用；现在允许那一个受控文件，其余 src/web/** 仍然全禁。
 async function s9DeploymentSurface() {
   const problems = [];
   // 只审当前版本（versions/CURRENT）：冻结版本没有 Web 层，不该被当前部署面规则倒逼改动
@@ -223,7 +225,16 @@ async function s9DeploymentSurface() {
       return out;
     })();
     const WRITE_CALLS = ['service.write(', 'service.forget(', 'service.supersede(', 'service.curateApply(', 'appendEvent('];
+    const WRITE_ALLOWED = path.join(v, 'src', 'web', 'api', 'write.js');
     for (const f of webFiles) {
+      if (path.resolve(f) === path.resolve(WRITE_ALLOWED)) {
+        // 受控写入口：必须自带两道闸（只读默认 + 同源校验），否则等于没有防线
+        const text = await fsp.readFile(f, 'utf8').catch(() => '');
+        for (const guard of ['E_READONLY', 'E_BAD_ORIGIN']) {
+          if (!text.includes(guard)) problems.push(`${rel(f)}: 受控写入口缺少 ${guard} 闸门`);
+        }
+        continue;
+      }
       const lines = (await fsp.readFile(f, 'utf8').catch(() => '')).split('\n');
       lines.forEach((line, i) => {
         for (const kw of WRITE_CALLS) {

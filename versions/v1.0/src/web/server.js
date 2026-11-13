@@ -29,7 +29,11 @@ function isLoopbackHost(host) {
  */
 export async function createWebServer({
   memoHome, scope, port = 7788, host = '127.0.0.1', includeUi = true, service,
+  write = process.env.MEMO_WRITE === '1', // W7：默认只读；显式 {write:true} 或 MEMO_WRITE=1 才开放写端点
 } = {}) {
+  // W7：把「是否可写」同步到进程环境，供 /api/summary 与 UI 只读门禁读取（避免再穿一层参数）
+  if (write) process.env.MEMO_WRITE = '1';
+
   if (!memoHome) {
     const err = new Error('createWebServer: memoHome is required');
     err.code = 'E_INVALID_ARG';
@@ -95,7 +99,10 @@ export async function createWebServer({
     const pathname = url.pathname;
 
     if (pathname.startsWith('/api/')) {
-      if (req.method !== 'GET') {
+      // W7：POST 只放行人类可写端点（后续仍有 只读门禁/Origin 校验 在 write 通道内执行）；其余方法一律 405
+      const isWritePost = req.method === 'POST'
+        && (pathname === '/api/write' || pathname === '/api/supersede' || pathname === '/api/forget');
+      if (req.method !== 'GET' && !isWritePost) {
         res.writeHead(405, { 'content-type': 'application/json; charset=utf-8' });
         res.end(JSON.stringify({ ok: false, code: 'E_METHOD', message: `${req.method} not allowed (read-only GET API)` }));
         return;
@@ -127,7 +134,11 @@ export async function createWebServer({
       }
       // 裁决 39：常驻服务不写库，读前先按文件水位增量刷新，否则浏览器看到的截面会自相矛盾
       await active.refreshView();
-      const { status, body } = await handleApi(active, url);
+      // W7：POST 写端点把 req（读 body）与写模式上下文递给 handleApi；GET 行为不变
+      const writeOpts = isWritePost
+        ? { write, serverPort: server.address()?.port ?? port }
+        : undefined;
+      const { status, body } = await handleApi(active, url, req, writeOpts);
       res.writeHead(status, { 'content-type': 'application/json; charset=utf-8' });
       res.end(JSON.stringify(body));
       return;

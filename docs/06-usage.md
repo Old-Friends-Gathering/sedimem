@@ -657,3 +657,36 @@ memo derive --json                  # 机读
 - 派生失败（未配置/超预算/输出非法）一律回落到规则字段（`title` → `subject · predicate` → 正文前 24 字），brief 与搜索不会因此变空。
 - 所有派生数据都在 `~/.memo/derived/`，删掉即回到「无派生」状态，真相层不受影响。
 
+## 20、人类编辑与导入（v1.0 W7）
+
+### 20.1 开启写模式
+
+```bash
+MEMO_HOME=$HOME/.memo node versions/v1.0/src/cli/memo.js serve --port 7788 --write
+# 或：MEMO_WRITE=1 ... memo serve --port 7788
+```
+
+不开写模式时观察台仍然可用，但编辑页所有提交按钮是 disabled、API 返回 `403 E_READONLY`。
+
+### 20.2 编辑记忆（永不原地改）
+
+- 页面：`http://127.0.0.1:7788/#/edit` → 选一条记录 → 改 title/kind/内容 → 提交
+- 语义：**append 一条新版本 + 把旧版本标 superseded**，`ifMatch` 用旧记录的 `validFrom`；
+  别人刚改过 → `409 E_CONFLICT`，刷新后重试
+- 每次成功写入都会在事件流里留 `ui_edit`（谁、什么动作、为什么）
+
+### 20.3 导入既有记忆
+
+```bash
+# 预览（默认 dry-run，不写盘）
+node versions/v1.0/src/cli/memo.js import agents ~/.codex/AGENTS.md
+node versions/v1.0/src/cli/memo.js import basic-memory ~/notes
+node versions/v1.0/src/cli/memo.js import obsidian ~/vault/some-folder
+node versions/v1.0/src/cli/memo.js import mem0 ~/mem0-export.json
+node versions/v1.0/src/cli/memo.js import cline ~/myproject/memory-bank
+
+# 真写
+node versions/v1.0/src/cli/memo.js import agents ~/.codex/AGENTS.md --apply
+```
+
+导入页（`#/import`）做的是同一件事，只是走 HTTP：先预览再写入。

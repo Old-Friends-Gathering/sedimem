@@ -5,58 +5,14 @@
  * 安全约定：所有接口数据一律 textContent 写入，禁止 innerHTML 拼数据，无 eval。
  */
 import { renderLineChart, fmtPct as pctFmt } from './charts.js';
+import { API, TZ_OFFSET, api, apiPost, currentScope, hrefFor } from './api.js';
+import { el, localDateStr } from './dom.js';
 import { renderSearchResults } from './search-view.js';
 import { resolveScope, hrefFor as buildHref } from './scope.js';
 
-const API = 'api'; // 文档相对：根路径部署与子路径代理（DSH 插件 iframe）都能解析
-/** 东八区为 +480；-new Date().getTimezoneOffset() 把浏览器时区换成「东为正」分钟数。 */
-const TZ_OFFSET = -new Date().getTimezoneOffset();
 
-/* ---------------- 小工具 ---------------- */
 
-/** 当前观察的分库（?scope=repo:xxx）；空串表示用服务端启动时解析出的那个。 */
-function currentScope() {
-  const m = /(?:^|[?&])scope=([^&]+)/.exec(location.hash.split('?')[1] ?? '');
-  return m ? decodeURIComponent(m[1]) : '';
-}
 
-/** 统一出口：内部跳转必须带当前 scope（W4：裸 '#/'+route 会丢 ?scope=）。 */
-function hrefFor(route, extra = {}) {
-  return buildHref(route, { scope: currentScope(), ...extra });
-}
-
-async function api(path) {
-  const sc = currentScope();
-  const sep = path.includes('?') ? '&' : '?';
-  const withScope = sc ? `${API + path}${sep}scope=${encodeURIComponent(sc)}` : API + path;
-  let res;
-  try {
-    res = await fetch(withScope);
-  } catch {
-    throw new Error('E_FETCH_FAILED: 无法连接本地服务，请确认 memo serve 正在运行。');
-  }
-  let body = null;
-  try { body = await res.json(); } catch { /* 非 JSON 错误体走下面统一处理 */ }
-  if (!res.ok || !body || body.ok === false) {
-    const code = body?.code ?? `E_HTTP_${res.status}`;
-    throw new Error(`${code}: ${body?.message ?? res.statusText}`);
-  }
-  return body;
-}
-
-/** 创建元素并批量填子节点/文本。 */
-function el(tag, className, text) {
-  const n = document.createElement(tag);
-  if (className) n.className = className;
-  if (text !== undefined) n.textContent = text;
-  return n;
-}
-
-/** YYYY-MM-DD（本地时区）。 */
-function localDateStr(d = new Date()) {
-  const p = (n) => String(n).padStart(2, '0');
-  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`;
-}
 
 /** date 字符串 ± n 天。 */
 function shiftDate(dateStr, n) {
@@ -395,7 +351,7 @@ let graphScope;
 
 async function loadGraph() {
   const toolbar = document.getElementById('graph-toolbar');
-  const canvas = document.getElementById('graph-canvas');
+  const container = document.getElementById('graph-canvas');
   const detail = document.getElementById('graph-detail');
 
   const mod = await import('./graph.js').catch(() => null);
@@ -412,7 +368,7 @@ async function loadGraph() {
   if (graphApi && graphScope === scope) return; // 已初始化且分库未变：canvas/toolbar/detail 由 graph.js 接管
   destroyGraph();
   graphScope = scope;
-  graphApi = await mod.initGraph({ canvas, detailEl: detail, toolbarEl: toolbar, apiBase: API, scope });
+  graphApi = await mod.initGraph({ container, detailEl: detail, toolbarEl: toolbar, apiBase: API, scope });
 }
 
 function destroyGraph() {
@@ -491,9 +447,40 @@ function watchGraphDetail() {
   mo.observe(detail, { childList: true });
 }
 
+/* ---------------- 编辑 / 导入页（W7 / B1-B2：懒加载，参考图谱页委托模式） ---------------- */
+
+let editMounted = null; // { scope } 记住挂载时分库，换库要重挂
+let importMounted = null;
+
+async function loadEdit() {
+  const scope = currentScope();
+  if (editMounted && editMounted.scope === scope) return;
+  const mod = await import('./edit-view.js').catch(() => null);
+  const box = document.getElementById('edit-container');
+  if (!mod || typeof mod.mountEditView !== 'function') {
+    box.replaceChildren(el('p', 'dim', '编辑模块 edit-view.js 未加载，刷新页面重试。'));
+    return;
+  }
+  await mod.mountEditView({ container: box, apiGet: api, apiPost });
+  editMounted = { scope };
+}
+
+async function loadImport() {
+  const scope = currentScope();
+  if (importMounted && importMounted.scope === scope) return;
+  const mod = await import('./import-view.js').catch(() => null);
+  const box = document.getElementById('import-container');
+  if (!mod || typeof mod.mountImportView !== 'function') {
+    box.replaceChildren(el('p', 'dim', '导入模块 import-view.js 未加载，刷新页面重试。'));
+    return;
+  }
+  await mod.mountImportView({ container: box, apiGet: api, apiPost });
+  importMounted = { scope };
+}
+
 /* ---------------- 路由 ---------------- */
 
-const ROUTES = ['today', 'graph', 'search', 'hygiene'];
+const ROUTES = ['today', 'graph', 'search', 'hygiene', 'edit', 'import'];
 
 function currentRoute() {
   // 只取 path 部分：`#/graph?scope=repo:x` 的路由是 graph，不是 "graph?scope=repo:x"
@@ -510,6 +497,8 @@ async function render() {
   if (route === 'today') await loadToday();
   else if (route === 'graph') await loadGraph();
   else if (route === 'search') await loadSearch();
+  else if (route === 'edit') await loadEdit();
+  else if (route === 'import') await loadImport();
   else await loadHygiene();
 }
 

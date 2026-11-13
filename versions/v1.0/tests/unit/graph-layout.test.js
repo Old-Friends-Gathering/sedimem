@@ -6,7 +6,8 @@
  */
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { layoutTick } from '../../ui/layout.js';
+import { layoutTick, KIND_COLORS, kindColorsFromPolicy, EDGE_PREF_KEY, DEFAULT_EDGE_TYPES, OPTIONAL_EDGE_TYPES } from '../../ui/layout.js';
+import { nodeRadius } from '../../ui/graph-style.js';
 
 /** 构造一个小图：5 个节点环 + 两条弹簧边 */
 function makeNodes(count = 5) {
@@ -136,4 +137,39 @@ test('空图：不抛错，energy 为 0，alpha 仍衰减', () => {
   const out = layoutTick([], [], { alpha: 1 });
   assert.equal(out.energy, 0);
   assert.ok(out.alpha < 1);
+});
+
+/* ===== W6：force-graph 改造后仍保留的纯函数契约（graph.js 直接复用，覆盖不减） ===== */
+
+test('KIND_COLORS 兜底色表齐全且为 hex', () => {
+  for (const k of ['fact', 'pref', 'decision', 'gotcha', 'state']) {
+    assert.match(KIND_COLORS[k], /^#[0-9a-f]{6}$/i, `KIND_COLORS.${k} 应为 6 位 hex`);
+  }
+});
+
+test('kindColorsFromPolicy：policy 覆盖兜底，缺失时回落', () => {
+  // policy 只给差异项也能得到完整色表
+  const colors = kindColorsFromPolicy({ kinds: { fact: { color: '#123456' } } });
+  assert.equal(colors.fact, '#123456');
+  assert.equal(colors.gotcha, KIND_COLORS.gotcha);
+  // 新增 kind 也要带出来
+  const ext = kindColorsFromPolicy({ kinds: { newkind: { color: '#abcdef' } } });
+  assert.equal(ext.newkind, '#abcdef');
+  // policy 缺失 / 空 → 与兜底表一致
+  assert.deepStrictEqual(kindColorsFromPolicy(undefined), { ...KIND_COLORS });
+  assert.deepStrictEqual(kindColorsFromPolicy({}), { ...KIND_COLORS });
+});
+
+test('边偏好常量：默认开启与可选类型、localStorage 键名不变', () => {
+  assert.deepStrictEqual(DEFAULT_EDGE_TYPES, ['supersedes', 'same-entity']);
+  assert.deepStrictEqual(OPTIONAL_EDGE_TYPES, ['duplicate-of', 'disputed-with']);
+  assert.equal(EDGE_PREF_KEY, 'sedimem.graph.edges');
+});
+
+test('nodeRadius：半径随 hits 开方 + 基数，异常输入不炸', () => {
+  assert.equal(nodeRadius({ hits: 0 }), 3);
+  assert.equal(nodeRadius({ hits: 9 }), 6);
+  assert.equal(nodeRadius({}), 3);
+  assert.equal(nodeRadius(null), 3);
+  assert.equal(nodeRadius({ hits: -5 }), 3);
 });

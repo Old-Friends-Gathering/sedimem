@@ -335,3 +335,27 @@ v1.0 把观察台从「只读三页 + 搜索」扩展为九页信息架构（`do
 
 落地时本文件将按计划 §12.6 重写为「信息架构 + 页面契约 + 写模式安全模型 + 导入器映射表」；
 在那之前，上面这些只做评审参照，不作为实现依据。
+
+## 十五、v1.0 W6 技术栈变更（2026-11-14）
+
+| 能力 | v0.6 及以前 | v1.0 |
+|---|---|---|
+| 版式 | 自研 `style.css` | Tabler CSS（`ui/vendor/tabler.min.css`，自托管、仅 CSS 不用其 JS）+ 自研 `style.css` 覆盖 |
+| 趋势图 | 自研 SVG 折线 | **uPlot**（`ui/vendor/uPlot.iife.min.js`），`null` 点断线不画；全局缺失时回退 `renderLineChartSvg` |
+| 图谱 | 自研 3D canvas（球壳 + 深度雾化 + 投影） | **force-graph**（`ui/vendor/force-graph.min.js`，2D 力导向），节点标签用 `nodeCanvasObject` 画（font = 12/scale 保持屏幕恒定字号） |
+
+### 为什么换
+
+- 自研 3D 图谱的第三维只贡献雾化装饰，却要自己实现投影/遮挡/命中检测/标签防叠四套逻辑（`docs/research/graph-library-2026-11.md` 有体积与收益对比）。
+- 趋势图自研 SVG 在 5 条线 × 30 天时够用，但补网格/交互/图例都要手写；uPlot 50KB 一次解决。
+- 版式换 Tabler 是为了后续九页 IA（W7/W8）有现成的表单/卡片/表格类名，少写样式。
+
+### 纪律（Q13 门禁）
+
+第三方资产只能放 `ui/vendor/`，必须在 `ui/vendor/VENDOR.md` 登记 `版本 / 上游 / LICENSE / sha256`，
+并随附 `*.LICENSE`；`ui/**` 不得出现任何 CDN 外链。升级 = 换文件 + 改表 + 校验 sha256 一致。
+
+### 已知取舍
+
+- 密集簇里标签会互相压（force-graph 默认无标签避让）——后续可用 `nodeCanvasObject` 做简单网格避让，或按缩放级别只画高度数节点。
+- 力导向布局每次刷新位置不同（无种子随机），不追求"同一个库每次一样"；要稳定布局需引入固定种子（未做）。

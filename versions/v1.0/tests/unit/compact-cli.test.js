@@ -48,6 +48,11 @@ test('compactCli 真跑：只删 purge 墓碑，active 记录与事件流都在'
     await new Promise((r) => setTimeout(r, 5));
     const out = await compactCli(service, { grace: '0', json: true });
     assert.equal(out.purged, 2, JSON.stringify(out));
+    // 压实只能删 purge 墓碑：keeper 记录必须还在（否则 compact 就成了"按行删"）
+    const keepId = keep?.record?.id ?? keep?.id ?? keep;
+    const exported = await service.exportRecords({ status: 'all' });
+    const all = Array.isArray(exported) ? exported : (exported?.records ?? exported?.items ?? []);
+    assert.ok(all.some((r) => r.id === keepId), 'keeper 记录被误删');
     assert.ok(out.backupPath && out.backupPath.includes('.bak.'), `应留下备份: ${out.backupPath}`);
     const left = await service.get(keep.record.id);
     assert.equal(left.status, 'active');

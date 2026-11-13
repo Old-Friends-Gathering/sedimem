@@ -1,115 +1,70 @@
 /**
- * graph.js —— 图谱页渲染与交互（W5 / D 路）：力导向循环、canvas 绘制、缩放/平移/拖拽/详情。
+ * graph.js —— 图谱页渲染与交互（W6）：改用 vendor 的 force-graph（window.ForceGraph）。
  *
- * 零依赖、零构建：仅用浏览器内置 API（canvas 2D、fetch、requestAnimationFrame、localStorage）。
- * 数据来自 `/api/graph?limit=300&days=90` → { nodes, edges, sampled }。
- * 布局核心 `layoutTick()` 与视觉常量在 ./layout.js（纯函数，单测覆盖）。
+ * 零构建纪律不变：force-graph 由 index.html 以普通 <script> 引入（ui/vendor/VENDOR.md），
+ * 本文件只在函数内部取 window.ForceGraph；Node 单测环境没有该全局 → 走降级路径（不抛错）。
+ * 自研 3D 布局（layoutTick/球壳/投影）已不再被本文件调用，layout.js 里的纯函数与
+ * KIND_COLORS / EDGE_PREF_KEY / edgeTypesFromPref 等常量继续复用并被单测覆盖。
  *
  * 交互契约（docs/08-web-ui.md §5.2）：
- * - 实时力导向：斥力 O(n²) + 弹簧 + 向心 + 阻尼 0.85；alpha 初值 1、每帧 ×0.985，< 0.005 停帧；拖拽唤醒。
- * - 拖节点（拖时固定 fx/fy）、滚轮缩放 0.4–2.5（鼠标为锚）、空白拖拽平移、
- *   单击节点渲染详情到 detailEl、双击锁定/释放。
- * - 边默认只画 same-entity + supersedes；工具栏「全开」+ duplicate-of / disputed-with 单独勾选；
- *   偏好存 localStorage 键 `sedimem.graph.edges`（JSON，只存偏好不存正文）。
- * - sampled.shown < sampled.total 时画布右上角常驻「已采样 shown / total 条」。
+ * - 数据来自 `GET {apiBase}/graph?limit=300&days=90&scope=…` → { nodes, edges, sampled }。
+ * - 节点：半径按聚合条数（node.count）、颜色按 kind（policy.kinds 或 KIND_COLORS）、
+ *   superseded 半透明；标签用 node.label（后端已聚合 ×N）。
+ * - 边默认 same-entity + supersedes；工具栏「全开」+ duplicate-of / disputed-with 勾选；
+ *   偏好存 localStorage `sedimem.graph.edges`（对象形状 {all,"duplicate-of","disputed-with"}）。
+ * - 交互：单击节点 → detailEl 渲染记录列表（textContent 防注入）；快速双击 → 聚焦；
+ *   「旋转视角」= force-graph 下自动缓慢环绕（中心点小幅圆周漂移，可关）。
+ * - sampled.shown < sampled.total 时右上角常驻「已采样 shown / total 条」（DOM 覆盖层）。
+ * - 浅色/深色颜色全部取 uiPalette()；浅色连线经 contrastColor 压暗（v0.4.2 对比度规则）。
+ * - window.ForceGraph 缺失 → container 内提示「图谱库未加载」，返回 {destroy(){}}。
  */
 
 import { renderToolbar } from './graph-toolbar.js';
-import { uiPalette, nodeStroke } from './palette.js';
-import { edgeStyleFor, edgeStrokeColor, edgeAlpha, nodeAlpha, nodeFillColor, nodeRadius } from './graph-style.js';
+import { uiPalette } from './palette.js';
+import { edgeStyleFor, edgeStrokeColor, nodeFillColor } from './graph-style.js';
 import {
-  KIND_COLORS, kindColorsFromPolicy, DEFAULT_EDGE_TYPES, OPTIONAL_EDGE_TYPES, EDGE_PREF_KEY, layoutTick,
-  MIN_SCALE, MAX_SCALE, ALPHA_MIN,
+  KIND_COLORS, kindColorsFromPolicy, DEFAULT_EDGE_TYPES, OPTIONAL_EDGE_TYPES, EDGE_PREF_KEY,
 } from './layout.js';
 
+/** hex → 带透明度的颜色（superseded 半透明用）。非法输入原样返回。 */
+function withAlpha(color, a) {
+  const m = /^#([0-9a-f]{6})$/i.exec(String(color || ''));
+  if (!m) return color;
+  const h = m[1];
+  return `rgba(${parseInt(h.slice(0, 2), 16)},${parseInt(h.slice(2, 4), 16)},${parseInt(h.slice(4, 6), 16)},${a})`;
+}
 
-export async function initGraph({ canvas, detailEl, toolbarEl, apiBase = 'api', scope = '' }) {
-  const ctx = canvas.getContext('2d');
+export async function initGraph({ container, detailEl, toolbarEl, apiBase = 'api', scope = '' }) {
+  /* ---------- 降级路径：全局缺失（如 Node 单测）→ 提示一行文本，不抛错 ---------- */
+  const ForceGraph = (typeof window !== 'undefined' ? window.ForceGraph : undefined);
+  if (typeof ForceGraph !== 'function') {
+    if (container) {
+      const tip = document.createElement('div');
+      tip.textContent = '图谱库未加载';
+      container.replaceChildren(tip);
+    }
+    return { destroy() { if (container) container.replaceChildren(); } };
+  }
+
   const state = {
     nodes: [],
     edges: [],
     sampled: { shown: 0, total: 0 },
-    alpha: 1,
-    view: { rotY: 0.55, rotX: 0.22, scale: 1, tx: 0, ty: 0 }, // 初始带倾角：能看出是球
-    selectedId: null,
-    fitted: false,
-    frames: 0,
-    userAdjusted: false,
-    running: true,
+    pref: loadEdgePref(),
     rotateMode: false,
-    sphereRadius: 0,
+    selectedId: null,
+    center: null,      // 环绕中心（世界坐标）
+    angle: 0,          // 环绕相位
+    zoom: 1,
     destroyed: false,
     rafId: 0,
   };
-  const pref = loadEdgePref();
-
-  /* ---------- 坐标变换 ---------- */
-  // 3D 投影：绕 Y 轴旋转 rotY 后做弱透视（camera 在 z=+600）。
-  // 返回 [sx, sy, scale因子]——scale因子 = 近大远小，画点/标签时用。
-  const project = (x, y, z = 0) => {
-    z = z ?? 0;
-    // 俯仰（绕 X）：y/z 平面旋转
-    const cx = Math.cos(state.view.rotX ?? 0);
-    const sxn = Math.sin(state.view.rotX ?? 0);
-    const ry0 = y * cx - z * sxn;
-    const rz0 = y * sxn + z * cx;
-    // 环视（绕 Y）：x/z 平面旋转
-    const cy = Math.cos(state.view.rotY);
-    const sy = Math.sin(state.view.rotY);
-    const rx = x * cy - rz0 * sy;
-    const rz = x * sy + rz0 * cy;
-    // 弱透视：近大远小；不乘 scale（与画布缩放解耦，拖 zoom 不抖）
-    const persp = 600 / (600 + rz);
-    return [
-      rx * state.view.scale * persp + state.view.tx,
-      ry0 * state.view.scale * persp + state.view.ty,
-      persp,
-    ];
-  };
-  const toScreen = (x, y, z) => project(x, y, z);
-  const toWorld = (sx, sy) => [(sx - state.view.tx) / state.view.scale, (sy - state.view.ty) / state.view.scale];
-
-  function resizeCanvas() {
-    const dpr = window.devicePixelRatio || 1;
-    const rect = canvas.getBoundingClientRect();
-    canvas.width = Math.max(1, Math.round(rect.width * dpr));
-    canvas.height = Math.max(1, Math.round(rect.height * dpr));
-    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-  }
-  resizeCanvas();
-
-  /* ---------- 数据加载 ---------- */
-  let loadError = null;
-  // 颜色随 policy.kinds 下发（issue #33）；拉取失败或接口未带 kinds 时用兜底表，视觉不回归
+  let fg = null;
   let kindColors = KIND_COLORS;
-  try {
-    // 分库必须跟着顶栏走，否则切了分库图谱还是老库（issue #25）
-    const q = new URLSearchParams({ limit: '300', days: '90' });
-    if (scope) q.set('scope', scope);
-    const res = await fetch(`${apiBase}/graph?${q.toString()}`);
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    const data = await res.json();
-    state.nodes = Array.isArray(data.nodes) ? data.nodes : [];
-    state.edges = Array.isArray(data.edges) ? data.edges : [];
-    state.sampled = data.sampled || { shown: state.nodes.length, total: state.nodes.length };
-    // 颜色唯一真相在 policy（/api/summary 的 policy.kinds）；单独 try 包住，
-    // 摘要接口异常不能连累图谱主数据加载
-    try {
-      const sr = await fetch(`${apiBase}/summary${scope ? `?scope=${encodeURIComponent(scope)}` : ''}`);
-      if (sr.ok) {
-        const summary = await sr.json();
-        if (summary?.policy?.kinds) kindColors = kindColorsFromPolicy(summary.policy);
-      }
-    } catch { /* summary 失败 → 继续用兜底色 */ }
-  } catch (err) {
-    loadError = err;
-    state.nodes = [];
-    state.edges = [];
-  }
+  let loadError = null;
+  const nodeById = new Map();
 
-  const nodeById = new Map(state.nodes.map((nd) => [nd.id, nd]));
-
-  /* ---------- 边偏好 ---------- */
+  /* ---------- 边偏好（对象形状 {all,"duplicate-of","disputed-with"}） ---------- */
   function loadEdgePref() {
     const fallback = { all: false, 'duplicate-of': false, 'disputed-with': false };
     try {
@@ -126,467 +81,255 @@ export async function initGraph({ canvas, detailEl, toolbarEl, apiBase = 'api', 
     }
   }
   function saveEdgePref() {
-    try {
-      localStorage.setItem(EDGE_PREF_KEY, JSON.stringify(pref));
-    } catch { /* localStorage 不可用时静默降级为会话内记忆 */ }
+    try { localStorage.setItem(EDGE_PREF_KEY, JSON.stringify(state.pref)); } catch { /* 静默降级 */ }
   }
   function activeEdgeTypes() {
     const set = new Set(DEFAULT_EDGE_TYPES);
-    if (pref['duplicate-of']) set.add('duplicate-of');
-    if (pref['disputed-with']) set.add('disputed-with');
+    if (state.pref['duplicate-of']) set.add('duplicate-of');
+    if (state.pref['disputed-with']) set.add('disputed-with');
     return set;
   }
 
-  /* ---------- 工具栏 ---------- */
-  const checks = {};
+  /* ---------- 数据加载 ---------- */
+  async function fetchData() {
+    const q = new URLSearchParams({ limit: '300', days: '90' });
+    if (scope) q.set('scope', scope); // 分库跟顶栏走（issue #25）
+    const res = await fetch(`${apiBase}/graph?${q.toString()}`);
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    return res.json();
+  }
+  async function loadKindColors() {
+    try {
+      const sr = await fetch(`${apiBase}/summary${scope ? `?scope=${encodeURIComponent(scope)}` : ''}`);
+      if (sr.ok) {
+        const summary = await sr.json();
+        if (summary?.policy?.kinds) kindColors = kindColorsFromPolicy(summary.policy);
+      }
+    } catch { /* summary 失败 → 继续用兜底色 */ }
+  }
+
+  /* ---------- 采样提示（DOM 覆盖层，force-graph 画不了文字叠加） ---------- */
+  const overlay = document.createElement('div');
+  overlay.style.cssText = 'position:absolute;top:10px;right:14px;padding:4px 10px;'
+    + 'font:12px sans-serif;border-radius:6px;background:rgba(100,116,139,0.14);pointer-events:none;';
+  function updateOverlay() {
+    if (state.sampled.shown < state.sampled.total) {
+      overlay.textContent = `已采样 ${state.sampled.shown} / ${state.sampled.total} 条`;
+      overlay.style.display = 'block';
+    } else {
+      overlay.style.display = 'none';
+    }
+  }
+
+  /* ---------- 详情（textContent 防注入） ---------- */
+  function showDetail(nd) {
+    if (!detailEl) return;
+    if (!nd) {
+      detailEl.textContent = loadError ? `加载失败：${loadError.message}` : '点击节点查看详情';
+      return;
+    }
+    // 聚合节点：chain 是组内演化（旧 → 新）；没有 chain 就只有本节点一条
+    const records = Array.isArray(nd.chain) && nd.chain.length
+      ? nd.chain : [{ title: nd.label ?? nd.id, text: nd.text ?? nd.value, createdAt: nd.createdAt, status: nd.status }];
+    const lines = [`标签：${nd.label ?? nd.id}`, ...(nd.count > 1 ? [`同主题记录：${nd.count} 条`] : []), ''];
+    for (const rec of records) {
+      lines.push(`标题：${rec.title ?? String(rec.id ?? '').slice(0, 12)}`);
+      lines.push(`时间：${String(rec.createdAt ?? '-').slice(0, 10)}${rec.status && rec.status !== 'active' ? `（${rec.status}）` : ''}`);
+      if (rec.text) lines.push(`摘要：${String(rec.text).slice(0, 120)}`);
+      lines.push('');
+    }
+    lines.push(`类型：${nd.kind ?? '-'}　状态：${nd.status ?? '-'}　主体：${nd.subject ?? '-'}`);
+    detailEl.textContent = lines.join('\n');
+  }
+
+  /* ---------- force-graph 实例 ---------- */
+  function nodeColor(nd) {
+    const base = nodeFillColor(kindColors[nd.kind] || KIND_COLORS.state, uiPalette());
+    // superseded 半透明；浅色底再抬高一点 alpha 下限，否则看不见（v0.4.2 规则）
+    return nd.status === 'superseded' ? withAlpha(base, uiPalette().light ? 0.55 : 0.4) : base;
+  }
+  function applyEdgeVisibility() {
+    if (!fg) return;
+    const types = activeEdgeTypes();
+    fg.linkVisibility((e) => types.has(e.type)); // 重设 accessor 触发重算
+    fg.linkColor((e) => edgeStrokeColor(e.type, uiPalette()));
+    fg.linkWidth((e) => edgeStyleFor(e.type).width);
+  }
+  function fitToGraph() {
+    if (!fg || !state.nodes.length) return;
+    fg.zoomToFit(400, 46);
+    // 环绕中心 = 节点包围盒中心（zoomToFit 之后取均值即可近似）
+    let sx = 0; let sy = 0;
+    for (const nd of state.nodes) { sx += nd.x || 0; sy += nd.y || 0; }
+    state.center = { x: sx / state.nodes.length, y: sy / state.nodes.length };
+  }
+  function applyData(data) {
+    state.nodes = Array.isArray(data.nodes) ? data.nodes : [];
+    state.edges = Array.isArray(data.edges) ? data.edges : [];
+    state.sampled = data.sampled || { shown: state.nodes.length, total: state.nodes.length };
+    nodeById.clear();
+    for (const nd of state.nodes) nodeById.set(nd.id, nd);
+    updateOverlay();
+    if (!fg) return;
+    fg.graphData({ nodes: state.nodes, links: state.edges });
+    applyEdgeVisibility();
+    // 双保险：引擎停止回调之外，再在 400ms / 2000ms 各 fit 一次（数据量小时引擎可能瞬间停）
+    setTimeout(() => fitToGraph(), 400);
+    setTimeout(() => fitToGraph(), 2000);
+  }
+  function buildGraph() {
+    const pal = uiPalette();
+    fg = ForceGraph()(container)
+      .backgroundColor(pal.bg)
+      .width(container.clientWidth || 600)
+      .height(container.clientHeight || 600)
+      .nodeId('id')
+      .nodeLabel((nd) => nd.label ?? nd.id)
+      .nodeVal((nd) => Math.max(1, nd.count ?? 1)) // 半径按聚合条数
+      .nodeColor(nodeColor)
+      .nodeRelSize(4)
+      .linkSource('from')
+      .linkTarget('to')
+      .nodeCanvasObjectMode(() => 'after')
+      // 节点文字：force-graph 默认只给 tooltip，不给画布文字。
+      // 缩放很小时不画（避免糊成一团），字体大小按 1/scale 抵消画布缩放，屏幕上恒定 11–13px。
+      .nodeCanvasObject((nd, ctx, scale) => {
+        if (!nd || scale < 0.22) return;
+        const pal = uiPalette();
+        const raw = String(nd.label ?? nd.id ?? '');
+        const label = raw.length > 18 ? `${raw.slice(0, 17)}…` : raw;
+        if (!label) return;
+        const r = Math.sqrt(Math.max(1, nd.count ?? 1)) * 4 + 3;
+        // 关键：font 必须是 12/scale（不做上下钳制），否则画布缩放后屏幕上就不是 12px 了
+        const fs = Math.min(80, 12 / scale);
+        ctx.save();
+        ctx.font = `${fs}px system-ui, -apple-system, 'PingFang SC', sans-serif`;
+        ctx.textAlign = 'left';
+        ctx.textBaseline = 'middle';
+        const x = (nd.x ?? 0) + r + 4 / scale;
+        const y = nd.y ?? 0;
+        // 描边当 halo：浅色底用近白，深色底用近黑，保证两种主题都可读（v0.4.2 对比度规则）
+        ctx.lineWidth = 3 / scale;
+        ctx.strokeStyle = pal.light ? 'rgba(255,255,255,0.92)' : 'rgba(11,13,18,0.85)';
+        ctx.strokeText(label, x, y);
+        ctx.fillStyle = nd.status === 'superseded' ? pal.nodeDim : pal.label;
+        ctx.fillText(label, x, y);
+        ctx.restore();
+      })
+      .onNodeClick(onNodeClick)
+      .onZoom((t) => { state.zoom = t.k; })
+      // 引擎停下后必须再 fit 一次：首次 zoomToFit 时节点还没散开，
+      // 之后节点会飘出视口（v1.0 W6 首版实测：9s 后只剩左上角一小团）
+      .onEngineStop(() => { fitToGraph(); })
+      .warmupTicks(20)
+      .cooldownTicks(220)
+      .cooldownTime(4000);
+
+    // 布局手感：默认 charge 太弱 → 节点挤成几坨、标签互相压。
+    // 注意：d3Force(name) 返回的是 force 实例（不是 graph），不能串在链上。
+    const charge = fg.d3Force('charge');
+    if (charge && typeof charge.strength === 'function') charge.strength(-90);
+    const link = fg.d3Force('link');
+    if (link && typeof link.distance === 'function') link.distance(70);
+    applyEdgeVisibility();
+  }
+
+  /* ---------- 交互 ---------- */
+  let lastClick = { id: null, t: 0 };
+  function onNodeClick(nd) {
+    state.selectedId = nd.id;
+    showDetail(nd);
+    const now = Date.now();
+    // 快速双击同一节点 = 聚焦（force-graph 2D 没有独立 dblclick 命中，用节流判断）
+    if (lastClick.id === nd.id && now - lastClick.t < 350) {
+      focusNode(nd);
+      lastClick = { id: null, t: 0 };
+    } else {
+      lastClick = { id: nd.id, t: now };
+    }
+  }
+  function focusNode(nd) {
+    if (!fg || !nd) return;
+    fg.centerAt(nd.x || 0, nd.y || 0, 600);
+    fg.zoom(3, 600);
+    state.center = { x: nd.x || 0, y: nd.y || 0 }; // 环绕中心跟着走
+  }
+
+  /* 自动缓慢环绕：rotateMode 开时中心点沿小圆周漂移；关则回正（自己的 rAF 驱动，
+     与 force-graph 内部模拟解耦，后台标签页被节流也只是转得慢、不炸）。 */
+  function tick() {
+    if (state.destroyed) return;
+    state.rafId = requestAnimationFrame(tick);
+    if (!fg || !state.center) return;
+    if (state.rotateMode) {
+      state.angle += 0.01;
+      const r = 30 / Math.max(0.2, state.zoom); // 屏幕上约 30px 的环绕半径
+      fg.centerAt(state.center.x + Math.cos(state.angle) * r, state.center.y + Math.sin(state.angle) * r);
+    } else if (state.angle !== 0) {
+      state.angle = 0;
+      fg.centerAt(state.center.x, state.center.y);
+    }
+  }
+
+  const onResize = () => {
+    if (!fg) return;
+    fg.width(container.clientWidth || 600).height(container.clientHeight || 600);
+  };
+  window.addEventListener('resize', onResize);
+
+  /* ---------- 装配 ---------- */
   function buildToolbar() {
     renderToolbar({
       toolbarEl,
       state,
-      pref,
+      pref: state.pref,
       optionalEdgeTypes: OPTIONAL_EDGE_TYPES,
-      checks,
+      checks: {},
       saveEdgePref,
-      render,
+      render: applyEdgeVisibility, // 工具栏只改 pref，这里把偏好刷到 force-graph
     });
   }
 
-  /* ---------- 详情 ---------- */
-  function showDetail(nd) {
-    if (!nd) {
-      detailEl.textContent = loadError
-        ? `加载失败：${loadError.message}`
-        : '点击节点查看详情';
-      return;
-    }
-    // 组内演化时间线（裁决 60 终版：聚合图上组内自环没有信息，关联在这里表达）
-    const chainLines = Array.isArray(nd.chain) && nd.chain.length > 1
-      ? [
-        '演化时间线（旧 → 新）：',
-        ...nd.chain.map((c) => `  · ${(c.createdAt ?? '').slice(0, 10)}  ${c.title ?? c.id.slice(0, 12)}${c.status !== 'active' ? `（${c.status}）` : ''}`),
-        '',
-      ]
-      : [];
-    const lines = [
-      `标签：${nd.label ?? nd.id}`,
-      ...(nd.count > 1 ? [`同主题记录：${nd.count} 条（图上合并为一个点）`] : []),
-      ...chainLines,
-      ...(Array.isArray(nd.predicates) && nd.predicates.length
-        ? [`维度（predicate）：${nd.predicates.join(' · ')}`] : []),
-      `类型：${nd.kind ?? '-'}　状态：${nd.status ?? '-'}`,
-      `主体：${nd.subject ?? '-'}`,
-      `创建时间：${nd.createdAt ?? '-'}`,
-      `命中：${nd.hits ?? 0}　度数：${nd.degree ?? 0}`,
-      '',
-      '全文：',
-      String(nd.text ?? nd.value ?? '（接口未提供正文）'),
-    ];
-    detailEl.textContent = lines.join('\n');
-  }
-
-  /* ---------- 命中检测 ---------- */
-  function hitNode(sx, sy) {
-    // 深度优先：先命中「离相机近」的节点（persp 大者优先）
-    let best = null; let bestPersp = -1;
-    for (const nd of state.nodes) {
-      const [px, py, persp] = toScreen(nd.x, nd.y, nd.z ?? 0);
-      const r = Math.max(6, nodeRadius(nd) * state.view.scale ** 0.6 * persp + 4);
-      if ((sx - px) ** 2 + (sy - py) ** 2 <= r * r && persp > bestPersp) {
-        best = nd; bestPersp = persp;
-      }
-    }
-    return best;
-  }
-
-  /* ---------- 渲染 ---------- */
-  /** 自适应视图：把当前布局按包围盒缩放到画布内（右侧留出详情面板宽度由 CSS 保证）。 */
-  function fitView() {
-    const rect = canvas.getBoundingClientRect();
-    if (!state.nodes.length || rect.width < 40 || rect.height < 40) return;
-    // 用当前视角投影后的屏幕坐标算包围盒：旋转后自动重新贴合画布
-    const saved = { scale: state.view.scale, tx: state.view.tx, ty: state.view.ty };
-    state.view.scale = 1; state.view.tx = 0; state.view.ty = 0;
-    let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
-    for (const nd of state.nodes) {
-      if (!Number.isFinite(nd.x) || !Number.isFinite(nd.y)) continue;
-      const [px, py] = project(nd.x, nd.y, nd.z ?? 0);
-      minX = Math.min(minX, px); maxX = Math.max(maxX, px);
-      minY = Math.min(minY, py); maxY = Math.max(maxY, py);
-    }
-    state.view.scale = saved.scale; state.view.tx = saved.tx; state.view.ty = saved.ty;
-    if (!Number.isFinite(minX)) return;
-    const pad = 46;
-    const bw = Math.max(1, maxX - minX);
-    const bh = Math.max(1, maxY - minY);
-    const scale = Math.max(0.4, Math.min(2.5, Math.min((rect.width - pad * 2) / bw, (rect.height - pad * 2) / bh)));
-    const cxWorld = (minX + maxX) / 2;
-    const cyWorld = (minY + maxY) / 2;
-    state.view.scale = scale;
-    state.view.tx = rect.width / 2 - cxWorld * scale;
-    state.view.ty = rect.height / 2 - cyWorld * scale;
-  }
-
-  /**
-   * 标签绘制（裁决 33：label 由服务端生成，这里只负责画）。
-   *
-   * 密度大时必须做取舍：83 个节点全画标签会糊成一片，所以按「同主题条数 → 命中次数」
-   * 排序后逐个放，**与已画标签重叠就跳过**——宁可少画几个，也不要叠字。
-   * 字号固定 11px（屏幕空间），缩得太小（<0.2）才完全关掉。
-   */
-  function drawLabels(pal) {
-    if (state.view.scale < 0.2) return;
-    const boxes = [];
-    // v0.3.3 标签降噪：83 个全画必然叠。只画「聚合点（count>1）」与
-    // 「度数 top 30」的节点；单条孤立记录选中时才在详情里看全名。
-    const deg = new Map();
-    for (const e of state.edges) {
-      deg.set(e.from, (deg.get(e.from) ?? 0) + 1);
-      deg.set(e.to, (deg.get(e.to) ?? 0) + 1);
-    }
-    const topByDeg = new Set(
-      state.nodes.slice().sort((a, b) => (deg.get(b.id) ?? 0) - (deg.get(a.id) ?? 0)).slice(0, 12).map((n) => n.id)
-    );
-    const cand = state.nodes
-      .filter((nd) => typeof nd.label === 'string' && nd.label !== '')
-      .filter((nd) => (nd.count ?? 1) > 1 || topByDeg.has(nd.id) || nd.id === state.selectedId)
-      .slice()
-      .sort((a, b) => (b.count ?? 1) - (a.count ?? 1) || (deg.get(b.id) ?? 0) - (deg.get(a.id) ?? 0));
-    ctx.font = '11px -apple-system, "PingFang SC", sans-serif';
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'top';
-    const MAX_W = 132; // ≈12 个汉字；再宽会和邻居叠上
-    for (const nd of cand) {
-      const [px, py] = toScreen(nd.x, nd.y);
-      const r = Math.max(2.2, nodeRadius(nd) * state.view.scale ** 0.6);
-      const badge = nd.count > 1 ? ` ×${nd.count}` : '';
-      let text = `${nd.label}${badge}`;
-      if (ctx.measureText(text).width > MAX_W) {
-        let s = nd.label;
-        while (s.length > 2 && ctx.measureText(`${s}…${badge}`).width > MAX_W) s = s.slice(0, -1);
-        text = `${s}…${badge}`;
-      }
-      const w = ctx.measureText(text).width;
-      const x = px - w / 2;
-      const y = py + r + 3;
-      const box = { x: x - 2, y: y - 1, w: w + 4, h: 14 };
-      const hit = boxes.some(
-        (b) => !(box.x + box.w < b.x || b.x + b.w < box.x || box.y + box.h < b.y || b.y + b.h < box.y)
-      );
-      if (hit) continue;
-      boxes.push(box);
-      ctx.lineWidth = 3;
-      ctx.strokeStyle = pal.bg === '#11141b' ? 'rgba(11,13,18,0.85)' : 'rgba(255,255,255,0.9)';
-      ctx.strokeText(text, x, y);
-      ctx.fillStyle = nd.status === 'superseded' ? pal.nodeDim : pal.nodeFg;
-      ctx.fillText(text, x, y);
-      if (boxes.length >= 240) break; // 上限：再多也没人看得清
-    }
-  }
-
-  function render() {
-    const pal = uiPalette();
-    state.frames++;
-    // 自动适配：用户未手动缩放/平移前，每 20 帧把布局缩放回画布内，
-    // 这样模拟过程中图不会缩成一小团，也不会因为持续外扩而跑出画布。
-    if (!state.userAdjusted && state.frames % 20 === 0) fitView();
-    const rect = canvas.getBoundingClientRect();
-    ctx.clearRect(0, 0, rect.width, rect.height);
-    if (loadError) {
-      ctx.fillStyle = '#ef4444';
-      ctx.font = '13px sans-serif';
-      ctx.fillText(`加载失败：${loadError.message}`, 12, 24);
-      return;
-    }
-    const types = activeEdgeTypes();
-    // 边：球体视角下按「3D 空间距离」筛选——长边横跨整个球是「找不着北」的元凶。
-    // 只画两端在球面上足够近的边；近的边按深度给透明度（远侧更淡），形成球体纵深。
-    const cand = [];
-    for (const e of state.edges) {
-      if (!types.has(e.type)) continue;
-      const a = nodeById.get(e.from);
-      const b = nodeById.get(e.to);
-      if (!a || !b) continue;
-      const dz = (a.z ?? 0) - (b.z ?? 0);
-      const dx = a.x - b.x;
-      const dy = a.y - b.y;
-      cand.push({ e, a, b, len: Math.sqrt(dx * dx + dy * dy + dz * dz) });
-    }
-    let limit = Infinity; // 距离阈值：中位数的 1.15 倍，去掉长线
-    if (cand.length > 0) {
-      const lens = cand.map((c) => c.len).sort((x, y) => x - y);
-      limit = lens[Math.floor(lens.length / 2)] * 1.15;
-    }
-    const drawEdges = cand.filter((c) => c.len <= limit).slice(0, 90);
-    for (const c of drawEdges) {
-      const { e, a, b } = c;
-      const st = edgeStyleFor(e.type);
-      const [x1, y1, p1] = toScreen(a.x, a.y, a.z ?? 0);
-      const [x2, y2, p2] = toScreen(b.x, b.y, b.z ?? 0);
-      // 深度雾化：远侧（persp 小）更淡，近侧更实（浅色底的下限见 graph-style）
-      const depth = (p1 + p2) / 2;
-      ctx.globalAlpha = edgeAlpha(depth, pal);
-      ctx.beginPath();
-      ctx.setLineDash(st.dash);
-      const w = Number.isFinite(e.weight) ? Math.max(0.75, Math.min(3, e.weight)) : 1;
-      ctx.lineWidth = (e.type === 'duplicate-of' ? w : st.width) + (pal.light ? 0.45 : 0); // 浅色底细线易消失
-      ctx.strokeStyle = edgeStrokeColor(e.type, pal);
-      ctx.moveTo(x1, y1);
-      ctx.lineTo(x2, y2);
-      ctx.stroke();
-      ctx.setLineDash([]);
-      ctx.globalAlpha = 1;
-    }
-    // 节点
-    for (const nd of state.nodes) {
-      const [px, py, persp] = toScreen(nd.x, nd.y, nd.z ?? 0);
-      // 缩小时圆点不能消失：半径按 scale^0.6 缩、留 2.2px 下限，再乘近大远小
-      const r = Math.max(2.2, nodeRadius(nd) * state.view.scale ** 0.6 * persp);
-      const color = kindColors[nd.kind] || KIND_COLORS.state;
-      const superseded = nd.status === 'superseded';
-      // 深度雾化：背面（persp<1）变暗，正面更亮 —— 球体纵深的关键线索
-      const alpha = nodeAlpha(persp, pal, superseded);
-      ctx.beginPath();
-      ctx.globalAlpha = alpha;
-      ctx.fillStyle = nodeFillColor(color, pal);
-      ctx.arc(px, py, r, 0, Math.PI * 2);
-      ctx.fill();
-      const stroke = nodeStroke(pal);
-      if (stroke && r >= 2.5) {
-        // 浅色底：近白描边把节点从连线里分离出来（深色底不需要，避免发灰）
-        ctx.strokeStyle = stroke.color;
-        ctx.lineWidth = stroke.width;
-        ctx.stroke();
-      }
-      if (superseded) {
-        // 斜线标记
-        ctx.save();
-        ctx.clip();
-        ctx.beginPath();
-        ctx.moveTo(px - r, py + r);
-        ctx.lineTo(px + r, py - r);
-        ctx.strokeStyle = 'rgba(15,23,42,0.8)';
-        ctx.lineWidth = 1.5;
-        ctx.stroke();
-        ctx.restore();
-      }
-      if (nd.status === 'disputed') {
-        ctx.beginPath();
-        ctx.arc(px, py, r + 2, 0, Math.PI * 2);
-        ctx.strokeStyle = '#ef4444';
-        ctx.lineWidth = 1.75;
-        ctx.stroke();
-      }
-      if (nd.id === state.selectedId) {
-        ctx.beginPath();
-        ctx.arc(px, py, r + 4, 0, Math.PI * 2);
-        ctx.strokeStyle = pal.light ? 'rgba(15,23,42,0.8)' : 'rgba(15,23,42,0.65)';
-        ctx.lineWidth = 1;
-        ctx.stroke();
-      }
-      ctx.globalAlpha = 1;
-      if (state.alpha < 0.02 && !state.fitted) { state.fitted = true; if (!state.userAdjusted) fitView(); }
-
-    }
-    drawLabels(pal);
-    // 采样提示（右上角常驻）
-    if (state.sampled.shown < state.sampled.total) {
-      const text = `已采样 ${state.sampled.shown} / ${state.sampled.total} 条`;
-      ctx.font = '12px sans-serif';
-      const w = ctx.measureText(text).width;
-      ctx.fillStyle = 'rgba(15,23,42,0.06)';
-      ctx.fillRect(rect.width - w - 22, 10, w + 14, 24);
-      ctx.fillStyle = pal.label;
-      ctx.fillText(text, rect.width - w - 15, 26);
-    }
-  }
-
-  /**
-   * 按画布尺寸与节点数给布局参数。
-   *
-   * - 节点少：弹簧更长，图形铺开，不缩在中间一小团
-   * - 节点多（>40）：按 sqrt(n/40) 放大斥力，否则 80+ 个点会挤成一坨
-   */
-  function layoutOpts(width, height) {
-    const base = Math.max(120, Math.min(320, Math.min(width, height) / 2.6));
-    const n = state.nodes.length;
-    const crowd = n > 40 ? Math.sqrt(n / 40) : 1;
-    // 3D 球半径：取画布短边的 0.42，节点数越多半径略收（密度守恒）
-    const sphere = (Math.min(width, height) * 0.46) / Math.sqrt(Math.max(1, crowd));
-    state.sphereRadius = sphere;
-    return {
-      // 球内布局：斥力适中（球壳会兜住，不会炸开），弹簧稍短让簇内聚团
-      springLength: base * 0.9,
-      repulsion: 4200 * (base / 120) ** 2 * 0.8,
-      centering: 0.02,
-      sphere,
-      shellKeep: 0.9,
-    };
-  }
-
-  /* ---------- 主循环 ---------- */
-  function frame() {
-    if (state.destroyed) return;
-    if (state.running && state.alpha >= ALPHA_MIN && state.nodes.length > 0) {
-      const width = canvas.getBoundingClientRect().width || 600;
-      const height = canvas.getBoundingClientRect().height || 600;
-      const out = layoutTick(state.nodes, state.edges, { alpha: state.alpha, width, height, ...layoutOpts(width, height) });
-      state.alpha = out.alpha;
-    }
-    render();
-    state.rafId = requestAnimationFrame(frame);
-  }
-
-  /* ---------- 交互 ---------- */
-  let drag = null; // { kind:'node'|'pan', node?, lastX,lastY, moved, downX, downY }
-  function localPos(ev) {
-    const rect = canvas.getBoundingClientRect();
-    return [ev.clientX - rect.left, ev.clientY - rect.top];
-  }
-  const onPointerDown = (ev) => {
-    const [sx, sy] = localPos(ev);
-    const nd = state.rotateMode ? null : hitNode(sx, sy); // 旋转模式：全画布拖拽都旋转
-    if (nd) {
-      nd.fx = nd.x;
-      nd.fy = nd.y;
-      drag = { kind: 'node', node: nd, moved: 0, downX: sx, downY: sy };
-    } else if (ev.shiftKey || ev.button === 1) {
-      // Shift 拖 / 中键拖 = 平移（旋转是默认手势，平移退到修饰键）
-      drag = { kind: 'pan', lastX: ev.clientX, lastY: ev.clientY, moved: 0, downX: sx, downY: sy };
-    } else {
-      // 默认：空白拖拽 = 手动旋转。之前这里误留成 pan，导致 rotY 永远不动（用户 m07849）
-      drag = { kind: 'rotate', lastX: ev.clientX, lastY: ev.clientY, moved: 0, downX: sx, downY: sy };
-      state.userAdjusted = true;
-    }
-    canvas.setPointerCapture?.(ev.pointerId);
-  };
-  const onPointerMove = (ev) => {
-    if (!drag) return;
-    const [sx, sy] = localPos(ev);
-    if (drag.kind === 'node') {
-      const [wx, wy] = toWorld(sx, sy);
-      drag.node.fx = wx;
-      drag.node.fy = wy;
-      drag.moved += Math.abs(ev.movementX || 0) + Math.abs(ev.movementY || 0);
-      state.alpha = Math.max(state.alpha, 0.3); // 拖拽唤醒
-    } else if (drag.kind === 'rotate') {
-      // 手动旋转：水平拖 = 环视（绕 Y），垂直拖 = 俯仰（绕 X，±0.9rad 防翻转过头）。
-      // 只改视角、不重跑模拟——用户要的是「转着看」，不是自动动画。
-      // NaN 护栏：某一帧缺 lastX/lastY 也不能把视角写脏（写脏会让整个投影变 NaN、画面卡死）
-      const dxr = ev.clientX - (Number.isFinite(drag.lastX) ? drag.lastX : ev.clientX);
-      const dyr = ev.clientY - (Number.isFinite(drag.lastY) ? drag.lastY : ev.clientY);
-      if (Number.isFinite(dxr)) state.view.rotY += dxr * 0.008;
-      if (Number.isFinite(dyr)) {
-        state.view.rotX = Math.max(-0.9, Math.min(0.9, (state.view.rotX ?? 0) + dyr * 0.006));
-      }
-      drag.moved += Math.abs(dxr) + Math.abs(dyr);
-      drag.lastX = ev.clientX;
-      drag.lastY = ev.clientY;
-    } else {
-      state.userAdjusted = true;
-      state.view.tx += ev.clientX - drag.lastX;
-      state.view.ty += ev.clientY - drag.lastY;
-      drag.moved += Math.abs(ev.clientX - drag.lastX) + Math.abs(ev.clientY - drag.lastY);
-      drag.lastX = ev.clientX;
-      drag.lastY = ev.clientY;
-    }
-  };
-  const onPointerUp = (ev) => {
-    if (!drag) return;
-    if (drag.kind === 'rotate' && drag.moved > 2) fitView(); // 旋转后重新贴合画布
-    if (drag.kind === 'node') {
-      const nd = drag.node;
-      const wasLocked = nd.__locked === true;
-      if (drag.moved < 4) {
-        // 单击：选中并渲染详情
-        state.selectedId = nd.id;
-        showDetail(nd);
-      }
-      // 拖时固定的 fx/fy：锁定节点保留，否则释放回模拟
-      if (!wasLocked) {
-        delete nd.fx;
-        delete nd.fy;
-      }
-      state.alpha = Math.max(state.alpha, 0.2);
-    } else if (drag.moved < 4) {
-      state.selectedId = null;
-      showDetail(null);
-    }
-    drag = null;
-    canvas.releasePointerCapture?.(ev.pointerId);
-  };
-  const onDblClick = (ev) => {
-    const [sx, sy] = localPos(ev);
-    const nd = hitNode(sx, sy);
-    if (!nd) return;
-    if (nd.__locked) {
-      delete nd.__locked;
-      delete nd.fx;
-      delete nd.fy;
-      nd.status = nd.__prevStatus ?? nd.status;
-      delete nd.__prevStatus;
-    } else {
-      nd.__locked = true;
-      nd.fx = nd.x;
-      nd.fy = nd.y;
-      nd.__prevStatus = nd.status;
-    }
-    state.alpha = Math.max(state.alpha, 0.2);
-  };
-  const onWheel = (ev) => {
-    ev.preventDefault();
-    const [sx, sy] = localPos(ev);
-    const old = state.view.scale;
-    const next = Math.min(MAX_SCALE, Math.max(MIN_SCALE, old * (ev.deltaY < 0 ? 1.1 : 1 / 1.1)));
-    // 以鼠标为锚：保持 (sx,sy) 对应的世界点不动
-    state.userAdjusted = true;
-    state.view.tx = sx - ((sx - state.view.tx) / old) * next;
-    state.view.ty = sy - ((sy - state.view.ty) / old) * next;
-    state.view.scale = next;
-  };
-  const onResize = () => { resizeCanvas(); render(); };
-
+  container.style.position = 'relative'; // 覆盖层定位基准
+  buildGraph();
   window.__sedimemGraphState = state; // 自动化验收用（只读快照，不参与业务）
-  canvas.addEventListener('pointerdown', onPointerDown);
-  canvas.addEventListener('pointermove', onPointerMove);
-  canvas.addEventListener('pointerup', onPointerUp);
-  canvas.addEventListener('pointercancel', onPointerUp);
-  canvas.addEventListener('dblclick', onDblClick);
-  canvas.addEventListener('wheel', onWheel, { passive: false });
-  window.addEventListener('resize', onResize);
-
   buildToolbar();
   showDetail(null);
-  // 同步热身：先跑 80 帧模拟再自适应缩放，保证首帧就是「铺满画布」的稳定布局
-  // （rAF 在后台标签页/无头浏览器里可能被节流，不能只依赖逐帧自适应）
-  if (state.nodes.length > 0) {
-    const rect0 = canvas.getBoundingClientRect();
-    for (let i = 0; i < 80; i++) {
-      const w0 = rect0.width || 600;
-      const h0 = rect0.height || 600;
-      const out = layoutTick(state.nodes, state.edges, {
-        alpha: state.alpha, width: w0, height: h0, ...layoutOpts(w0, h0),
-      });
-      state.alpha = out.alpha;
-    }
-    fitView();
-  }
+  state.rafId = requestAnimationFrame(tick);
 
-  state.rafId = requestAnimationFrame(frame);
+  try {
+    const data = await fetchData();
+    await loadKindColors();
+    applyData(data);
+    fitToGraph();
+  } catch (err) {
+    loadError = err;
+    showDetail(null);
+  }
 
   return {
     destroy() {
       state.destroyed = true;
       cancelAnimationFrame(state.rafId);
-      canvas.removeEventListener('pointerdown', onPointerDown);
-      canvas.removeEventListener('pointermove', onPointerMove);
-      canvas.removeEventListener('pointerup', onPointerUp);
-      canvas.removeEventListener('pointercancel', onPointerUp);
-      canvas.removeEventListener('dblclick', onDblClick);
-      canvas.removeEventListener('wheel', onWheel);
       window.removeEventListener('resize', onResize);
-      ctx && ctx.clearRect(0, 0, canvas.width, canvas.height);
+      if (fg && typeof fg._destructor === 'function') fg._destructor();
+      fg = null;
+      container.replaceChildren();
       if (detailEl) detailEl.textContent = '';
       if (toolbarEl) toolbarEl.replaceChildren();
     },
+    async reload() {
+      try {
+        const data = await fetchData();
+        loadError = null;
+        await loadKindColors();
+        applyData(data);
+        fitToGraph();
+      } catch (err) {
+        loadError = err;
+        showDetail(null);
+      }
+    },
+    focus(id) { focusNode(nodeById.get(id)); },
   };
 }
