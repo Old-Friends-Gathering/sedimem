@@ -6,7 +6,7 @@
 import { readFile } from 'node:fs/promises';
 import { systemClock } from '../core/clock.js';
 import {
-  SESSION_PREFIX, createSessionId, isSessionScope,
+  SESSION_PREFIX, isSessionScope,
   startSession, sessionStatus, sweepSessions,
   resolveParentScope, updateSessionRegistry,
 } from '../session/lifecycle.js';
