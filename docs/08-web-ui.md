@@ -1,7 +1,14 @@
-# 08 · v0.2 只读 Web UI（记忆观察台）
+# 08 · Web UI（记忆观察台）—— v0.6 现状
 
-> 本文件是 v0.2 Web UI 的**设计契约**：页面规格、只读 HTTP 接口、图谱语义、安全边界、门禁增项、分阶段交付。
-> 实现与本文件不一致时，以本文件为准；要改先改本文件并提 issue。
+> doc-kind: contract
+> doc-version: 0.6
+> verified-at: 2026-11-14
+> verified-against: versions/CURRENT（v0.6 / 0.6.2）
+
+> 本文件是 Web UI 的**设计契约**，描述 v0.6 的现状：页面规格、只读 HTTP 接口、图谱语义、
+> 安全边界、门禁增项。§1–§11 为 v0.2 定稿的核心契约（至今有效，实现与本文件不一致时以本文件为准，
+> 要改先改本文件并提 issue）；§12–§15 是 v0.1.3–v0.4.2 的增量，已并入正文不再是"增补段落"；
+> §16 是 v1.0 的**未实现规划**，勿据此实现。
 > 线框图见 `docs/ui-mockup.html`（自包含静态页，无需启动服务即可打开）。
 
 ---
@@ -213,7 +220,7 @@ async exportRecords({ since, until, status = 'active', kind, limit = 2000 } = {}
 > 8. **Q9 阈值落地**（S3）：零构建 + 单文件 ≤600 + 总量 ≤2500 真正实现；为此把 `ui/graph.js` 拆成 `ui/layout.js`（纯布局）+ `ui/graph.js`（渲染交互）（裁决 43）；`// q9-allow` 必须带理由（B6）。
 > 9. **契约登记**（S4）：`read-only.js` / `paths.js` / `mask.js` 的导出与私有耦合写入 `docs/02 §3.11`，Q5 覆盖率 98.3%。
 
-三页与 7 个端点按 §4–§7 实现（`versions/v0.3/src/web/{server,handlers,static}.js` + `versions/v0.3/ui/`，CLI 子命令 `memo serve`）。以下三处与本文设计不一致，均已冻结为 `docs/02` §3.10 裁决 35–38，冲突时以 02 为准：
+三页与 7 个端点按 §4–§7 实现（`versions/<CURRENT>/src/web/{server,handlers,static}.js` + `versions/<CURRENT>/ui/`，CLI 子命令 `memo serve`）。以下三处与本文设计不一致，均已冻结为 `docs/02` §3.10 裁决 35–38，冲突时以 02 为准：
 
 1. **图谱 same-entity 边改为时间链（裁决 35）**：§5.2 原描述「同一 subject 两两连边」在全连时是 O(n²) 且视觉上不可读（17 节点 136 条重叠边）。实现改为按 `createdAt` 升序只连相邻两条，表达同一实体的时间序列。
 2. **图谱节点标签做了防重叠跳过**：标签绘制前做包围盒碰撞检测，重叠时只画部分标签（缩放到 `scale ≥ 0.45` 且不重叠才画）。语义仍全部由服务端 label 承载（裁决 37），被跳过的标签点节点看详情兜底——这是绘制层的取舍，不是数据缺失。
@@ -300,3 +307,31 @@ v0.4 先补「可解释的检索」与「界面能搜」，语义道本身是可
 实现位置：`ui/palette.js` 的纯函数（`parseColor` / `contrastColor` / `fogAlphaFloor` / `nodeStroke`）+
 `ui/graph-style.js` 的取色函数；`ui/graph.js` 只负责绘制。单测：`tests/unit/palette-contrast.test.js`。
 真实截图：[`docs/shots/graph-light.png`](shots/graph-light.png)。
+
+## 16. v1.0 目标信息架构（未实现）
+
+> **计划中，勿据此实现。** 本节只描述目标，所有内容以
+> [`docs/plans/v1.0.0-refactor.md`](plans/v1.0.0-refactor.md) §12（记忆中心整体重做，W6–W8 波次）为准；
+> 该计划未落地前，§1–§15 仍是唯一契约。
+
+v1.0 把观察台从「只读三页 + 搜索」扩展为九页信息架构（`docs/plans/v1.0.0-refactor.md` §12.3）：
+
+| 页面 | 路由 | 状态来源 |
+|---|---|---|
+| 今日 / 图谱 / 搜索 / 卫生 | `#/today` `#/graph` `#/search` `#/hygiene` | 现有 API（§4–§5、§13–§14 不变） |
+| **会话** | `#/session` | v0.6 `memo session` 数据（八段 checkpoint、close/promote） |
+| **编辑** | `#/edit/:id` | W7 写 API；编辑 = 追加新版本（supersede），永不原地改 |
+| **导入** | `#/import` | W7 导入 API；五个导入器（agents-md / basic-memory / obsidian / mem0 / cline-memory-bank），dry-run 优先 |
+| **交接** | `#/handoffs` | v0.6 close 产物 `handoffs/<id>.md`，只渲染不编辑 |
+| 设置 | `#/settings` | policy 只读视图 + 成本护栏 + 分库管理 |
+
+配套四件事（细节见计划 §12.2 / §12.4 / §12.6）：
+
+- **vendor 政策**：`ui/vendor/` 只放静态资源，`VENDOR.md` 登记版本/上游/LICENSE/sha256，Q13 校验，禁 CDN；
+- **写模式安全**：默认 `--readonly`；开写需 `--write` + `MEMO_WRITE_TOKEN`，仅 loopback + Origin 校验 +
+  Bearer token + 乐观并发（409）+ `ui_edit` 审计事件；
+- **门禁增项**：Q13（vendor）、Q9 更新（总量 2500→3500）、I47–I50（UI smoke / edit-conflict / import-dryrun / session-ui）；
+- **导入器映射表**：每源的解析规则、kind 映射与已知坑，见计划 §12.5。
+
+落地时本文件将按计划 §12.6 重写为「信息架构 + 页面契约 + 写模式安全模型 + 导入器映射表」；
+在那之前，上面这些只做评审参照，不作为实现依据。

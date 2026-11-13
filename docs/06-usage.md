@@ -1,5 +1,12 @@
 # 06 · 使用与运维（memo）
 
+> doc-kind: manual
+> doc-version: 0.6
+> verified-at: 2026-11-14
+> verified-against: versions/CURRENT（v0.6 / 0.6.2）
+
+> 当前版本 = **v0.6**（由仓库根的 `versions/CURRENT` 指向）。下文所有命令都从仓库根
+> 用 `cd versions/$(cat versions/CURRENT)` 进入当前版本目录后执行，**不写死任何 v0.x 路径**。
 > 安装位置与本次落地的真实路径见 §1；日常用法见 §2；每天/每周做什么见 §3；换机器怎么装见 §4；出问题查 §5。
 
 ## 1. 本机已就位（2026-11-02 实测）
@@ -56,14 +63,14 @@ memory_scope({action:'use', path:'/abs/path/to/project'})  # 切到项目分库�
 - **每次会话结束前**（Agent 自觉）：`memory_dedupe_scan` → 逐簇判定 → `memory_curate(apply)`。不确定就 `keep_both` 并在 `note` 里写理由——系统宁可并存，也不静默删。
 - **每天一次**（cron，不占会话时间）：
   ```cron
-  0 3 * * * cd /abs/path/to/memo/versions/v0.3 && /abs/path/to/node src/cli/nightly.js >> ~/.memo/nightly.log 2>&1
+  0 3 * * * cd /abs/path/to/repo && cd versions/$(cat versions/CURRENT) && /abs/path/to/node src/cli/nightly.js >> ~/.memo/nightly.log 2>&1
   ```
   nightly 做：TTL 过期、配额淘汰（墓碑打 `quota` tag）、hits 落盘、brief 重建写 `~/.memo/brief/<scope>.md`、metrics 快照，并打印去重候选簇摘要（**只报告不自动裁决**）。
 - **每周一眼**：`memory_stats` 的 `dupRatio`/`conflictRate` 上升 → 说明有人在重复写或事实在漂移，去看 `brief` 与 `dedupe_scan`。
 - **命令行等价物**（不想开 Agent 时）：
   ```bash
   NODE=${MEMO_NODE:-node}
-  cd sedimem/versions/v0.3
+  cd "$(git rev-parse --show-toplevel 2>/dev/null || echo .)" && cd versions/$(cat versions/CURRENT)
   $NODE src/cli/memo.js brief
   $NODE src/cli/memo.js dedupe scan          # 可加 --threshold 0.45 --dice 0.15 --json
   $NODE src/cli/memo.js doctor
@@ -93,7 +100,8 @@ memory_scope({action:'use', path:'/abs/path/to/project'})  # 切到项目分库�
   ```vbs
   ' start-observer.vbs —— 由 wscript.exe 调起，窗口不出现
   Set sh = CreateObject("WScript.Shell")
-  sh.Run """C:\Program Files\nodejs\node.exe"" ""<repo>\versions\v0.3\src\cli\memo.js"" serve --port 7788", 0, False
+  ' <ver> = 读 <repo>\versions\CURRENT 得到的当前版本目录（当前为 v0.6）；换版本时重生成这个 vbs 即可
+  sh.Run """C:\Program Files\nodejs\node.exe"" ""<repo>\versions\<ver>\src\cli\memo.js"" serve --port 7788", 0, False
   ```
 
   ```powershell
@@ -136,7 +144,7 @@ memory_scope({action:'use', path:'/abs/path/to/project'})  # 切到项目分库�
 ### 7.1 启动
 
 ```bash
-cd sedimem/versions/v0.3
+cd versions/$(cat versions/CURRENT)
 node src/cli/memo.js serve --port 7788     # 默认 127.0.0.1:7788；--no-ui 只提供 API
 ```
 
@@ -163,7 +171,7 @@ node src/cli/memo.js serve --port 7788     # 默认 127.0.0.1:7788；--no-ui 只
 | 现象 | 原因 / 处理 |
 |---|---|
 | 端口占用报错 | 换 `--port`；`lsof -i :7788` 查占用者。服务不自动递增端口 |
-| 打开是 404 / 提示 ui 缺失 | `versions/v0.3/ui/` 目录不完整（拷贝/打包时漏了）；补齐目录后刷新；`--no-ui` 模式下本来就不出页面，只给 `/api/*` |
+| 打开是 404 / 提示 ui 缺失 | 当前版本目录的 `ui/` 不完整（拷贝/打包时漏了）；补齐目录后刷新；`--no-ui` 模式下本来就不出页面，只给 `/api/*` |
 | 页面数字和预期对不上 | 先看页眉 scope：**页面显示的是 `memo serve` 启动进程按 cwd 解析出的那个分库**（与 CLI 同规则）。scope 不对就到目标项目目录重新 `serve`，或设 `MEMO_SCOPE` 后再启动 |
 | 图谱某些节点没标签 | 标签防重叠跳过（见 `docs/08` §12 偏差 b）；点节点看详情即可 |
 
@@ -172,7 +180,7 @@ node src/cli/memo.js serve --port 7788     # 默认 127.0.0.1:7788；--no-ui 只
 默认内存倒排索引（BM25，纯 JS）。数据量大时可以切到 SQLite FTS5 后端，行为语义不变（同一套
 IndexPort 契约：同一 `tokenize()` 切词、同一排序与过滤约定）。
 
-**切换**：改 `versions/v0.3/config/policy.json`：
+**切换**：改当前版本目录的 `config/policy.json`（即 `versions/$(cat versions/CURRENT)/config/policy.json`）：
 
 ```json
 { "index": { "backend": "sqlite" } }
@@ -197,7 +205,7 @@ IndexPort 契约：同一 `tokenize()` 切词、同一排序与过滤约定）�
 把「候选 → 裁决 → 落盘」固定成三步，Agent 不用手工拼 JSON：
 
 ```bash
-cd sedimem/versions/v0.3
+cd versions/$(cat versions/CURRENT)
 node src/cli/memo.js curate prompt            # 1. 生成裁决任务包
 #    → $MEMO_HOME/curate/<batchId>.md（人读：裁决表 + 全文对照）
 #    → 同名 .json（机读：Agent 只回填这个，避免从 Markdown 反解析）
@@ -220,7 +228,7 @@ node src/cli/memo.js curate status            # 看各批次进度（未开始/�
   不靠额外状态文件。
 - 任务包文件被删 → apply 报「未知批次」，重新 `curate prompt` 即可。
 - MCP 侧等价物仍是 `memory_dedupe_scan` + `memory_curate(apply)`（同一份 `service.dedupeScan()` /
-  `service.curateApply()` 数据与语义，见 `docs/10` §5）。
+  `service.curateApply()` 数据与语义，见 `docs/02` 附录 B）。
 
 ## 10. 自动裁决重复记忆（v0.2.1 起）
 
@@ -251,10 +259,25 @@ memo compact --grace 0                    # 立刻删（小心：不可回查）
 ## 12. 常驻服务（macOS launchd）：观察台 + 夜间整合
 
 两件事适合常驻：**只读观察台**（随时打开看）和 **夜间整合**（每天跑一次）。都走同一个入口脚本
-`scripts/sedimem-run.sh`——它读 `versions/CURRENT` 决定跑哪个版本目录，所以换大版本时 plist 不用动。
+`scripts/sedimem-run.sh`——它读 `versions/CURRENT` 决定跑哪个版本目录。
 
-> 为什么非要这个脚本：有台机器的 crontab 里写死了 `versions/v0.1/src/cli/nightly.js`，
-> 版本目录切到 v0.2 之后，**夜间整合一直在跑冻结代码**，仓库里的门禁扫不到，只有查 crontab 才发现。
+### 12.0 换版本只改 versions/CURRENT，launchd plist 与 crontab 都不动
+
+`scripts/sedimem-run.sh` 在每次执行时读仓库根的 `versions/CURRENT`（当前内容 = `v0.6`），
+再进对应版本目录跑。所以升级只是：
+
+```bash
+echo "v0.7" > versions/CURRENT   # 假设 v0.7 已就位且测试全绿
+launchctl kickstart -k gui/$(id -u)/live.sedimem.observer   # 让常驻观察台立刻加载新版本
+```
+
+- plist 里只有 `scripts/sedimem-run.sh` 一个入口，**不出现任何 `versions/vX.Y/` 路径**；
+- crontab（若还在用）按 §3 的 `cd versions/$(cat versions/CURRENT)` 写法，同样不含版本号；
+- 回滚 = 把 `versions/CURRENT` 改回旧版本号并 kickstart，一条命令。
+
+> 为什么非要这个脚本：曾有机器的 crontab 里写死了旧版本的 `src/cli/nightly.js` 绝对路径，
+> 版本目录切换之后，**夜间整合一直在跑冻结代码**，仓库里的门禁扫不到，只有查 crontab 才发现。
+> 结论：定时与常驻配置里一律不落版本号，版本由 `versions/CURRENT` 单点决定。
 
 ### 12.1 安装
 
@@ -265,7 +288,7 @@ cd <仓库根>
 sed -e "s|__REPO_ROOT__|$PWD|" \
     -e "s|__MEMO_HOME__|$HOME/.memo|" \
     -e "s|__NODE__|$(command -v node)|" \
-    versions/v0.3/configs/launchd/live.sedimem.observer.plist > /tmp/observer.plist
+    versions/$(cat versions/CURRENT)/configs/launchd/live.sedimem.observer.plist > /tmp/observer.plist
 plutil -lint /tmp/observer.plist
 mv /tmp/observer.plist ~/Library/LaunchAgents/live.sedimem.observer.plist
 launchctl load ~/Library/LaunchAgents/live.sedimem.observer.plist
@@ -274,7 +297,7 @@ launchctl load ~/Library/LaunchAgents/live.sedimem.observer.plist
 sed -e "s|__REPO_ROOT__|$PWD|" \
     -e "s|__MEMO_HOME__|$HOME/.memo|" \
     -e "s|__NODE__|$(command -v node)|" \
-    versions/v0.3/configs/launchd/live.sedimem.nightly.plist > /tmp/nightly.plist
+    versions/$(cat versions/CURRENT)/configs/launchd/live.sedimem.nightly.plist > /tmp/nightly.plist
 plutil -lint /tmp/nightly.plist
 mv /tmp/nightly.plist ~/Library/LaunchAgents/live.sedimem.nightly.plist
 launchctl load ~/Library/LaunchAgents/live.sedimem.nightly.plist
@@ -404,7 +427,7 @@ memo retitle --from-file titles.json   # 用 Agent 产出的标题：[{"id":"01M
 要开语义道，给一个 OpenAI 兼容的 embedding 端点：
 
 ```json
-// versions/v0.5/config/policy.json 的 search 段
+// 当前版本目录的 config/policy.json 的 search 段
 "search": {
   "embedder": {
     "kind": "http",
@@ -484,7 +507,7 @@ node eval/bench-scale.mjs --n 100000 --backend sqlite
 ### 17.2 四个命令的真实输出
 
 ```bash
-cd sedimem/versions/v0.6
+cd versions/$(cat versions/CURRENT)
 
 memo session start --title "v0.6 文档收尾"
 # session 已创建: session:20261113-1200-abcd
@@ -567,3 +590,21 @@ close 做四件事，顺序固定：
 | 往 session 库写 `fact` 被拒（`E_SCRATCH_KIND_FORBIDDEN`） | 这是故意的：临时库里的 fact 不会被晋升、只会随库丢弃，等于写了就丢。长期事实写主库 |
 | close 后主库搜不到晋升的记录 | 多半是检索进程还挂着旧索引缓存；重新 search / 重启 MCP server 即可，晋升本身有事件可查（`from-session:<id>` 标签） |
 | 忘了 close 的僵尸会话 | `memo session sweep --older-than 14d`：只报告候选（scope / 开始时间 / 标题），**不删**；确认后再手动 close |
+
+## 18. v0.4–v0.6 新增命令速查（当前版本目录下执行）
+
+先 `cd versions/$(cat versions/CURRENT)`（当前 = v0.6）再复制以下命令：
+
+| 命令 | 作用 | 详见 |
+|---|---|---|
+| `memo backfill-vectors [--scope s] [--dry-run] [--force]` | 给已存在记录回填语义向量（开语义道后必须先跑一次） | §16.1 |
+| `memo capture scan --file notes.md --scope s` | 从笔记抽写入候选（确定性启发式，零 LLM），只进 inbox 不进真相层 | §16.3 |
+| `memo capture list --status pending` / `accept --ids …` / `reject --ids … --note …` | 审阅候选队列；accept 走完整写入门禁 | §16.3 |
+| `memo conflicts [--json]` | 按 slot 列出分歧记录（含候选对与相似度） | §16.4 |
+| `memo conflicts resolve --slot <slot> --winner <recordId>` | 分歧裁决（走 `curateApply`，非破坏、幂等） | §16.4 |
+| `memo session start --title "…"` | 开会话临时库（`session:<id>` scope；禁写 fact） | §17.2 |
+| `memo session checkpoint --scope session:<id> --file cp.json`（或 `--from-summary dsh-summary.json`） | 追加 8 段 checkpoint；可接 DSH 压缩摘要 | §17.3–17.4 |
+| `memo session status --scope session:<id>` | 看临时库状态（open/closed、checkpoint 数、fact 数） | §17.2 |
+| `memo session close --scope session:<id>` | 晋升 decision/gotcha 回主库、写交接文档、其余 tombstone（幂等） | §17.5 |
+| `memo session sweep --older-than 14d` | 只报告忘了 close 的僵尸会话，不删 | §17.7 |
+| `memo derive …` | **v1.0 规划，尚未实现**（LLM 派生 title/summary，见 `docs/plans/v1.0.0-refactor.md`） | 勿据此使用 |

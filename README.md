@@ -2,6 +2,12 @@
 
 # sedimem
 
+> doc-kind: manual
+> doc-version: 0.6
+> verified-at: 2026-11-14
+> verified-against: versions/CURRENT（v0.6 / 0.6.2）
+
+
 **记忆不是攒得越多越好 —— 它该像地层一样沉积、可回溯、会收敛。**
 
 跨会话、跨客户端的本地记忆层：DSH / Codex CLI / Claude Code 三端共读一份真相层，
@@ -14,7 +20,7 @@
 [![license: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 ![node](https://img.shields.io/badge/node-%E2%89%A522-3c873a)
 ![deps](https://img.shields.io/badge/runtime%20deps-0-brightgreen)
-![tests](https://img.shields.io/badge/tests-288-brightgreen)
+![tests](https://img.shields.io/badge/tests-471-brightgreen)
 ![eval](https://img.shields.io/badge/injection%20eval-I1%E2%80%93I24-blueviolet)
 
 **[🌐 图文版项目站](https://old-friends-gathering.github.io/sedimem/)** · [快速开始](#快速开始) · [架构](#架构) · [三端接入](#三端接入dsh--codex--claude) · [部署](#部署常驻观察台与-nightly) · [设计决策](#设计决策为什么这么做) · [文档](#文档地图)
@@ -106,8 +112,8 @@ git clone https://github.com/Old-Friends-Gathering/sedimem && cd sedimem
 NODE=$(command -v node)
 V=versions/$(cat versions/CURRENT)          # 当前版本目录由指针决定
 
-$NODE --test "$V/tests/**/*.test.js"        # 288 个测试（单元 + 注入式回归）
-$NODE $V/eval/run.js                         # I1–I24 注入式评测，结果写 $V/eval/results/
+$NODE --test "$V/tests/**/*.test.js"        # 471 个测试（单元 + 注入式回归）
+$NODE $V/eval/run.js                         # I1–I40 注入式评测，结果写 $V/eval/results/
 $NODE $V/src/cli/memo.js --help              # CLI 入口
 $NODE $V/src/mcp/server.js                   # MCP server（stdio）
 ```
@@ -127,9 +133,9 @@ MCP 是唯一的接缝。三端各自配一条 stdio server，指向**同一个*
 
 | 客户端 | 配在哪 | 模板 |
 |---|---|---|
-| DSH | `~/.dsh/profiles/<profile>/cordis.patch.yml` 的 `- insert:` 条目 | [`configs/dsh-cordis.patch.yml`](versions/v0.3/configs/dsh-cordis.patch.yml) |
-| Codex CLI | `~/.codex/config.toml` 的 `[mcp_servers.memo]` | [`configs/codex-config.toml`](versions/v0.3/configs/codex-config.toml) |
-| Claude Code | `claude mcp add --scope user memo …` | [`configs/claude-mcp.sh`](versions/v0.3/configs/claude-mcp.sh) |
+| DSH | `~/.dsh/profiles/<profile>/cordis.patch.yml` 的 `- insert:` 条目 | [`configs/dsh-cordis.patch.yml`](versions/v0.6/configs/dsh-cordis.patch.yml) |
+| Codex CLI | `~/.codex/config.toml` 的 `[mcp_servers.memo]` | [`configs/codex-config.toml`](versions/v0.6/configs/codex-config.toml) |
+| Claude Code | `claude mcp add --scope user memo …` | [`configs/claude-mcp.sh`](versions/v0.6/configs/claude-mcp.sh) |
 
 一键自检（写盐值 → 另一个进程召回 → 用召回值作答）：
 
@@ -150,7 +156,7 @@ $NODE $V/src/cli/memo.js serve --port 7788
 $NODE $V/src/cli/nightly.js
 ```
 
-macOS 上建议用 launchd 常驻（模板见 [`configs/launchd/`](versions/v0.3/configs/launchd/)），
+macOS 上建议用 launchd 常驻（模板见 [`configs/launchd/`](versions/v0.6/configs/launchd/)），
 入口统一走 [`scripts/sedimem-run.sh`](scripts/sedimem-run.sh) —— 它读 `versions/CURRENT`，
 所以**换大版本只改指针，plist 与 crontab 都不用碰**：
 
@@ -225,8 +231,8 @@ launchctl kickstart -k gui/$(id -u)/live.sedimem.observer   # 改完代码热加
 | 检查 | 内容 |
 |---|---|
 | `test (22)` / `test (24)` | Node 22/24 上跑全部测试，0 失败 |
-| `eval (I1–I36)` | 注入式回归：重复/冲突/过时/删除/投毒/并发/分库/脱敏/注入预算… |
-| `quality` | 零依赖、源码规模、测试清单、评测对齐、**契约覆盖率 ≥ 90%**（当前 97.6%）、文档链接、版本自包含、编码卫生 |
+| `eval (I1–I40)` | 注入式回归：重复/冲突/过时/删除/投毒/并发/分库/脱敏/注入预算… |
+| `quality` | 零依赖、源码规模、测试清单、评测对齐、**契约覆盖率 ≥ 90%**（当前 93.6%）、文档链接、版本自包含、编码卫生 |
 | `security` | 个人路径、凭据、内部域名、配置可移植、`.gitignore`、许可证、大文件、历史面 |
 | `CodeQL` / `codeql` | 静态分析（含 `security-and-quality` 查询集） |
 | `windows-smoke` | 真 `windows-latest` 上验跨平台文件名与 CLI 路径 |
@@ -269,7 +275,7 @@ node tools/pages-verify.mjs --attempts 1   # 可选：立刻看一眼线上是�
 | 三端落位、日常操作、排障 | [`docs/06-usage.md`](docs/06-usage.md) |
 | 门禁指标与阈值 | [`docs/07-quality-and-security.md`](docs/07-quality-and-security.md) |
 | 观察台三页规格 | [`docs/08-web-ui.md`](docs/08-web-ui.md) |
-| SQLite 索引 / curate 任务包 | [`docs/09`](docs/09-sqlite-index.md) · [`docs/10`](docs/10-curate-auto.md) |
+| SQLite 索引 / curate 任务包（历史契约） | [`docs/02` 附录 A / 附录 B](docs/02-data-model-and-contract.md) |
 | 为什么自建（8 个开源系统横评） | [`docs/research/`](docs/research/README.md) |
 
 ## 版本

@@ -17,8 +17,8 @@
 | docs/06-usage.md | v0.3 为主，尾部补丁到 v0.6 | L59/66/139/166/175/200 操作路径全部 `versions/v0.3`（cron、nightly、policy.json）；L268/277 launchd 模板指 v0.3；仅 L407（v0.5 policy）、L487/517（v0.6）是新的——同一篇文档三种版本路径并存 | 高 |
 | docs/07-quality-and-security.md | 正文 v0.6，头部 v0.3 时代 | L9–11「质量 8 项 / 安全 8 项 / 覆盖率 3 项」→ 实跑 `tools/quality-check.mjs` 11/11、`security-check.mjs` 9/9（正文 L59/L75 自己也写 11/9，自相矛盾）；L12「cd versions/v0.3 … 行为（I1–I12）」→ 应为 v0.6 / I1–I40；L152 基线「447 tests」→ 现实测 471（基线标注 2026-11-13/v0.6.0，过期 3 天）；L179 分支保护快照 `eval (I1–I23)`（有日期标注，属考古） | 高（头部命令行会直接误导） |
 | docs/08-web-ui.md | v0.2 契约 + §14–15 v0.4 增补 | 头部自称「v0.2 设计契约」；L216 实现位置写 `versions/v0.3/src/web + versions/v0.3/ui` → 现行实现在 versions/v0.6；§14 搜索页、§15 浅色（v0.4.2）为后补，版本地层靠节标题辨认 | 中 |
-| docs/09-sqlite-index.md | v0.2.1（历史） | 全文为 issue #20 交付记录，实现已稳定在 src/index/sqlite-index.js；无版本标注头部 | 低（历史型） |
-| docs/10-curate-auto.md | v0.2.1（历史） | 同上，issue #21 交付记录 | 低（历史型） |
+| docs/09（SQLite 索引，已删）| v0.2.1（历史） | 全文为 issue #20 交付记录，实现已稳定在 src/index/sqlite-index.js；无版本标注头部 | 低（历史型）。**已处理（2026-11-14）**：文件已删除，要点归档进 `docs/02` 附录 A |
+| docs/10（curate auto，已删）| v0.2.1（历史） | 同上，issue #21 交付记录 | 低（历史型）。**已处理（2026-11-14）**：文件已删除，要点归档进 `docs/02` 附录 B |
 | docs/plans/ | v0.2–v0.7 | 计划文档含已完成的 v0.2–v0.6 与未做的 v0.7；v0.7-ui-and-ecosystem.md 是否仍有效未验证 | 低 |
 | versions/CURRENT | — | 内容 `v0.6` 是目录指针，符合 03 §3 规则（X.Y 换目录）；非漂移，列此备查 | — |
 

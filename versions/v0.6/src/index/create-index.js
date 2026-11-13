@@ -1,4 +1,4 @@
-// index/create-index.js — 索引后端构造点（契约：docs/09-sqlite-index.md §5）
+// index/create-index.js — 索引后端构造点（契约：docs/02 附录 A）
 // service.js 只调 createIndex({...})，IndexPort 的可插拔性验证点：注入只发生在这里。
 // backend=memory（默认）与 v0.1.3 行为完全一致；sqlite 在 node:sqlite / FTS5
 // 不可用时启动即抛 E_INDEX_UNAVAILABLE（不允许静默降级回 memory）。

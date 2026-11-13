@@ -1,5 +1,11 @@
 # 05 · 研发流程：文档先行 → TDD → 多 Agent 审核 → 门禁
 
+> doc-kind: manual
+> doc-version: 0.6
+> verified-at: 2026-11-14
+> verified-against: versions/CURRENT（v0.6 / 0.6.2）
+
+
 ## 1. 角色
 
 | 角色 | 谁 | 职责 | 写权限（互不重叠） |

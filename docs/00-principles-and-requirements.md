@@ -1,5 +1,11 @@
 # 00 · 原则与需求
 
+> doc-kind: contract
+> doc-version: 0.6
+> verified-at: 2026-11-14
+> verified-against: versions/CURRENT（v0.6 / 0.6.2）
+
+
 ## 1. 问题
 
 现有记忆系统（claude-mem / mem0 / dsh-memory / CLAUDE.md 约定）把「记忆」当成**检索问题**，用更大上下文、更强 embedding 去提高召回；但用户实际感受到的痛是**治理问题**：冗余、重复、互相矛盾、越用越脏。BEAM（ICLR 2026, arXiv:2510.27246）也确认：所有记忆系统最弱的是矛盾消解，其次时序推理与知识更新。
