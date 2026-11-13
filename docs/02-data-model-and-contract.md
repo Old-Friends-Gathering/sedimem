@@ -931,3 +931,33 @@ v1.0 是重构版本，**行为不改，只改结构与文档**。以下五条�
 
 **为什么 session 生命周期不自己 new service**：`api/write-path → session/lifecycle → api/service` 会成环。`startSession()` 改为接收 `serviceFactory`（CLI / MCP 各自注入），`src/session/**` 对 `api/service.js` 零依赖——这条由裁决 81 的第四条守住。
 
+## §3.19 v1.0 LLM 派生层契约（裁决 83–88）与导出登记
+
+### 裁决
+
+- **83 派生层是投影，不是真相**：LLM 生成内容只落 `$MEMO_HOME/derived/<scopeKey>.jsonl`；`items/` 在派生前后必须逐字节相同（I41 断言）。
+- **84 写路径绝不同步调 LLM**：写入只 append `derive-queue/<scopeKey>.jsonl`；排空由三顺位 drain 者负责（`memo derive` / MCP 空闲 / nightly），失败只降级不影响写入。
+- **85 派生输出不得携带真相字段**：`kind/text/value/status/validTo/validFrom/id` 出现即判 `deriveStatus:'failed'`（I44）；`kindHint` 仅审计，不一致记 `kindMismatch` 但不改记录。
+- **86 幂等与成本**：幂等键 `(id, validFrom, promptVersion)`；单次调用受 `policy.llm.purposes[purpose]` 输入/输出 token 上限约束；跨进程预算与缓存在 `$MEMO_HOME/llm/{budget.json,cache.jsonl}` 落盘共享（cost 审核 C2）。
+- **87 隐私默认值**：`policy.llm.provider` 缺省 `none`、`egress` 缺省 `local-only`；`egress:'local-only'` 且 provider 非 none 在构造期抛 `E_LLM_PRIVACY_CONFLICT`。
+- **88 向后兼容**：v1.0 新增事件 op（如 `derive`）与目录对旧 reader 只应是未知数据；未知 op / 坏行必须跳过而不是崩溃（I46）。
+
+### 第十五·二轮导出登记（v1.0 W3）
+
+| 模块 | 导出 | 说明 |
+|---|---|---|
+| `src/llm/port.js` | `PURPOSES` `createLlmPort` | LLM 端口（四用途 token 上限、openai-compatible 调用、永不抛） |
+| `src/llm/budget.js` | `readBudget` `isBlocked` `chargeBudget` | 跨进程日预算（CNY，跨日重置） |
+| `src/llm/cache.js` | `cacheKey` `readCache` `writeCache` | 结果缓存（append-only + compact） |
+| `src/llm/derive.js` | `DERIVE_PROMPT_VERSION` `buildDerivePrompt` `applyDerivation` `deriveFingerprint` | 派生提示与输出守卫 |
+| `src/llm/derived-store.js` | `DERIVE_STATUSES` `derivedFilePath` `loadDerived` `appendDerived` `rebuildDerived` | 派生 sidecar（容错读、原子重建） |
+| `src/llm/outbox.js` | `MAX_ATTEMPTS` `enqueueDerive` `claimBatch` `completeItem` `deriveQueueStats` `queueStats` | 派生队列（幂等/重试/死信） |
+| `src/llm/lock.js` | `withPathLock` `atomicWriteFile` | llm 层自带锁与原子写（不依赖 storage） |
+| `src/cli/derive.js` | `deriveCli` | `memo derive --drain/--rebuild` |
+| `src/cli/nightly.js` | `hysteresisState` `tokenFootprint` | 数学轨道：滞回状态、注入足迹 |
+| `src/core/record.js` | `MAX_VALUE` `effectiveWriteCaps` | 写侧上限的工具函数（policy 覆盖用） |
+
+### 服务层新增（MemoryService）
+
+`derivedFor(id, validFrom)`、`drainDerive({limit})`、`enqueueDeriveFor(record)`、`rebuildDerived()`；构造参数新增 `llmPort`（测试可注入假端口）。
+

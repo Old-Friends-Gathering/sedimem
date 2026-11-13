@@ -1,0 +1,9 @@
+{
+  "id": "I41",
+  "name": "LLM 派生落 sidecar",
+  "expects": [
+    "派生写 derived/ 且真相层 sha256 不变",
+    "brief 使用派生 title",
+    "派生失败回落规则字段"
+  ]
+}

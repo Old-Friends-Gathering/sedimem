@@ -30,7 +30,7 @@ export const THRESHOLDS = {
   // v0.6 调高到 13000：会话临时库新增 src/session/*（lifecycle 190 + checkpoint 150 +
   // handoff 110 ≈ 450 行）+ cli/session 130 行 + core/record 的契约代码 ~60 行。
   // 单文件 900 硬线**不动**：放宽总量只允许「多几个职责单一的小模块」。
-  maxTotalSrcLines: 13000,
+  maxTotalSrcLines: 15000,
   /** 单元测试文件数下限 */
   minTestFiles: 8,
   /** 契约文档对 src 导出名的覆盖率（%）；内部工具函数在 contract-exempt.json 里登记豁免 */
@@ -512,6 +512,73 @@ async function q11WriteAndSessionContract() {
 }
 
 
+// ── Q15 LLM 派生层契约（v1.0）───────────────────────────────
+// 起因：v1.0 引入 LLM 总结层（派生 title/summary）。它必须永远是**可丢弃的投影**：
+//   - llm 层不得 import storage/**（否则派生读取会绕开真相层的锁与增量水位）；
+//   - llm 层源码不得出现 items/ 真相层写入（派生写真相层 = I44「字节不变」直接失效）；
+//   - policy.llm 必须存在且 egress 有明确取值（隐私默认值不能被删）；
+//   - 派生提示版本必须是常量（幂等键 (id, validFrom, promptVersion) 依赖它）。
+async function q15LlmDeriveContract() {
+  const problems = [];
+  const versionDir = currentVersionDir();
+
+  // 1) policy.llm / derive 段存在且关键字段有值
+  const policyPath = path.join(versionDir, 'config', 'policy.json');
+  const policy = JSON.parse(await fsp.readFile(policyPath, 'utf8'));
+  if (!policy.llm || typeof policy.llm !== 'object') {
+    problems.push(`${rel(policyPath)}: 缺 llm 段（LLM 端口必须可配置，默认 provider=none）`);
+  } else {
+    if (typeof policy.llm.provider !== 'string') problems.push(`${rel(policyPath)}: llm.provider 必须是字符串`);
+    if (!['local-only', 'allowed'].includes(policy.llm.egress)) problems.push(`${rel(policyPath)}: llm.egress 必须是 local-only 或 allowed`);
+    if (!Number.isFinite(policy.llm.dailyLimitCny)) problems.push(`${rel(policyPath)}: llm.dailyLimitCny 必须是数字（成本护栏）`);
+  }
+  if (!policy.derive || typeof policy.derive.promptVersion !== 'string') {
+    problems.push(`${rel(policyPath)}: 缺 derive.promptVersion（幂等键依赖提示版本）`);
+  }
+
+  // 2) llm 层不得依赖 storage 层（Q15 核心：派生层与真相层解耦）
+  const llmDir = path.join(versionDir, 'src', 'llm');
+  let files = [];
+  try {
+    files = (await fsp.readdir(llmDir)).filter((f) => f.endsWith('.js'));
+  } catch {
+    problems.push(`${rel(llmDir)}: 不存在（v1.0 LLM 层缺失）`);
+  }
+  for (const f of files) {
+    const p = path.join(llmDir, f);
+    const src = await fsp.readFile(p, 'utf8');
+    if (/from\s+['"][^'"]*\/storage\//.test(src) || /import\(\s*['"][^'"]*\/storage\//.test(src)) {
+      problems.push(`${rel(p)}: llm 层不得 import storage/**（派生层必须与真相层解耦）`);
+    }
+    // 真相层文件名只能在注释里被提及，不能出现在可执行代码里
+    const codeOnly = src.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
+    if (/itemsFileName\s*\(|['"]items['"]\s*,/.test(codeOnly)) {
+      problems.push(`${rel(p)}: llm 层不得写 items/ 真相层（I44 要求派生前后真相层字节不变）`);
+    }
+  }
+
+  // 3) 派生提示版本是导出常量
+  const derivePath = path.join(llmDir, 'derive.js');
+  try {
+    const src = await fsp.readFile(derivePath, 'utf8');
+    if (!/export\s+const\s+DERIVE_PROMPT_VERSION/.test(src)) {
+      problems.push(`${rel(derivePath)}: 必须导出 DERIVE_PROMPT_VERSION 常量`);
+    }
+  } catch {
+    problems.push(`${rel(derivePath)}: 不存在（派生逻辑缺失）`);
+  }
+
+  // 4) 派生层必须有注入式评测兜底
+  const evalSrc = await fsp.readFile(path.join(versionDir, 'eval', 'run.js'), 'utf8');
+  for (const id of ['I41', 'I42', 'I43', 'I44', 'I45', 'I46']) {
+    if (!evalSrc.includes(`['${id}'`)) {
+      problems.push(`${rel(path.join(versionDir, 'eval', 'run.js'))}: 缺少 ${id} 用例登记（派生层契约必须有端到端评测）`);
+    }
+  }
+
+  record('Q15', 'LLM 派生层契约（policy.llm 可配置 / llm 不碰 storage 与真相层 / 提示版本常量 / I41–I46 在册）', problems.length === 0, problems);
+}
+
 async function q14DocsGovernance() {
   const { checkDocs } = await import('./docs-drift-check.mjs');
   const report = await checkDocs({ root: ROOT });
@@ -523,7 +590,7 @@ async function q14DocsGovernance() {
 }
 
 const CHECKS = [q1ZeroDependencies, q2SourceSize, q3TestInventory, q4EvalAlignment,
-  q5ContractCoverage, q6DocLinks, q7VersionIntegrity, q8Encoding, q9WebUiBoundary, q10ReleaseSurface, q11WriteAndSessionContract, q14DocsGovernance];
+  q5ContractCoverage, q6DocLinks, q7VersionIntegrity, q8Encoding, q9WebUiBoundary, q10ReleaseSurface, q11WriteAndSessionContract, q14DocsGovernance, q15LlmDeriveContract];
 
 for (const check of CHECKS) {
   try {

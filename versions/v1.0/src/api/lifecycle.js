@@ -6,6 +6,7 @@ import { validateRecord } from '../core/record.js';
 // 错误工厂从 service.js 反向引用：三处工厂是唯一权威（错误文本被测试断言），
 // ESM 函数声明在实例化期即初始化，循环 import 在运行期取值是安全的。
 import { invalid } from '../core/errors.js';
+import { enqueueDerive } from '../llm/outbox.js';
 
 /** 初始化：全量重载一次真相层（原 _init 方法体） */
 export async function init(svc) {
@@ -125,6 +126,11 @@ export async function commit(svc, record, op = 'write', detail = {}) {
   svc._versions.get(record.id).push(record);
   svc.index.add(record);
   await event(svc, op, record.id, detail);
+  // v1.0 W3：真相层落盘成功后只**入队**（裁决 84：写入路径绝不同步调 LLM）。
+  // 入队失败不影响写入（派生层是可选投影，失败可由 rebuild 重建）。
+  try {
+    await enqueueDerive({ memoHome: svc.memoHome, scope: svc.scope, id: record.id, validFrom: record.validFrom });
+  } catch { /* 派生层故障隔离：写路径永不因派生失败而失败 */ }
   return record;
 }
 

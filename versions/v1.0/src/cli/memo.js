@@ -665,6 +665,15 @@ async function main() {
       }
       return 0;
     }
+    case 'derive': {
+      const { deriveCli } = await import('./derive.js');
+      const service = await loadService(serviceOpts());
+      try {
+        return await deriveCli(service, { drain: opts.drain === true, rebuild: opts.rebuild === true, limit: opts.limit, json: asJson });
+      } finally {
+        await service.close();
+      }
+    }
     case 'retitle': {
       const { retitleRecords } = await import('../api/retitle.js');
       const service = await loadService(serviceOpts());

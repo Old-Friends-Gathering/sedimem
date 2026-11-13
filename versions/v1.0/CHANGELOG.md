@@ -2,6 +2,11 @@
 
 ## [1.0.0] — 进行中（2026-11-14 起）
 
+- **LLM 总结层（W3，裁决 83–88）**：新增 `src/llm/{port,budget,cache,derive,derived-store,outbox,lock}.js`；
+  派生 title/summary/tags 落 `$MEMO_HOME/derived/`，真相层字节不变（I41）；写入只入队不调 LLM（裁决 84）；
+  跨进程日预算 `$MEMO_HOME/llm/budget.json`；`memo derive --drain/--rebuild`；nightly 兜底排空 ≤200；
+  新门禁 Q15（llm 不得 import storage、不得写真相层）；新 eval I41–I46。
+
 大版本：彻底重构 + 文档先行 + LLM 接管总结 + 记忆中心重做。
 
 ### Added

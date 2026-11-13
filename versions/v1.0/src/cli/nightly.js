@@ -280,6 +280,16 @@ async function main() {
       plan.hitsFlushed = extractHitsFlushed(await service.flushHits());
     }
 
+    // 3b) 派生队列兜底排空（v1.0 W3 裁决 86：nightly 是第三顺位 drain 者，上限 200 条，
+    //     受 llm 日预算约束；无 provider 时立即全部 no-provider 失败，不会无限重试）
+    if (!dryRun) {
+      try {
+        plan.deriveDrained = await service.drainDerive({ limit: 200 });
+      } catch (err) {
+        plan.deriveDrained = { error: String(err?.message ?? err) };
+      }
+    }
+
     // 4) brief 重建并落盘（契约布局声明 brief/<scope>.md；派生层，允许覆盖重写）
     const brief = await service.brief({});
     plan.briefLines = brief.split('\n').length;

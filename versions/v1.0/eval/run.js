@@ -102,6 +102,12 @@ const CASE_FILES = [
   ['I38', 'i38-session-lifecycle.test.js'],
   ['I39', 'i39-session-isolation.test.js'],
   ['I40', 'i40-scope-stickiness.test.js'],
+  ['I41', 'i41-llm-derive.test.js'],
+  ['I42', 'i42-llm-no-provider.test.js'],
+  ['I43', 'i43-llm-budget.test.js'],
+  ['I44', 'i44-llm-truth-guard.test.js'],
+  ['I45', 'i45-derive-outbox.test.js'],
+  ['I46', 'i46-backward-compat.test.js'],
 ];
 
 function runCase(id, file) {

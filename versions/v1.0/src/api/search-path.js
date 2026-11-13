@@ -214,8 +214,17 @@ export async function briefRecords(svc, { lines = 80, dedupeCandidates, blocks }
       viewBlocks = null; // 视图模块缺失/损坏不影响 brief 主路径（降级为扁平）
     }
   }
+  // v1.0 W3：有 ok 派生时用 LLM 生成的 title 覆盖规则字段（缺失/失败自动回落，不改变条数）
+  let shaped = records;
+  if (svc.llmPort && svc.llmPort.ready) {
+    await svc._loadDerived();
+    shaped = records.map((r) => {
+      const d = svc._derived.get(`${r.id}@${r.validFrom}`);
+      return d && d.deriveStatus === 'ok' && d.title ? { ...r, title: d.title } : r;
+    });
+  }
   return renderBrief({
-    scope: svc.scope, records, lines, clock: svc.clock, dedupeCandidates: candidates,
+    scope: svc.scope, records: shaped, lines, clock: svc.clock, dedupeCandidates: candidates,
     blocks: viewBlocks,
   });
 }

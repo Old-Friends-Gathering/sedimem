@@ -1,0 +1,9 @@
+{
+  "id": "I42",
+  "name": "无 provider 降级",
+  "expects": [
+    "写入成功不依赖 LLM",
+    "deriveStatus=no-provider",
+    "兜底 title 非空"
+  ]
+}
