@@ -690,3 +690,17 @@ node versions/v1.0/src/cli/memo.js import agents ~/.codex/AGENTS.md --apply
 ```
 
 导入页（`#/import`）做的是同一件事，只是走 HTTP：先预览再写入。
+
+## 21、观察台页面（v1.0）
+
+| 路由 | 看什么 | 能改吗 |
+|---|---|---|
+| `#/today` | 当天库的变化（新增/取代/删除/合并） | 只读 |
+| `#/graph` | 关系图谱（force-graph 2D，节点按 subject 聚合 ×N） | 只读 |
+| `#/search` | 检索（带 `basis` 与 `degraded` 说明） | 只读 |
+| `#/hygiene` | 待裁决候选 + 30 天趋势 + doctor | 只读 |
+| `#/edit` | 选记录 → 改 → supersede（需 `--write`） | **可写**（默认只读） |
+| `#/import` | 五源导入器预览/写入（需 `--write`） | **可写**（默认只读） |
+| `#/session` | 会话临时库列表与 checkpoint | 只读（关闭会话用 CLI） |
+| `#/handoff` | 交接文档 | 只读 |
+| `#/settings` | 版本/契约/阈值/kinds/健康 | 只读 |
