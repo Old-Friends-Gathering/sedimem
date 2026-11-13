@@ -28,15 +28,6 @@ function cachePaths(memoHome) {
   return { dir, file: path.join(dir, 'cache.jsonl'), lock: 'cache.lock' };
 }
 
-/** 解析 JSONL 为行对象数组（坏行跳过，append-only 容忍半行写入） */
-function parseLines(text) {
-  const out = [];
-  for (const line of String(text || '').split('\n')) {
-    if (!line.trim()) continue;
-    try { out.push(JSON.parse(line)); } catch { /* 坏行跳过 */ }
-  }
-  return out;
-}
 
 /**
  * 读缓存：取最后一条同 key 的记录；文件超 2000 行只扫尾部 2000 行。
