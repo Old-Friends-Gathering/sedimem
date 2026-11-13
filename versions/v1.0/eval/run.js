@@ -109,6 +109,9 @@ const CASE_FILES = [
   ['I45', 'i45-derive-outbox.test.js'],
   ['I46', 'i46-backward-compat.test.js'],
   ['I47', 'i47-write-api.test.js'],
+  ['I48', 'i48-ui-readonly.test.js'],
+  ['I49', 'i49-import.test.js'],
+  ['I50', 'i50-session-handoff.test.js'],
 ];
 
 function runCase(id, file) {
