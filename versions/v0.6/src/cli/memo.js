@@ -94,6 +94,21 @@ function requireOpt(opts, name, usage) {
   return String(v);
 }
 
+/**
+ * 0.6.2：命令行的 --scope 必须真的生效。
+ *
+ * 之前所有命令都只按 cwd/env 解析 scope，`memo write --scope session:...` 会被静默写进 cwd 的分库
+ * （实测：session 库的写入落到了主库，且 session 禁 fact 的门禁因此被绕过）。这里统一把字符串型
+ * --scope 透传给 createMemoryService，与 MEMO_SCOPE 同等优先级。
+ */
+/** 当前进程解析出的 CLI 选项（main() 里赋值），供 loadService 读取 --scope。 */
+let CURRENT_OPTS = {};
+
+function serviceOpts() {
+  const scope = CURRENT_OPTS?.scope;
+  return typeof scope === 'string' && scope.length > 0 ? { scope } : {};
+}
+
 async function loadService(extra = {}) {
   let mod;
   try {
@@ -146,7 +161,7 @@ function parseNumber(opts, name) {
 }
 
 async function cmdWrite(opts, asJson) {
-  const service = await loadService();
+  const service = await loadService(serviceOpts());
   try {
     const text = requireOpt(opts, 'text', 'memo write --text "..."');
     const result = await service.write({
@@ -173,7 +188,7 @@ async function cmdWrite(opts, asJson) {
 }
 
 async function cmdSearch(argv, opts, asJson) {
-  const service = await loadService();
+  const service = await loadService(serviceOpts());
   try {
     const query = argv.join(' ');
     if (!query) throw new UsageError('memo search 需要一个查询串');
@@ -196,7 +211,7 @@ async function cmdSearch(argv, opts, asJson) {
 }
 
 async function cmdBrief(opts) {
-  const service = await loadService();
+  const service = await loadService(serviceOpts());
   try {
     process.stdout.write(await service.brief({ lines: parseNumber(opts, 'lines') }));
   } finally {
@@ -207,7 +222,7 @@ async function cmdBrief(opts) {
 async function cmdGet(positional) {
   const id = positional[0];
   if (!id) throw new UsageError('memo get <id>');
-  const service = await loadService();
+  const service = await loadService(serviceOpts());
   try {
     const record = await service.get(id);
     if (!record) {
@@ -225,7 +240,7 @@ async function cmdSupersede(positional, opts, asJson) {
   const id = positional[0];
   if (!id) throw new UsageError('memo supersede <id> --value "..."');
   const value = requireOpt(opts, 'value', `memo supersede ${id} --value "..."`);
-  const service = await loadService();
+  const service = await loadService(serviceOpts());
   try {
     const result = await service.supersede({
       oldId: id,
@@ -244,7 +259,7 @@ async function cmdSupersede(positional, opts, asJson) {
 async function cmdForget(positional, opts, asJson) {
   const id = positional[0];
   if (!id) throw new UsageError('memo forget <id> [--purge]');
-  const service = await loadService();
+  const service = await loadService(serviceOpts());
   try {
     const result = await service.forget({
       id,
@@ -259,7 +274,7 @@ async function cmdForget(positional, opts, asJson) {
 }
 
 async function withStats(asJson, fn) {
-  const service = await loadService();
+  const service = await loadService(serviceOpts());
   try {
     const result = await fn(service);
     if (asJson) printJson(result);
@@ -278,7 +293,7 @@ async function cmdDedupe(sub, opts, asJson) {
   if (sub !== 'scan' && sub !== 'apply') {
     throw new UsageError(`未知的 dedupe 子命令: ${sub ?? '(空)'}\n${USAGE}`);
   }
-  const service = await loadService();
+  const service = await loadService(serviceOpts());
   try {
     if (sub === 'scan') {
       const threshold = parseNumber(opts, 'threshold');
@@ -350,7 +365,7 @@ async function cmdCurate(sub, positional, opts, asJson) {
   // 新增子命令走 src/cli/curate.js（任务包生成/状态/严格校验应用）
   if (sub === 'auto') {
     const curate = await import('./curate.js');
-    const service = await loadService();
+    const service = await loadService(serviceOpts());
     try {
       await curate.curateAutoCli(service, {
         limit: parseNumber(opts, 'limit'), dryRun: opts['dry-run'] === true, json: asJson,
@@ -362,7 +377,7 @@ async function cmdCurate(sub, positional, opts, asJson) {
   }
   if (sub === 'prompt' || sub === 'status' || (sub === 'apply' && opts.file !== undefined)) {
     const curate = await import('./curate.js');
-    const service = await loadService();
+    const service = await loadService(serviceOpts());
     try {
       if (sub === 'prompt') {
         const out = await curate.curatePrompt(service, {
@@ -396,7 +411,7 @@ async function cmdCurate(sub, positional, opts, asJson) {
       await service.close();
     }
   }
-  const service = await loadService();
+  const service = await loadService(serviceOpts());
   try {
     if (sub === 'export') {
       const batch = await service.curateExport({ limit: parseNumber(opts, 'limit') });
@@ -591,6 +606,7 @@ async function main() {
   }
   const command = argv[0];
   const { positional, opts } = parseArgs(argv.slice(1));
+  CURRENT_OPTS = opts; // 让 loadService() 能读到 --scope（0.6.2）
   const asJson = Boolean(opts.json);
 
   switch (command) {
@@ -602,7 +618,7 @@ async function main() {
       return 0;
     case 'brief': {
       if (opts.tier0) {
-        const service = await loadService();
+        const service = await loadService(serviceOpts());
         try { await cmdBriefTier0(opts, asJson, service); } finally { await service.close(); }
         return 0;
       }
@@ -610,7 +626,7 @@ async function main() {
       return 0;
     }
     case 'view': {
-      const service = await loadService();
+      const service = await loadService(serviceOpts());
       try { return await cmdView(positional, opts, asJson, service); } finally { await service.close(); }
     }
     case 'get':
@@ -640,7 +656,7 @@ async function main() {
       return 0;
     case 'compact': {
       const { compactCli } = await import('./compact.js');
-      const service = await loadService();
+      const service = await loadService(serviceOpts());
       try {
         // grace 不写死 7d：交给 policy.quota.purgeGraceMs（契约裁决 51），CLI 只透传用户显式值
         await compactCli(service, { dryRun: opts['dry-run'] === true, grace: opts.grace, json: asJson });
@@ -651,7 +667,7 @@ async function main() {
     }
     case 'retitle': {
       const { retitleRecords } = await import('../api/retitle.js');
-      const service = await loadService();
+      const service = await loadService(serviceOpts());
       try {
         const dryRun = opts['dry-run'] === true;
         const limit = opts.limit === undefined || opts.limit === true ? 0 : Number(opts.limit);
@@ -691,7 +707,7 @@ async function main() {
     }
     case 'conflicts': {
       const { listConflicts, resolveConflicts } = await import('../views/conflicts.js');
-      const service = await loadService();
+      const service = await loadService(serviceOpts());
       try {
         if (positional[0] === 'resolve') {
           const r = await resolveConflicts({
@@ -727,7 +743,7 @@ async function main() {
     }
     case 'session': {
       const { sessionCli } = await import('./session.js');
-      const service = await loadService();
+      const service = await loadService(serviceOpts());
       try {
         // sessionCli 自己解析 argv（与 --scope/--file 等混排更稳），这里把原始参数整段交出去
         const res = await sessionCli(argv.slice(1), {
