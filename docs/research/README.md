@@ -40,6 +40,14 @@
 - 论文编号均核验过 arXiv abs 页；少数数字来自二手分析，文中用 ⚠️ 标注，**引用前请先核原文**。
 - `memory-ecosystem-2026.md` 与 `agent-memory-projects-survey-2026-11.md` 覆盖范围不同：前者是**编码 Agent 侧**（Claude/Codex/DSH 生态），后者是**通用开源记忆系统**，两份都要看才算覆盖完整。
 
+## v1.0.0 第二批：CLM 与 LLM 流水线（2026-11-14）
+
+| 文件 | 回答什么问题 | 体量 |
+|---|---|---|
+| [`clm-paper-2026.md`](clm-paper-2026.md) | **CLM 精读**：arXiv:2609.37725「context 当文件、模型用 Bash 改写」的机制、ContextBench 数字、RL/自进化、**对 append-only 的可迁移点与必须放弃的点** | 120 行 |
+| [`llm-summarization-pipeline-2026.md`](llm-summarization-pipeline-2026.md) | **LLM 总结工序**：Mem0/LangMem/Graphiti/Letta/TriMem 对照、调用点性价比排序、输出 JSON 契约、成本护栏、I41–I44 指标、派生层强制只读真相层 | 107 行 |
+| [`session-llm-checkpoint-2026.md`](session-llm-checkpoint-2026.md) | **会话库 LLM checkpoint**：三家 transcript 来源（DSH/Codex/Claude，实测路径）、压缩比、8 段抽取 prompt、增量 vs 全量、验证与成本 | 100 行 |
+
 ## v1.0.0 调研批次（2026-11-14）
 
 1.0.0 是「彻底重构」版本，四份调研分别回答：记忆机制还有没有更优做法（`iclr-2027-memory-papers.md`）、图谱要不要换成成熟库（`graph-library-2026-11.md`）、文档为什么漂移以及怎么机械拦住（`docs-drift-audit-2026-11.md`）、代码基线离文档声明的架构有多远（`code-refactor-baseline-2026-11.md`）。结论汇总与波次见 [`docs/plans/v1.0.0-refactor.md`](../plans/v1.0.0-refactor.md)。
