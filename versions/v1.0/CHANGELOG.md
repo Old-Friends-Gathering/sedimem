@@ -1,6 +1,6 @@
 # CHANGELOG · v0.6
 
-## [1.0.0] — 进行中（2026-11-14 起）
+## [1.0.0] — 2026-11-14
 
 - **W6 UI 骨架**：vendor Tabler 1.7.5（CSS）/uPlot 1.6.31/force-graph 1.52.0 到 `ui/vendor/`（VENDOR.md + LICENSE + sha256，Q13 门禁）；
   趋势图改 uPlot（保留 SVG 回退），图谱改 2D force-graph（保留工具栏/边开关/详情/采样提示，标签按 12/scale 绘制）；
