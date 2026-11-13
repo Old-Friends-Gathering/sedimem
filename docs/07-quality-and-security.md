@@ -11,10 +11,10 @@
 四个门禁全部**零依赖**、本地与 CI 跑同一份代码，避免"本地绿、CI 红"。
 
 ```bash
-node tools/quality-check.mjs      # 质量（Q1–Q11 + Q14 共 13 项）
+node tools/quality-check.mjs      # 质量（Q1–Q11 + Q14 共 14 项）
 node tools/security-check.mjs     # 安全（S1–S9 共 9 项）
 node tools/coverage-gate.mjs      # 覆盖率（3 项）
-cd "$(cat versions/CURRENT)" && node eval/run.js   # 行为（I1–I46）
+cd "$(cat versions/CURRENT)" && node eval/run.js   # 行为（I1–I47）
 ```
 
 ---
@@ -24,7 +24,7 @@ cd "$(cat versions/CURRENT)" && node eval/run.js   # 行为（I1–I46）
 | 项 | 指标 | 阈值 | 失败含义 |
 |---|---|---|---|
 | `test (22)` / `test (24)` | `node --test 'tests/**/*.test.js'` | **0 失败**（2026-11-13 实测 483 用例） | 行为回归，或测试自身有竞态（历史上 I8 就因此偶发红，已修根因） |
-| `eval (I1–I46)` | `eval/run.js` 退出码 | **全 PASS**（最近一次见 `eval/results/LATEST.json`） | 注入式行为契约破了：重复/冲突/过时/删除/投毒/配额/改写/并发/时区/遮蔽/裁决回路/中文改写等 40 条 |
+| `eval (I1–I47)` | `eval/run.js` 退出码 | **全 PASS**（最近一次见 `eval/results/LATEST.json`） | 注入式行为契约破了：重复/冲突/过时/删除/投毒/配额/改写/并发/时区/遮蔽/裁决回路/中文改写等 40 条 |
 | `windows-smoke` | `node tools/windows-smoke.mjs`（`windows-latest`） | **全部 PASS** | Windows 真相层文件名 / 分库枚举 / `compact` / `nightly` 之一回归（见 §一.1） |
 | 关键指标 | `dupRatio` / `conflictRate` | `dupRatio = 0`；`conflictRate` 只允许由**真冲突用例**产生 | 冗余或冲突治理失效 |
 | 性能 | `bench n5000` search p95 | **< 50ms**（实测 1.9–2.4ms） | 索引退化（例如误改成 O(n) 扫描） |
@@ -61,7 +61,7 @@ cd "$(cat versions/CURRENT)" && node eval/run.js   # 行为（I1–I46）
 
 阈值贴着基线设置，意味着**新增未覆盖代码会直接卡住**——这是故意的：先写测试再实现（TDD）。
 
-## 三、质量门禁（quality-check.mjs，13 项：Q1–Q11 + Q14；Q12/Q13 为 v1.0 预留号）
+## 三、质量门禁（quality-check.mjs，14 项：Q1–Q11 + Q13 + Q14 + Q15；Q12 已被 v0.6 计划占用）
 
 | ID | 检查 | 判定 | 为什么这条值得占一个门禁 |
 |---|---|---|---|
@@ -78,7 +78,7 @@ cd "$(cat versions/CURRENT)" && node eval/run.js   # 行为（I1–I46）
 | Q14 | 文档治理（`tools/docs-drift-check.mjs`：头部元信息 / 版本一致 / 无旧版本路径 / 测试数与 I 区间 / 门禁项数 / 注释引用已删除文档） | 六条 R1–R6 全绿（递归扫 docs/；R6 禁注释引用 docs/09、docs/10，改指 docs/02 附录 A/B）；过期豁免报 `ALLOWLIST_EXPIRED` | 文档跟版本走是硬需求，靠人记必漏 |
 | Q11 | 写侧粒度与会话库契约 | `config/policy.json` 必须有 `write` 段且 `textHardMaxChars`/`valueRecommendChars`/`titleRequiredKinds` 合法；`src/core/record.js` 无 `MAX_TEXT` 静默截断；session 写路径有 kind 校验（`E_SCRATCH_KIND_FORBIDDEN` 禁 fact）；eval 在册 I37–I39 | 这两条契约最容易被后续改动悄悄退化（把硬上限改回静默截断、把 session 的 fact 禁令删掉），必须机械钉住 |
 
-> 编号预留：Q12 已被 v0.6 计划占用；v1.0 计划新增 Q13/Q14/Q15（见 `docs/plans/v1.0.0-refactor.md`）。
+> 编号预留：Q12 已被 v0.6 计划占用；v1.0 计划新增 Q13（vendor 资产）、Q14（文档治理）、Q15（LLM 派生层），见 `docs/plans/v1.0.0-refactor.md`。
 
 ## 四、安全门禁（security-check.mjs，9 项）
 
@@ -157,7 +157,7 @@ Pages 构建是异步的（实测 2–5 分钟），脚本默认重试 20×15s�
 | 门禁 | 结果 |
 |---|---|
 | 单元 + 注入式 | **483 tests pass**（`node --test 'tests/**/*.test.js'`） |
-| 评测 | **eval I1–I46 全 PASS**（`node eval/run.js`；最近一次结果归档于 `eval/results/LATEST.json`，2026-11-13T11:25Z，40/40 通过） |
+| 评测 | **eval I1–I47 全 PASS**（`node eval/run.js`；最近一次结果归档于 `eval/results/LATEST.json`，2026-11-13T11:25Z，40/40 通过） |
 | 质量 | **11/11**（Q1–Q11，含 Q11 写侧粒度与会话库契约） |
 | 安全 | 9/9（含 S9：src/web 无写接口、只绑回环） |
 | 覆盖率 | 数值不落盘，跑 `node tools/coverage-gate.mjs` 实时采集（阈值 lines ≥ 85% / branches ≥ 70% / functions ≥ 90%）；eval 基线见 `eval/results/LATEST.json` |
@@ -184,7 +184,7 @@ write→search→stats 走通）+ `tests/unit/run-script.test.js` + eval 的 CLI
 ```json
 {
   "required_status_checks": {"strict": true,
-    "contexts": ["test (22)", "test (24)", "eval (I1–I46)", "quality", "security", "codeql", "issue-link", "windows-smoke"]},
+    "contexts": ["test (22)", "test (24)", "eval (I1–I47)", "quality", "security", "codeql", "issue-link", "windows-smoke"]},
   "enforce_admins": true,
   "required_pull_request_reviews": null,
   "required_linear_history": true,

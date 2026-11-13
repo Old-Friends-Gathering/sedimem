@@ -5,6 +5,8 @@
 <title>sedimem · 记忆观察台</title>
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data:; style-src 'self' 'unsafe-inline'; script-src 'self'">
+<link rel="stylesheet" href="./vendor/tabler.min.css">
+<link rel="stylesheet" href="./vendor/uPlot.min.css">
 <link rel="stylesheet" href="./style.css">
 </head>
 <body>
@@ -22,6 +24,8 @@
   <button id="tab-graph">图谱</button>
   <button id="tab-search">搜索</button>
   <button id="tab-hygiene">卫生</button>
+  <button id="tab-edit">编辑</button>
+  <button id="tab-import">导入</button>
 </nav>
 
 <main>
@@ -50,10 +54,10 @@
     <div class="sub">节点 = 记录；边 = 同实体 / 版本链 / 近重复候选 / 冲突。颜色按 kind，透明度按状态。</div>
     <div id="graph-toolbar"></div>
     <div class="graph-stage">
-      <canvas id="graph-canvas"></canvas>
+      <div id="graph-canvas" role="img" aria-label="记忆关系图"></div>
       <aside id="graph-detail"><p class="dim" id="graph-hint">点击节点查看详情。</p></aside>
     </div>
-    <p class="dim" id="graph-mode-note" style="margin-top:6px">3D 力导向（实验）：滚轮缩放、空白拖拽旋转、双击节点聚焦。</p>
+    <p class="dim" id="graph-mode-note" style="margin-top:6px">力导向布局：滚轮缩放、拖拽平移、拖节点固定、单击看详情、双击聚焦。</p>
   </section>
 
   <!-- ============ 搜索（B3 / D8） ============ -->
@@ -83,8 +87,24 @@
     <h3 class="h3">体检摘要（doctor）</h3>
     <div id="hyg-doctor"></div>
   </section>
+
+  <!-- ============ 编辑（W7 / B1，内容委托 edit-view.js） ============ -->
+  <section id="edit">
+    <h2>编辑记忆</h2>
+    <div class="sub">左侧选记录，右侧改字段；保存走 supersede（不原地改真相层），新增走 write。</div>
+    <div id="edit-container"></div>
+  </section>
+
+  <!-- ============ 导入（W7 / B2，内容委托 import-view.js） ============ -->
+  <section id="import">
+    <h2>导入记忆</h2>
+    <div class="sub">选来源、填路径，先预览（dryRun）确认解析结果，再写入（apply）。</div>
+    <div id="import-container"></div>
+  </section>
 </main>
 
+<script src="./vendor/uPlot.iife.min.js"></script>
+<script src="./vendor/force-graph.min.js"></script>
 <script type="module" src="./app.js"></script>
 </body>
 </html>

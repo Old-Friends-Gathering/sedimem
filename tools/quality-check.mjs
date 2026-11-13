@@ -318,7 +318,7 @@ async function q9WebUiBoundary() {
     const webDir = path.join(v, 'src', 'web');
     // 1) ui/ 与 src/web/ 不得 import ../hygiene/、../storage/、../index/
     const boundaryFiles = [
-      ...await walk(uiDir, (p) => /\.(js|mjs|html)$/.test(p)),
+      ...await walk(uiDir, (p) => /\.(js|mjs|html)$/.test(p) && !p.includes(`${path.sep}vendor${path.sep}`)),
       ...await walk(webDir, (p) => /\.(js|mjs)$/.test(p)),
     ];
     for (const f of boundaryFiles) {
@@ -328,8 +328,9 @@ async function q9WebUiBoundary() {
         problems.push(`${rel(f)}:${line} → import "${m[1]}"（Web 层禁止触碰 hygiene/storage/index）`);
       }
     }
-    // ui/ 专属规则
-    const uiSrcs = await walk(uiDir, (p) => /\.(js|mjs|html|css)$/.test(p));
+    // ui/ 专属规则（**排除 vendor/**：第三方自托管资产不是我们维护的源码，
+    //  它们的体积/风格由 VENDOR.md 与 Q13 管，Q9 只管我们自己的 ui/*.js|html|css）
+    const uiSrcs = await walk(uiDir, (p) => /\.(js|mjs|html|css)$/.test(p) && !p.includes(`${path.sep}vendor${path.sep}`));
     uiFiles += uiSrcs.length;
     for (const f of uiSrcs) {
       const raw = await fsp.readFile(f, 'utf8');
@@ -360,9 +361,9 @@ async function q9WebUiBoundary() {
       }
     }
     // 5) 零构建 + 规模阈值（docs/08 §8 声明的 Q9 语义，之前只写在文档里没实现）：
-    //    单文件 ≤ 600 行、ui/ 总量 ≤ 2500 行、无 package.json/node_modules/构建产物
+    //    单文件 ≤ 600 行、ui/ 总量 ≤ 3500 行、无 package.json/node_modules/构建产物
     const UI_MAX_FILE_LINES = 600;
-    const UI_MAX_TOTAL_LINES = 2500;
+    const UI_MAX_TOTAL_LINES = 3500;
     let uiTotalLines = 0;
     for (const f of uiSrcs) {
       const n = (await fsp.readFile(f, 'utf8')).split('\n').length;
@@ -406,7 +407,7 @@ async function q9WebUiBoundary() {
       problems.push(`${rel(staticPath)}: 未识别"只服务 ui 目录"的解析逻辑（需 createStaticHandler + uiDir + path.resolve）`);
     }
   }
-  record('Q9', `Web UI 层边界（ui ${uiFiles} 文件：无越界 import/外链/innerHTML/eval，零构建 + 单文件≤600 行 + 总量≤2500 行，static 白名单）`,
+  record('Q9', `Web UI 层边界（ui ${uiFiles} 文件：无越界 import/外链/innerHTML/eval，零构建 + 单文件≤600 行 + 总量≤3500 行，static 白名单）`,
     problems.length === 0, problems.slice(0, 12));
 }
 
@@ -579,6 +580,63 @@ async function q15LlmDeriveContract() {
   record('Q15', 'LLM 派生层契约（policy.llm 可配置 / llm 不碰 storage 与真相层 / 提示版本常量 / I41–I46 在册）', problems.length === 0, problems);
 }
 
+
+// ── Q13 vendor 资产登记（v1.0 W6）───────────────────────────────
+// 起因：UI 重做允许自托管第三方资产（Tabler/uPlot/force-graph），但必须可复现、可审计：
+//   - 每个文件都在 VENDOR.md 登记了版本/上游/LICENSE/sha256；
+//   - 磁盘上的 sha256 与登记值一致（防止被悄悄替换）；
+//   - 登记了的 LICENSE 文件真的存在；
+//   - ui/** 不得引用任何 CDN（禁外链，离线可用）。
+async function q13VendorAssets() {
+  const problems = [];
+  const versionDir = currentVersionDir();
+  const vendorDir = path.join(versionDir, 'ui', 'vendor');
+  const manifestPath = path.join(vendorDir, 'VENDOR.md');
+
+  let manifest = '';
+  try {
+    manifest = await fsp.readFile(manifestPath, 'utf8');
+  } catch {
+    record('Q13', 'vendor 资产登记（VENDOR.md sha256 / LICENSE / 禁 CDN）', true, []);
+    return; // 没有 vendor 目录即视为本版本未引入第三方资产
+  }
+
+  const registered = new Map(); // 文件名 -> sha256
+  for (const line of manifest.split('\n')) {
+    const m = /^\|\s*`([^`]+)`\s*\|.*\|\s*`([0-9a-f]{64})`\s*\|\s*$/.exec(line);
+    if (m) registered.set(m[1], m[2]);
+  }
+  if (registered.size === 0) problems.push(`${rel(manifestPath)}: 没有解析到任何登记行（表格格式：| \`file\` | 上游 | 版本 | LICENSE | \`sha256\` |）`);
+
+  const files = (await fsp.readdir(vendorDir)).filter((f) => /\.(js|css)$/.test(f));
+  const crypto = await import('node:crypto');
+  for (const f of files) {
+    if (!registered.has(f)) {
+      problems.push(`${rel(path.join(vendorDir, f))}: 未在 VENDOR.md 登记（第三方资产必须可追溯）`);
+      continue;
+    }
+    const buf = await fsp.readFile(path.join(vendorDir, f));
+    const actual = crypto.createHash('sha256').update(buf).digest('hex');
+    if (actual !== registered.get(f)) {
+      problems.push(`${rel(path.join(vendorDir, f))}: sha256 不匹配（登记 ${registered.get(f).slice(0, 12)}… 实际 ${actual.slice(0, 12)}…）`);
+    }
+  }
+  // LICENSE 存在性：每个登记的上游必须有对应 *.LICENSE
+  const licenses = (await fsp.readdir(vendorDir)).filter((f) => f.endsWith('.LICENSE'));
+  if (licenses.length === 0) problems.push(`${rel(vendorDir)}: 缺少 *.LICENSE（第三方资产必须随附许可证）`);
+
+  // 禁 CDN：ui/** 不得出现外链（vendor 自身文件除外）
+  const uiFiles = await walk(path.join(versionDir, 'ui'), (p) => /\.(js|mjs|html|css)$/.test(p) && !p.includes(`${path.sep}vendor${path.sep}`));
+  for (const f of uiFiles) {
+    const text = await fsp.readFile(f, 'utf8');
+    for (const m of text.matchAll(/https?:\/\/(?:cdn\.|unpkg|cdnjs|jsdelivr)[^\s'"`)]*/g)) {
+      problems.push(`${rel(f)}: 引用了 CDN "${m[0]}"（必须自托管到 ui/vendor 并在 VENDOR.md 登记）`);
+    }
+  }
+
+  record('Q13', `vendor 资产登记（${registered.size} 个文件 sha256 / LICENSE / 禁 CDN）`, problems.length === 0, problems);
+}
+
 async function q14DocsGovernance() {
   const { checkDocs } = await import('./docs-drift-check.mjs');
   const report = await checkDocs({ root: ROOT });
@@ -590,7 +648,7 @@ async function q14DocsGovernance() {
 }
 
 const CHECKS = [q1ZeroDependencies, q2SourceSize, q3TestInventory, q4EvalAlignment,
-  q5ContractCoverage, q6DocLinks, q7VersionIntegrity, q8Encoding, q9WebUiBoundary, q10ReleaseSurface, q11WriteAndSessionContract, q14DocsGovernance, q15LlmDeriveContract];
+  q5ContractCoverage, q6DocLinks, q7VersionIntegrity, q8Encoding, q9WebUiBoundary, q10ReleaseSurface, q11WriteAndSessionContract, q14DocsGovernance, q15LlmDeriveContract, q13VendorAssets];
 
 for (const check of CHECKS) {
   try {

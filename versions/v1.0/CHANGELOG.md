@@ -2,6 +2,12 @@
 
 ## [1.0.0] — 进行中（2026-11-14 起）
 
+- **W6 UI 骨架**：vendor Tabler 1.7.5（CSS）/uPlot 1.6.31/force-graph 1.52.0 到 `ui/vendor/`（VENDOR.md + LICENSE + sha256，Q13 门禁）；
+  趋势图改 uPlot（保留 SVG 回退），图谱改 2D force-graph（保留工具栏/边开关/详情/采样提示，标签按 12/scale 绘制）；
+  Q9 排除 `vendor/`；`docs/08` §15 记录技术栈变更与取舍。
+- **W5 拆大文件**：`mcp/server.js` 890→197、`cli/memo.js` 808→185、`web/handlers.js` 717→59；
+  实现搬进 `src/mcp/{tools,session-tools}.js`、`src/cli/commands/{shared,memory,hygiene,ops}.js`、
+  `src/web/api/{shared,read,search,hygiene,today}.js`；导出名/签名/错误码/退出码零变化（裁决 48 延续）。
 - **LLM 总结层（W3，裁决 83–88）**：新增 `src/llm/{port,budget,cache,derive,derived-store,outbox,lock}.js`；
   派生 title/summary/tags 落 `$MEMO_HOME/derived/`，真相层字节不变（I41）；写入只入队不调 LLM（裁决 84）；
   跨进程日预算 `$MEMO_HOME/llm/budget.json`；`memo derive --drain/--rebuild`；nightly 兜底排空 ≤200；
