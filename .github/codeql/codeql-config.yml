@@ -22,4 +22,4 @@ query-filters:
   - exclude:
       id: js/file-access-to-http
       paths:
-        - versions/*/src/index/embedder.js
+        - versions/**/src/index/embedder.js

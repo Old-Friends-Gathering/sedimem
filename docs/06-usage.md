@@ -472,3 +472,98 @@ node eval/bench-scale.mjs --n 100000 --backend sqlite
 
 输出 write/search 的 p50·p95、冷启动、RSS。**10k 条以上请用 `policy.index.backend = "sqlite"`**
 （实测 memory 后端 10k 条 search p50 ≈ 85ms，sqlite 后端约一个数量级之内）。
+
+## 17. 会话临时库与写侧契约（v0.6）
+
+### 17.1 为什么要有临时库
+
+长期库只收「可判断的事实」，而会话里的过程性内容（下一步做什么、踩过什么坑）没有落点——
+压缩发生在上下文里，进程一关就没了。临时库（`session:<id>` scope）就是这个**会话级、可丢弃、可晋升**
+的中间层：过程先落盘，close 时只把 `decision`/`gotcha` 晋升回主库，其余随库 tombstone。
+
+### 17.2 四个命令的真实输出
+
+```bash
+cd sedimem/versions/v0.6
+
+memo session start --title "v0.6 文档收尾"
+# session 已创建: session:20261113-1200-abcd
+# 这是临时库：close 时只晋升 decision/gotcha 到主库，其余记录会被 tombstone。
+# 请把它设为当前写库（如 MEMO_SCOPE=session:20261113-1200-abcd）。
+
+memo session checkpoint --scope session:20261113-1200-abcd --file /tmp/cp.json
+# checkpoint 已追加 (01HXY… @ 2026-11-13T12:05:00.000Z)
+
+memo session status --scope session:20261113-1200-abcd
+# session 20261113-1200-abcd  status=open
+# checkpoints=1  facts=0  lastCheckpointAt=2026-11-13T12:05:00.000Z
+
+memo session close --scope session:20261113-1200-abcd
+# session 20261113-1200-abcd 已关闭：晋升 2 条到主库，tombstone 3 条；交接文档 ~/.memo/handoffs/20261113-1200-abcd.md
+```
+
+MCP 侧一一对应五个工具：`memory_session_start / checkpoint / status / close / sweep`（同一份
+`src/session/*` 实现，语义与 CLI 完全一致）。
+
+### 17.3 8 段 checkpoint
+
+模板冻结为八段（五段数组、三段字符串），缺段按空值补齐，多余键丢弃：
+
+```json
+{
+  "intent": "完成 sedimem v0.6.0 的文档收尾",
+  "concepts": ["写侧粒度契约", "session scope", "UI 分库粘性"],
+  "files": ["docs/06-usage.md", "docs/07-quality-and-security.md"],
+  "errorsAndFixes": ["Q6 报死链 → 修正 versions/v0.6 相对路径"],
+  "pendingJobs": ["ACCEPTANCE.md 判定段待 Lead 复核"],
+  "currentState": "五份文档已改完，等 quality-check 全绿",
+  "nextSteps": ["跑 node tools/quality-check.mjs", "跑 447 用例全量测试"],
+  "criticalContext": ["只改文档不改代码", "版本号数字照抄不许改"]
+}
+```
+
+### 17.4 `--from-summary` 接 DSH 的压缩摘要
+
+DSH 的 auto-compact 会发 `compaction/summary` 事件（payload 含 `compactionId` / `summary` /
+`shadowedTokenCount`）。**我们不复制它的压缩算法，只把已经压出来的摘要接住落盘**：
+
+```bash
+memo session checkpoint --scope session:20261113-1200-abcd --from-summary dsh-summary.json
+```
+
+`parseDshSummary` 只从摘要里抽 `intent`/`currentState` 的**草稿**，缺字段留空——不编造、
+不做自动总结（裁决 75），其余六段由 agent 或人补齐后再追加一次 checkpoint。
+
+### 17.5 close 的晋升规则与回滚
+
+close 做四件事，顺序固定：
+
+1. 白名单 kind（`decision`/`gotcha`）写入主库（`meta.parentScope`），带 `from-session:<id>` 标签；
+2. 最后一个 checkpoint 的 `nextSteps` 写成主库一条 `kind=state, subject=session, predicate=handoff`；
+3. 交接文档写 `<memoHome>/handoffs/<id>.md`（六节：做了什么 / 关键决策 / 踩过的坑 / 改了哪些文件 / 未完成事项 / 下次开工入口）；
+4. meta 置 `closed`，其余记录 tombstone（`reason=session-closed`）。
+
+- **幂等**：对已 closed 的 session 再 close 一次，直接返回 `already-closed`，不再晋升、不再落盘。
+- **回滚**：close 是非破坏操作——真相层 append-only，被 tombstone 的记录在物理清理前仍可
+  **as-of 回查**取回全文（30 天窗口内内容一定还在；物理删除只有 `memo compact` 这一个入口，
+  且要「墓碑 + purge 标签 + 超过 grace」三条同时满足）。要恢复某条记录，as-of 查出原文后
+  重新 `write` 即可，不需要专门的 restore 命令。
+
+### 17.6 写侧三条契约（policy.write）
+
+| 线 | 触发 | 行为 |
+|---|---|---|
+| 软线 | `text`/`value` 超 `valueRecommendChars`（默认 300 字） | 写入**成功**，返回 `warnings[E_RECORD_LONG]`（附 `splitSuggestion`，≤3 段可直接重放成多条），打 `long-form` 标签 |
+| 硬线 | `text` 超 `textHardMaxChars`（默认 4000 字） | **报错**（附 `truncateTo` 建议），不再静默截断——截断会让调用方误以为写全了 |
+| title | `kind ∈ titleRequiredKinds`（fact/pref/decision/gotcha）缺 `title` | 默认 `E_TITLE_MISSING` **警告**；`write.titleEnforce=true` 时才硬拒（破坏性变更留给部署方显式开启） |
+
+阈值全在 `config/policy.json` 的 `write` 段，是数据不是代码常量；门禁 Q11 钉住
+「可配置 / 无静默截断 / session 禁 fact」三条结构性事实。
+
+### 17.7 常见问题
+
+| 现象 | 原因 / 处理 |
+|---|---|
+| 往 session 库写 `fact` 被拒（`E_SCRATCH_KIND_FORBIDDEN`） | 这是故意的：临时库里的 fact 不会被晋升、只会随库丢弃，等于写了就丢。长期事实写主库 |
+| close 后主库搜不到晋升的记录 | 多半是检索进程还挂着旧索引缓存；重新 search / 重启 MCP server 即可，晋升本身有事件可查（`from-session:<id>` 标签） |
+| 忘了 close 的僵尸会话 | `memo session sweep --older-than 14d`：只报告候选（scope / 开始时间 / 标题），**不删**；确认后再手动 close |

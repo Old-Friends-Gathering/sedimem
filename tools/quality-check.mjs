@@ -27,7 +27,10 @@ export const THRESHOLDS = {
   // hybrid 85 + hybrid-index 210 + capture/extract 120 + capture/queue 200 + views/conflicts 200
   // + hygiene/redact 110 + render/inject 204 ≈ 1450 行）。单文件 900 硬线**不动** ——
   // 放宽总量是允许「多写几个职责单一的小模块」，不是允许「一个文件堆更多东西」。
-  maxTotalSrcLines: 12000,
+  // v0.6 调高到 13000：会话临时库新增 src/session/*（lifecycle 190 + checkpoint 150 +
+  // handoff 110 ≈ 450 行）+ cli/session 130 行 + core/record 的契约代码 ~60 行。
+  // 单文件 900 硬线**不动**：放宽总量只允许「多几个职责单一的小模块」。
+  maxTotalSrcLines: 13000,
   /** 单元测试文件数下限 */
   minTestFiles: 8,
   /** 契约文档对 src 导出名的覆盖率（%）；内部工具函数在 contract-exempt.json 里登记豁免 */
@@ -456,8 +459,60 @@ async function q10ReleaseSurface() {
   record('Q10', `发布面同步（README 版本表 / 项目站 / CI eval 用例区间，当前 v${version || '?'}）`, problems.length === 0, problems);
 }
 
+// ── Q11 写侧粒度与会话库契约（v0.6）───────────────────────────────
+// 起因：v0.6 把「一个记录 = 一个可判断的事实」写进契约，并新增会话临时库。
+// 这两件事都很容易被后续改动悄悄退化（例如把 MAX_TEXT 静默截断改回去、
+// 或者把 session 的 fact 禁令删掉），所以用机械检查钉住结构性事实。
+async function q11WriteAndSessionContract() {
+  const problems = [];
+  const versionDir = currentVersionDir();
+  const policyPath = path.join(versionDir, 'config', 'policy.json');
+  const policy = JSON.parse(await fsp.readFile(policyPath, 'utf8'));
+
+  // 1) write 段必须是数据（阈值可在配置里调，不是散在代码里的常量）
+  const write = policy.write;
+  if (!write || typeof write !== 'object') {
+    problems.push(`${rel(policyPath)}: 缺 write 段（写侧粒度契约必须可配置）`);
+  } else {
+    if (!Number.isFinite(write.textHardMaxChars) || write.textHardMaxChars <= 0) problems.push(`${rel(policyPath)}: write.textHardMaxChars 必须是正数`);
+    if (!Number.isFinite(write.valueRecommendChars) || write.valueRecommendChars <= 0) problems.push(`${rel(policyPath)}: write.valueRecommendChars 必须是正数`);
+    if (!Array.isArray(write.titleRequiredKinds) || write.titleRequiredKinds.length === 0) problems.push(`${rel(policyPath)}: write.titleRequiredKinds 不能为空`);
+  }
+
+  // 2) record.js 不得把硬上限做成静默截断（老实现是 text.slice(0, MAX_TEXT-1) + '…'）
+  const recordPath = path.join(versionDir, 'src', 'core', 'record.js');
+  const recordSrc = await fsp.readFile(recordPath, 'utf8');
+  if (!/textHardMaxChars/.test(recordSrc)) problems.push(`${rel(recordPath)}: 没读到 write.textHardMaxChars（硬上限必须来自 policy）`);
+  if (/slice\(\s*0\s*,\s*MAX_TEXT\s*-\s*1\s*\)/.test(recordSrc)) problems.push(`${rel(recordPath)}: 又出现了 MAX_TEXT 静默截断（契约要求超硬上限报错）`);
+
+  // 3) 会话库：fact 禁令必须在写路径上生效
+  const lifecyclePath = path.join(versionDir, 'src', 'session', 'lifecycle.js');
+  let lifecycleSrc = '';
+  try {
+    lifecycleSrc = await fsp.readFile(lifecyclePath, 'utf8');
+  } catch {
+    problems.push(`${rel(lifecyclePath)}: 不存在（v0.6 的会话库实现缺失）`);
+  }
+  if (lifecycleSrc && !/E_SCRATCH_KIND_FORBIDDEN/.test(lifecycleSrc)) problems.push(`${rel(lifecyclePath)}: 没有 E_SCRATCH_KIND_FORBIDDEN（临时库必须拒绝 fact）`);
+  const writePathSrc = await fsp.readFile(path.join(versionDir, 'src', 'api', 'write-path.js'), 'utf8');
+  if (!/assertWritableKind|E_SCRATCH_KIND_FORBIDDEN|startsWith\(\s*['"]session:/.test(writePathSrc)) {
+    problems.push(`${rel(path.join(versionDir, 'src', 'api', 'write-path.js'))}: 写路径没有会话库 kind 校验（禁令只写在注释里等于没有）`);
+  }
+
+  // 4) 这两条契约必须有注入式评测兜底
+  const evalSrc = await fsp.readFile(path.join(versionDir, 'eval', 'run.js'), 'utf8');
+  for (const id of ['I37', 'I38', 'I39']) {
+    // 用 includes 而不是 new RegExp：正则里的 ['I37' 会被解析成字符类开头（Unterminated character class）
+    if (!evalSrc.includes(`['${id}'`)) {
+      problems.push(`${rel(path.join(versionDir, 'eval', 'run.js'))}: 缺少 ${id} 用例登记（写侧/会话库契约必须有端到端评测）`);
+    }
+  }
+
+  record('Q11', '写侧粒度与会话库契约（policy.write 可配置 / 无静默截断 / session 禁 fact / I37–I39 在册）', problems.length === 0, problems);
+}
+
 const CHECKS = [q1ZeroDependencies, q2SourceSize, q3TestInventory, q4EvalAlignment,
-  q5ContractCoverage, q6DocLinks, q7VersionIntegrity, q8Encoding, q9WebUiBoundary, q10ReleaseSurface];
+  q5ContractCoverage, q6DocLinks, q7VersionIntegrity, q8Encoding, q9WebUiBoundary, q10ReleaseSurface, q11WriteAndSessionContract];
 
 for (const check of CHECKS) {
   try {

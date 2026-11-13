@@ -1,0 +1,153 @@
+{
+  "version": "0.1.0",
+  "kinds": {
+    "fact": {
+      "halfLifeMs": 7776000000,
+      "weight": 1.0,
+      "color": "#5b9cf5"
+    },
+    "pref": {
+      "halfLifeMs": 15552000000,
+      "weight": 1.3,
+      "color": "#c084fc"
+    },
+    "decision": {
+      "halfLifeMs": 31536000000,
+      "weight": 1.4,
+      "color": "#34d399"
+    },
+    "gotcha": {
+      "halfLifeMs": 31536000000,
+      "weight": 1.2,
+      "color": "#fbbf24"
+    },
+    "state": {
+      "halfLifeMs": 7200000,
+      "weight": 0.6,
+      "color": "#94a3b8"
+    }
+  },
+  "halfLifeMs": {
+    "pref": 15552000000,
+    "decision": 31536000000,
+    "fact": 7776000000,
+    "gotcha": 31536000000,
+    "state": 7200000
+  },
+  "kindWeight": {
+    "pref": 1.3,
+    "decision": 1.4,
+    "gotcha": 1.2,
+    "fact": 1.0,
+    "state": 0.6
+  },
+  "quota": {
+    "maxActive": 5000,
+    "purgeGraceMs": 604800000
+  },
+  "search": {
+    "limitDefault": 10,
+    "kindWeighted": true,
+    "recencyHalflifeMs": 7776000000,
+    "rrfK": 60,
+    "vectorTopK": 30,
+    "minScore": 0.25,
+    "embedder": {
+      "kind": "none",
+      "url": "",
+      "model": "",
+      "timeoutMs": 3000,
+      "dim": 0
+    }
+  },
+  "curate": {
+    "batchLimit": 20,
+    "similarityThreshold": 0.85
+  },
+  "brief": {
+    "lines": 80,
+    "recentCount": 15,
+    "tier0Chars": 800,
+    "totalChars": 8000,
+    "quota": {
+      "L2": 0.25,
+      "L3": 0.15
+    }
+  },
+  "suspiciousPatterns": [
+    "忽略之前",
+    "ignore previous",
+    "ignore all previous",
+    "system prompt",
+    "把 ~/.ssh"
+  ],
+  "dedupe": {
+    "nearDupThreshold": 0.85,
+    "scanThreshold": 0.45,
+    "scanDiceThreshold": 0.15
+  },
+  "index": {
+    "backend": "memory"
+  },
+  "views": {
+    "maxBlockSize": 64,
+    "maxClusterRecords": 2000
+  },
+  "l3": {
+    "maxCallsPerRun": 20,
+    "batchSize": 10,
+    "ttlMs": 2592000000
+  },
+  "redact": {
+    "enabled": true,
+    "kinds": [
+      "private_key",
+      "jwt",
+      "github_token",
+      "aws_key",
+      "api_key",
+      "internal_host",
+      "assignment"
+    ]
+  },
+  "capture": {
+    "maxItems": 50,
+    "maxLineChars": 400,
+    "inboxDir": "inbox"
+  },
+  "write": {
+    "titleRequiredKinds": [
+      "fact",
+      "pref",
+      "decision",
+      "gotcha"
+    ],
+    "valueRecommendChars": 300,
+    "textHardMaxChars": 4000,
+    "valueHardMaxChars": 2000,
+    "longFormTag": "long-form",
+    "titleEnforce": false
+  },
+  "session": {
+    "hintTokens": 30000,
+    "ttlMs": 604800000,
+    "promoteKinds": [
+      "decision",
+      "gotcha"
+    ],
+    "handoffDir": "handoffs",
+    "sweepOlderThanMs": 1209600000,
+    "autoWatch": false
+  },
+  "math": {
+    "calibrateDecay": {
+      "enabled": true,
+      "minSamples": 50,
+      "reportOnly": true
+    },
+    "hysteresis": {
+      "enterRatio": 0.8,
+      "exitRatio": 0.6
+    }
+  }
+}

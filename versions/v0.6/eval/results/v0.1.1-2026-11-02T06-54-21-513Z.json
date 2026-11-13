@@ -1,0 +1,122 @@
+{
+  "version": "0.1.1",
+  "ts": "2026-11-02T06:54:21.513Z",
+  "cases": [
+    {
+      "id": "I1",
+      "pass": true,
+      "ms": 85,
+      "detail": "ok"
+    },
+    {
+      "id": "I2",
+      "pass": true,
+      "ms": 88,
+      "detail": "ok"
+    },
+    {
+      "id": "I3",
+      "pass": true,
+      "ms": 74,
+      "detail": "ok"
+    },
+    {
+      "id": "I4",
+      "pass": true,
+      "ms": 73,
+      "detail": "ok"
+    },
+    {
+      "id": "I5",
+      "pass": true,
+      "ms": 75,
+      "detail": "ok"
+    },
+    {
+      "id": "I6",
+      "pass": true,
+      "ms": 111,
+      "detail": "ok"
+    },
+    {
+      "id": "I7",
+      "pass": true,
+      "ms": 113,
+      "detail": "ok"
+    },
+    {
+      "id": "I8",
+      "pass": true,
+      "ms": 214,
+      "detail": "ok"
+    },
+    {
+      "id": "I9",
+      "pass": true,
+      "ms": 71,
+      "detail": "ok"
+    },
+    {
+      "id": "I10",
+      "pass": true,
+      "ms": 73,
+      "detail": "ok"
+    },
+    {
+      "id": "I11",
+      "pass": true,
+      "ms": 87,
+      "detail": "ok"
+    },
+    {
+      "id": "I12",
+      "pass": true,
+      "ms": 110,
+      "detail": "ok"
+    }
+  ],
+  "metrics": {
+    "active": 3,
+    "dupRatio": 0,
+    "conflictRate": 0,
+    "unitCost": 12.667,
+    "nearDupBlocked": 19,
+    "disputedAfterCurate": 0,
+    "dedupeClusters": 1,
+    "agentMerged": 5,
+    "agentLoopActive": 1,
+    "gate": {
+      "dupRatio": true,
+      "conflictRate": true,
+      "disputedCountI7": true,
+      "dedupeClustersFound": true,
+      "agentLoopConverged": true
+    }
+  },
+  "bench": {
+    "n1000": {
+      "write": {
+        "p50": 1.015374999999949,
+        "p95": 1.512625000000071,
+        "n": 1000
+      },
+      "search": {
+        "p50": 0.2763749999999163,
+        "p95": 0.42729200000030687,
+        "n": 200
+      }
+    },
+    "n5000": {
+      "write": {
+        "p50": 3.04758400000037,
+        "p95": 5.5529590000005555,
+        "n": 5000
+      },
+      "search": {
+        "p50": 1.3445419999989099,
+        "p95": 1.7502499999973224,
+        "n": 200
+      }
+    }
+  }
+}
