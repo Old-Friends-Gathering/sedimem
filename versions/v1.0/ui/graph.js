@@ -22,13 +22,6 @@ import {
   MIN_SCALE, MAX_SCALE, ALPHA_MIN,
 } from './layout.js';
 
-/** 画一条边各类型使用的样式 */
-const EDGE_STYLE = {
-  'same-entity': { color: 'rgba(148,163,184,0.5)', dash: [], width: 1 },
-  supersedes: { color: 'rgba(100,116,139,0.7)', dash: [6, 3], width: 1.25 },
-  'duplicate-of': { color: '#f97316', dash: [7, 5], width: 1 },
-  'disputed-with': { color: '#ef4444', dash: [2, 4], width: 1.25 },
-};
 
 export async function initGraph({ canvas, detailEl, toolbarEl, apiBase = 'api', scope = '' }) {
   const ctx = canvas.getContext('2d');

@@ -32,7 +32,16 @@ test('I28 抽取：引导词/前缀/列表命中，代码块与 URL 不命中', 
   assert.ok(texts.some((t) => t.includes('FTS5')), '缺 FTS5');
   assert.ok(texts.some((t) => t.includes('crontab')), '缺 crontab');
   assert.ok(texts.some((t) => t.includes('sedimem-run.sh')), '缺列表项');
-  assert.ok(!texts.some((t) => t.includes('example.com')), 'URL 行不该进候选');
+  // 不判子串：用 URL 主机名精确判断（子串判定既会被 `notexample.com` 骗过，也会被 CodeQL 判成
+  // incomplete-url-substring-sanitization）。
+  const hasExampleHost = texts.some((t) => {
+    try {
+      return new URL(t).hostname === 'example.com';
+    } catch {
+      return false;
+    }
+  });
+  assert.equal(hasExampleHost, false, 'URL 行不该进候选');
   assert.ok(!texts.some((t) => t.includes('const x = 1')), '代码块不该进候选');
   // kind 映射：结论→fact、坑→gotcha、约定→decision
   const byText = new Map(got.map((c) => [c.text, c.kind]));

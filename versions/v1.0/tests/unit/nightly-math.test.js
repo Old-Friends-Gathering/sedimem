@@ -37,7 +37,7 @@ describe('calibrateDecay（W4 任务 1：生存分析式半衰期估计，只报
   });
 
   test('中位数正确：奇数个样本取正中值', () => {
-    const spans = [1000, 3000, 5000, 7000, 9000]; // 已乱序传入
+    // 已乱序传入，验证中位数与顺序无关
     const records = [3000, 9000, 1000, 7000, 5000].map((ms) => superseded('fact', ms));
     const out = calibrateDecay({ records, policy: { math: { calibrateDecay: { minSamples: 5 } } } });
     assert.equal(out[0].samples, 5);

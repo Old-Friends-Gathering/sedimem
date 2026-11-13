@@ -16,10 +16,10 @@ import * as lifecycle from './lifecycle.js';
 import * as writePath from './write-path.js';
 import * as searchPath from './search-path.js';
 import * as maintenance from './maintenance.js';
-import { invalid, notFound, invalidArg } from '../core/errors.js';
+
 
 // 错误工厂已上移到 core/errors.js（切断承接模块的反向 import 环）；
-// 这里 re-export 保持既有「从本文件取错误工厂」的外部调用不破。
+// 这里直接 re-export（不要先 import 再 export，否则 CodeQL 会把它们当未使用导入）。
 export { invalid, notFound, invalidArg } from '../core/errors.js';
 
 /**

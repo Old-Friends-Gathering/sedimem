@@ -7,7 +7,6 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
 import { createMemoryService } from '../../src/api/service.js';
-import { createClock } from '../../src/core/clock.js';
 import { startSession } from '../../src/session/lifecycle.js';
 import {
   CHECKPOINT_SECTIONS, normalizeCheckpoint, parseDshSummary, writeCheckpoint,

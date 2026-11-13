@@ -101,6 +101,8 @@ function httpEmbedder(cfg) {
       const timer = setTimeout(() => ac.abort(), timeoutMs);
       let res;
       try {
+        // codeql[js/file-access-to-http]: url 来自本机 policy（policy.search.embedder.endpoint），
+        // 已由 validatedEndpoint() 限死 http(s) + 有 host；不来自请求/文件内容。
         res = await fetch(url, {
           method: 'POST',
           headers: { 'content-type': 'application/json' },
