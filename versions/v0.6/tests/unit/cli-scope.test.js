@@ -34,7 +34,7 @@ test('CLI --scope 生效：写进指定分库而不是 cwd 分库', async () => 
 
     // 文件层面核实：没有写进 cwd 分库（dir:memo-cliscope-*），而是写进 session 文件
     const items = await fsp.readdir(path.join(memoHome, 'items'));
-    const sessionFile = items.find((f) => f.startsWith(sid.replace('session:', 'session:')));
+    const sessionFile = items.find((f) => f.startsWith(sid));
     assert.ok(sessionFile, `session 库文件不存在：${items.join(',')}`);
     const lines = (await fsp.readFile(path.join(memoHome, 'items', sessionFile), 'utf8')).trim().split('\n');
     assert.ok(lines.length >= 2, `session 库应含 meta + decision，实际 ${lines.length} 行`);
