@@ -117,6 +117,22 @@ cd versions/v0.3 && node eval/run.js   # 行为（I1–I12）
 | 豁免 | 仅 `no-issue` 标签，且正文必须写豁免理由（便于事后审计） |
 | 分支保护 | `main` 禁止直推/force push；必须过全部 required checks（含 `issue-link`）；**管理员也受约束**（`enforce_admins=true`） |
 
+## 五.1 发布面监控（pages-verify.yml）
+
+Q10 与 pages-verify 是同一条链的两段，缺一段就会在另一段漏：
+
+| 阶段 | 检查 | 拦什么 |
+|---|---|---|
+| 合并前 | Q10（`quality-check.mjs` 第 10 项） | 仓库里 README / `docs/index.html` / CI 检查名三处漂移 |
+| 合并后 | `pages-verify` workflow（`tools/pages-verify.mjs`） | Pages 构建没跑完 / 构建失败 / 构建落后 / 页面只服务旧内容 |
+
+`pages-verify` 的判定只有两条：线上首页含 `v<当前版本>`，且三张 `assets/*.png` 都 200。
+Pages 构建是异步的（实测 2–5 分钟），脚本默认重试 20×15s；超时才失败并开 issue
+（同标题已 open 则只评论，避免刷屏）。
+
+**为什么不进分支保护**：PR 阶段 Pages 还没构建，把它当 required check 只会让 PR 永远红，
+最后逼人 `--admin` 合并——那等于把保护整体关掉。
+
 ## 六、指标复盘与阈值变更
 
 - **谁改阈值**：维护者（CODEOWNERS），且必须走 issue + MR，在 issue 里回答三个问题：

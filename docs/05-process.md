@@ -103,3 +103,13 @@ Issue（feature/bug/chore 模板，验收标准必须可机械检验）
    否则 PR 会永远等一个不存在的检查。
 
 另需同步但不在 Q10 机械检查范围内的：`CHANGELOG`、`docs/DELTA.md`、`docs/07` 基线数字、`files under versions/<CURRENT>/eval/results/` 各留一份。
+
+### 6.2 合并后校验（pages-verify 会拦）
+
+合并（squash）后不要立刻宣布完成，先确认线上真的更新了：
+
+1. 等 `pages-verify` workflow 跑完（push main 自动触发，本地也可 `node tools/pages-verify.mjs` 立刻看）；
+2. 它红了 = 线上不是当前版本：查 `gh api repos/Owner/sedimem/pages` 的 `source`/`status`、
+   以及 `docs/index.html` 是否真的含新版本号；
+3. 它开了 issue 就**在同一条 issue 里**修完再关（同标题不会重复开，别手动造第二条）；
+4. 每天 03:17 UTC 还有一次巡检兜底，长时间不一致会一直有 open issue 提醒。

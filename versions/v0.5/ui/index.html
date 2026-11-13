@@ -1,0 +1,90 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>sedimem · 记忆观察台</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data:; style-src 'self' 'unsafe-inline'; script-src 'self'">
+<link rel="stylesheet" href="./style.css">
+</head>
+<body>
+<header>
+  <div class="brand">sedimem<small>记忆观察台 · 只读</small></div>
+  <div class="scope">
+    <span class="scope-pick" id="scope-pick"><span class="chip">scope …</span></span>
+    <span class="chip" id="chip-version"><b>…</b></span>
+    <span class="chip" id="chip-readonly"><b>只读</b></span>
+  </div>
+</header>
+
+<nav>
+  <button id="tab-today">今日</button>
+  <button id="tab-graph">图谱</button>
+  <button id="tab-search">搜索</button>
+  <button id="tab-hygiene">卫生</button>
+</nav>
+
+<main>
+  <!-- ============ 今日 ============ -->
+  <section id="today">
+    <h2 id="today-title">今日变化</h2>
+    <div class="sub">按 events.jsonl 归并；命中（hit）折叠在末尾，不占主体。</div>
+    <div class="datebar">
+      <button id="today-prev" title="前一天">‹ 前一天</button>
+      <input type="date" id="today-date">
+      <button id="today-next" title="后一天">后一天 ›</button>
+    </div>
+    <div class="cards">
+      <div class="card"><div class="n created" id="n-created">–</div><div class="k">新增 created</div></div>
+      <div class="card"><div class="n superseded" id="n-superseded">–</div><div class="k">被取代 superseded</div></div>
+      <div class="card"><div class="n forgotten" id="n-forgotten">–</div><div class="k">删除（墓碑）</div></div>
+      <div class="card"><div class="n merged" id="n-merged">–</div><div class="k">合并 merge</div></div>
+    </div>
+    <table id="today-table"><tbody></tbody></table>
+    <div class="empty" id="today-empty" hidden></div>
+  </section>
+
+  <!-- ============ 图谱（内容委托 graph.js） ============ -->
+  <section id="graph">
+    <h2>记忆图谱</h2>
+    <div class="sub">节点 = 记录；边 = 同实体 / 版本链 / 近重复候选 / 冲突。颜色按 kind，透明度按状态。</div>
+    <div id="graph-toolbar"></div>
+    <div class="graph-stage">
+      <canvas id="graph-canvas"></canvas>
+      <aside id="graph-detail"><p class="dim" id="graph-hint">点击节点查看详情。</p></aside>
+    </div>
+    <p class="dim" id="graph-mode-note" style="margin-top:6px">3D 力导向（实验）：滚轮缩放、空白拖拽旋转、双击节点聚焦。</p>
+  </section>
+
+  <!-- ============ 搜索（B3 / D8） ============ -->
+  <section id="search">
+    <h2>搜索记忆</h2>
+    <div class="sub">词法检索（语义道启用时自动融合）；结果按相关度排序，跟随顶栏分库。</div>
+    <div class="search-bar">
+      <input type="search" id="search-input" placeholder="输入关键词，回车搜索" aria-label="搜索记忆">
+    </div>
+    <div id="search-results"></div>
+  </section>
+
+  <!-- ============ 卫生 ============ -->
+  <section id="hygiene">
+    <h2>库的卫生状况</h2>
+    <div class="sub">待裁决 = 词法只报候选不判决；清理史 = 合并与失效；趋势看 30 天。</div>
+
+    <h3 class="h3">待裁决候选</h3>
+    <div id="hyg-candidates"></div>
+
+    <h3 class="h3">清理史（最近 30 天）</h3>
+    <table id="hyg-history"><tbody></tbody></table>
+
+    <h3 class="h3">趋势（30 天）</h3>
+    <div id="hyg-trend"></div>
+
+    <h3 class="h3">体检摘要（doctor）</h3>
+    <div id="hyg-doctor"></div>
+  </section>
+</main>
+
+<script type="module" src="./app.js"></script>
+</body>
+</html>
