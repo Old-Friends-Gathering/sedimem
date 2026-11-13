@@ -1,0 +1,11 @@
+{
+  "id": "I48",
+  "title": "记忆中心静态面与只读契约：九页导航 / vendor 自托管 / writeEnabled 下发",
+  "why": "W6/W8 把观察台换成 Tabler+uPlot+force-graph 并加了四页。UI 的失败模式是「页面能打开但资源 404/CDN 外链/只读库给了写入口」，这些在单测里看不出来，必须起真服务取真资源。",
+  "pass": [
+    "首页含 tab-today…tab-settings 九个入口",
+    "样式来自 ./vendor，页面无 http(s) 外链与 CDN 引用",
+    "tabler.min.css / uPlot.iife.min.js / force-graph.min.js 均 200 且体积 >1KB",
+    "/api/summary 在只读模式下发 writeEnabled=false，写模式发 true"
+  ]
+}
