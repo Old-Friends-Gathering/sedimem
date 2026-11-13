@@ -32,8 +32,10 @@ test('facade：拆分后 MemoryService 的公开方法集合不变（裁决 48�
     'brief', 'close', 'compact', 'curateApply', 'curateAuto', 'curateExport', 'dedupeScan', 'doctor', 'events',
     'enforceQuota', 'exportRecords', 'flushHits', 'forget', 'get', 'reindex', 'refreshView', 'search', 'stats',
     'supersede', 'write',
+    // v1.0 W3（裁决 83–88）：LLM 派生层对外方法
+    '_loadDerived', 'derivedFor', 'drainDerive', 'enqueueDeriveFor', 'rebuildDerived',
   ].sort();
-  assert.deepEqual(names, expected, '方法集合必须与拆分前一致（新增的 compact/curateAuto 是 v0.2.1 计划内新增）');
+  assert.deepEqual(names, expected, '方法集合必须与契约登记一致（v0.2.1 新增 compact/curateAuto；v1.0 新增派生层四方法 + 私有 _loadDerived）');
 });
 
 test('JudgePort：注入的裁决器必须真的被用（裁决 50；审核 S1）', () => withHome(async (memoHome) => {

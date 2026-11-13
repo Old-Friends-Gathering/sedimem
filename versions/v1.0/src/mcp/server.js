@@ -806,6 +806,26 @@ async function main() {
   const rl = readline.createInterface({ input: process.stdin, crlfDelay: Infinity });
   // 每连接独立：initialize 门禁 + 运行期 scope（client/scope 在 initialize 时填充）
   const connState = { initialized: false, client: 'unknown', scope: null, scopeSource: null };
+  // v1.0 W3 裁决 86：MCP 空闲时排空派生队列（第二顺位 drain 者）。
+  // 只在端口就绪且已初始化时工作：未配置 LLM 时零成本，协议处理路径完全不受影响。
+  const idleDeriver = (() => {
+    let stopped = false;
+    const timer = setInterval(async () => {
+      if (stopped || !connState.initialized || !connState.scope) return;
+      try {
+        const svc = await getService(connState.scope);
+        if (!svc?.llmPort?.ready) return;
+        const out = await svc.drainDerive({ limit: 5 });
+        if (out.claimed > 0) {
+          process.stderr.write(`[memo] idle derive: claimed=${out.claimed} ok=${out.ok} failed=${out.failed}\n`);
+        }
+      } catch (err) {
+        process.stderr.write(`[memo] idle derive skipped: ${err?.message ?? err}\n`);
+      }
+    }, 30000);
+    timer.unref?.();
+    return { stop() { stopped = true; clearInterval(timer); } };
+  })();
   let inFlight = 0; // 正在处理的请求数；stdin EOF 时必须等它清零再退出
   // 串行处理（A 项）：按到达顺序逐条处理，响应顺序与请求顺序一致，
   // 前一条的副作用（写入）对后一条可见；单条抛错不打断链。
@@ -845,6 +865,7 @@ async function main() {
     rl.close();
     while (inFlight > 0) await new Promise((r) => setTimeout(r, 10));
     try {
+      idleDeriver.stop();
       await closeAllServices();
     } finally {
       process.exit(0);

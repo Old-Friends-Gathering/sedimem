@@ -149,5 +149,37 @@
       "enterRatio": 0.8,
       "exitRatio": 0.6
     }
+  },
+  "llm": {
+    "provider": "none",
+    "baseUrl": "https://open.bigmodel.cn/api/paas/v4",
+    "apiKey": "",
+    "model": "glm-5.3-flash",
+    "egress": "local-only",
+    "timeoutMs": 8000,
+    "maxRetries": 1,
+    "dailyLimitCny": 5,
+    "price": {
+      "inPerM": 0.8,
+      "outPerM": 2.8
+    },
+    "purposes": {
+      "derive": {
+        "maxOutputTokens": 300
+      },
+      "curate": {
+        "maxOutputTokens": 300
+      },
+      "checkpoint": {
+        "maxOutputTokens": 1500
+      },
+      "brief": {
+        "maxOutputTokens": 400
+      }
+    }
+  },
+  "derive": {
+    "promptVersion": "d1-v1",
+    "maxAttempts": 3
   }
 }

@@ -16,6 +16,10 @@ import * as lifecycle from './lifecycle.js';
 import * as writePath from './write-path.js';
 import * as searchPath from './search-path.js';
 import * as maintenance from './maintenance.js';
+import { createLlmPort } from '../llm/port.js';
+import { loadDerived, appendDerived, rebuildDerived } from '../llm/derived-store.js';
+import { enqueueDerive, claimBatch, completeItem } from '../llm/outbox.js';
+import { applyDerivation } from '../llm/derive.js';
 
 
 // 错误工厂已上移到 core/errors.js（切断承接模块的反向 import 环）；
@@ -42,6 +46,19 @@ export function mergePolicy(base, override) {
 }
 
 /**
+ * 构造 LLM 端口：失败时降级为 null（调用方按 no-provider 处理），绝不阻断服务启动。
+ * 端口自身的构造期校验（egress 冲突、非法端点）在这里被捕获并记入 reason，由 doctor 暴露。
+ * @param {{policy?: object, memoHome: string, clock: object}} args
+ */
+function parseLlmPort({ policy, memoHome, clock }) {
+  try {
+    return createLlmPort({ policy, memoHome, clock });
+  } catch (err) {
+    return { name: 'none', model: null, ready: false, reason: err?.code ?? 'E_LLM_INIT', complete: async () => ({ ok: false, error: { code: 'E_LLM_UNAVAILABLE', message: String(err?.message ?? err) } }) };
+  }
+}
+
+/**
  * 创建 MemoryService（已 build 索引）。
  * @param {{memoHome: string, scope?: string, cwd?: string, clock?: object,
  *          store?: JsonlStore, index?: InvertedIndex, quota?: QuotaPolicy,
@@ -50,7 +67,7 @@ export function mergePolicy(base, override) {
  */
 export async function createMemoryService({
   memoHome, scope, cwd, clock = systemClock,
-  store, index, quota, judge, policy,
+  store, index, quota, judge, policy, llmPort,
 } = {}) {
   if (!memoHome) throw invalid('createMemoryService: memoHome is required');
   // 浅合并（每个顶层 section 一层）：传 {redact:{enabled:false}} 只改那一项，
@@ -68,13 +85,15 @@ export async function createMemoryService({
     quota: quota ?? new QuotaPolicy({}),
     // 裁决 50：裁决器是注入点（JudgePort）。缺省 ruleJudge 确定性、无 LLM，保证 curateAuto 行为可复现。
     judge: judge ?? createJudge({ policy: effectivePolicy }),
+    // W3：LLM 端口注入点（测试可传假端口；缺省按 policy.llm 构造）
+    llmPort,
   });
   await service._init();
   return service;
 }
 
 export class MemoryService {
-  constructor({ memoHome, scope, clock, store, index, quota, judge, policy }) {
+  constructor({ memoHome, scope, clock, store, index, quota, judge, policy, llmPort }) {
     this.memoHome = memoHome;
     /** @type {object} 生效策略（默认 config/policy.json；构造期可覆盖，裁决 53 之后新增） */
     this.policy = policy;
@@ -98,6 +117,13 @@ export class MemoryService {
     this._loadError = null;
     /** @type {boolean} 当前是否在本服务持有的 scope 锁临界区内（内部标志） */
     this._inScopeLock = false;
+    // —— LLM 总结层（v1.0 W3，裁决 83–88）——
+    // 端口永不为 null：provider=none 时 ready=false，派生降级为 no-provider，写入路径完全不受影响。
+    // 可注入端口（测试 / 多租户）；不传则按 policy.llm 构造，provider=none 时 ready=false
+    this.llmPort = llmPort ?? parseLlmPort({ policy, memoHome, clock });
+    /** @type {Map<string, object>} 派生 sidecar 缓存（键 `${id}@${validFrom}`） */
+    this._derived = new Map();
+    this._derivedLoaded = false;
     this._closed = false;
   }
 
@@ -126,6 +152,64 @@ export class MemoryService {
   _statusOk(r, opts) { return searchPath.statusOk(this, r, opts); }
   async get(id, opts) { return searchPath.getRecord(this, id, opts); }
   async brief(opts) { return searchPath.briefRecords(this, opts); }
+
+  // —— LLM 派生层（v1.0 W3）——
+  /** 惰性加载派生 sidecar（只读投影，不影响真相层） */
+  async derivedFor(id, validFrom) {
+    await this._loadDerived();
+    return this._derived.get(`${id}@${validFrom}`) ?? null;
+  }
+  async _loadDerived() {
+    if (this._derivedLoaded) return this._derived;
+    this._derived = await loadDerived({ memoHome: this.memoHome, scope: this.scope });
+    this._derivedLoaded = true;
+    return this._derived;
+  }
+  /** 重建派生 sidecar：只做去重/原子重写（不调 LLM、不改真相层） */
+  async rebuildDerived() {
+    await this._loadDerived();
+    const written = await rebuildDerived({
+      memoHome: this.memoHome, scope: this.scope, records: [...this._derived.values()],
+    });
+    this._derivedLoaded = false;
+    await this._loadDerived();
+    return { written, scope: this.scope };
+  }
+  /** 写成功后入队（只 append outbox，不做 LLM —— 裁决 84） */
+  async enqueueDeriveFor(record) {
+    if (!record || typeof record.id !== 'string') return { enqueued: false };
+    return enqueueDerive({
+      memoHome: this.memoHome, scope: this.scope, id: record.id, validFrom: record.validFrom,
+    });
+  }
+  /** 排空一批（可被 CLI / MCP 空闲 / nightly 调用）；单条失败不影响整批 */
+  async drainDerive({ limit = 5 } = {}) {
+    const claimed = await claimBatch({ memoHome: this.memoHome, scope: this.scope, limit, clock: this.clock });
+    const batch = Array.isArray(claimed) ? claimed : (claimed?.items ?? []);
+    const out = { claimed: batch.length, ok: 0, failed: 0, skipped: 0 };
+    for (const item of batch) {
+      const versions = this._versions.get(item.id) ?? [];
+      const record = versions.find((r) => r.validFrom === item.validFrom) ?? null;
+      if (!record) {
+        await completeItem({ memoHome: this.memoHome, scope: this.scope, id: item.id, validFrom: item.validFrom, ok: false });
+        out.skipped += 1;
+        continue;
+      }
+      const derived = await applyDerivation({
+        port: this.llmPort,
+        record,
+        promptVersion: this.policy?.derive?.promptVersion ?? 'd1-v1',
+        clock: this.clock,
+      });
+      await appendDerived({ memoHome: this.memoHome, scope: this.scope, record: derived });
+      const ok = derived.deriveStatus === 'ok';
+      await completeItem({ memoHome: this.memoHome, scope: this.scope, id: item.id, validFrom: item.validFrom, ok });
+      this._derived.set(`${item.id}@${item.validFrom}`, derived);
+      this._derivedLoaded = true;
+      if (ok) out.ok += 1; else out.failed += 1;
+    }
+    return out;
+  }
 
   // —— maintenance ——
   async stats() { return maintenance.stats(this); }

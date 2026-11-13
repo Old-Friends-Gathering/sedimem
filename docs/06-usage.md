@@ -608,3 +608,52 @@ close 做四件事，顺序固定：
 | `memo session close --scope session:<id>` | 晋升 decision/gotcha 回主库、写交接文档、其余 tombstone（幂等） | §17.5 |
 | `memo session sweep --older-than 14d` | 只报告忘了 close 的僵尸会话，不删 | §17.7 |
 | `memo derive …` | **v1.0 规划，尚未实现**（LLM 派生 title/summary，见 `docs/plans/v1.0.0-refactor.md`） | 勿据此使用 |
+
+## 19. LLM 总结层（v1.0 W3）
+
+记忆的 title/summary 可以由 LLM 生成，但它**永远是派生投影**：真相层 `items/*.jsonl` 不因为
+LLM 而改变一个字节（派生前后 sha256 相同，I41 断言）。默认 `provider: none`，不配置也不影响任何写入。
+
+### 19.1 打开
+
+`versions/CURRENT` 版本目录下 `config/policy.json`：
+
+```json
+"llm": {
+  "provider": "openai-compatible",
+  "baseUrl": "https://open.bigmodel.cn/api/paas/v4",
+  "apiKey": "从环境变量注入，不要写进仓库",
+  "model": "glm-5.3-flash",
+  "egress": "allowed",
+  "dailyLimitCny": 5,
+  "price": { "inPerM": 0.8, "outPerM": 2.8 }
+}
+```
+
+- `egress` 默认 `local-only`：此时只允许 `provider: none`，否则启动即报 `E_LLM_PRIVACY_CONFLICT`（防止误把记忆发出去）。
+- `apiKey` 建议用 `MEMO_LLM_API_KEY` 环境变量注入，不要进仓库。
+- `dailyLimitCny` 是跨进程共享的硬预算：CLI 与 MCP 共用 `~/.memo/llm/budget.json`，超了返回 `budget-exceeded`，写入照常成功。
+
+### 19.2 排空派生队列
+
+写入只入队，不调 LLM。三个排空者：
+
+| 触发 | 命令/时机 | 上限 |
+|---|---|---|
+| 手动 | `memo derive --drain --limit 20` | 参数 |
+| MCP 空闲 | 会话空闲时后台排空 | 每次 5 |
+| nightly | 每天 03:30 | 200 |
+
+```bash
+memo derive --drain --limit 20      # 排一批
+memo derive --rebuild               # 只去重/原子重写 sidecar（不调 LLM）
+memo derive --json                  # 机读
+```
+
+### 19.3 语义边界
+
+- LLM 输出只能含 `title / summary / tags / spo 建议 / kindHint`；出现 `kind`、`text`、`value` 等真相字段即判失败且不落任何真相字段（I44）。
+- `kindHint` 只作审计：与记录 kind 不一致时记 `kindMismatch: true`，**不改记录**。
+- 派生失败（未配置/超预算/输出非法）一律回落到规则字段（`title` → `subject · predicate` → 正文前 24 字），brief 与搜索不会因此变空。
+- 所有派生数据都在 `~/.memo/derived/`，删掉即回到「无派生」状态，真相层不受影响。
+
