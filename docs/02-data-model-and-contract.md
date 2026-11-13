@@ -514,7 +514,7 @@ await svc.exportRecords({ since, until, status = 'active', kind, limit = 2000 })
 
 ### 3.12 第十轮裁决 45–47（v0.2.1：索引后端可插拔 / curate 任务包 / 身份常量单点）
 
-> 来源：issue #20（SQLite FTS5 索引）与 #21（curate 裁决任务包）。设计细节见 `docs/09-sqlite-index.md`、`docs/10-curate-auto.md`；
+> 来源：issue #20（SQLite FTS5 索引）与 #21（curate 裁决任务包）。设计细节见本文末尾**附录 A / 附录 B**；
 > 本节只冻结**跨模块必须一致**的语义。
 
 **裁决 45（IndexPort 只有一个注入点，索引是纯派生层）**
@@ -815,6 +815,8 @@ v0.4 的取舍依据是竞品调研（`docs/research/competitive-dsh-plugins-202
 
 ### 第十四轮导出登记（裁决 61–65）
 
+> 路径基准：除 `ui/` 外均相对版本目录（即 `versions/<CURRENT>/src/...`）；`ui/scope.js` 即 `versions/<CURRENT>/ui/scope.js`。
+
 | 模块 | 导出 |
 |---|---|
 | `src/api/service.js` | `mergePolicy` |
@@ -865,3 +867,53 @@ v0.4 的取舍依据是竞品调研（`docs/research/competitive-dsh-plugins-202
 | `src/index/vector-index.js` | `decodeVector` |
 | `src/render/inject.js` | `FENCE_OPEN` `FENCE_CLOSE` `DATA_NOT_INSTRUCTION` |
 | `ui/scope.js` | `SCOPE_PATTERN` `resolveScope` `hrefFor` |
+
+---
+
+## 附录 A · SQLite FTS5 后端（history）
+
+> doc-kind: history
+> doc-version: 0.6
+> verified-at: 2026-11-14
+> verified-against: versions/CURRENT（v0.6 / 0.6.2）
+
+> 源自原 原 docs/09（SQLite FTS5 索引，v0.2.1-A，issue #20）。**已由 v0.2 起代码实现，本附录不再更新**；
+> 实现见 `src/index/sqlite-index.js`、`src/index/create-index.js`，切换与排障见 `docs/06` §8。
+
+- **契约**：`SqliteIndex` 与 `InvertedIndex` 实现同一 IndexPort（`build/add/remove/search/size`），
+  同一 `tokenize()` 切词、同一排序（score 降序、同分按 id 升序）与过滤约定（filter 在打分后生效）；
+  `limit` 缺省 10 与内存实现一致，要取全部显式传 `limit: index.size`；无 id 记录 `add` 抛 `E_INVALID_RECORD`。
+- **索引落盘位置**：`$MEMO_HOME/index/<scopeKey>.sqlite`（WAL 模式，连同 `.sqlite-wal`/`.sqlite-shm`）；
+  `scopeKey` 用 `src/config/paths.js` 的 `scopeKeyOf()`。FTS5 external content（`content='docs'`）不存正文两份；
+  **索引是派生层不存真相**，真相层始终是 `items/<scope>.jsonl`，删掉 `index/` 只会重建变慢。
+- **切换**：`config/policy.json` 的 `index.backend = memory | sqlite`；node:sqlite/FTS5 不可用时启动即抛
+  `E_INDEX_UNAVAILABLE`（fail-loud，不静默降级）；损坏（打开即错、`docs`/`docs_fts` 行数不符）自动删库重建 + `reindex` 补数据；
+  回滚 = 改回 `memory` 一条配置。
+- **查询语义**：`bm25()` 负分转正；`buildMatchExpr` 纯函数——同 `tokenize()` 切词、token 包 `"…"` 字面量转义、
+  OR 连接（不是 AND，保持与内存实现同结果集）、上限 `MAX_QUERY_TOKENS = 256`、0 token 返回 `[]`；
+  filter 时 `sqlLimit = max(limit, 200)` 先取够候选（最多两趟）防假阴性。
+- **校验/测试**：单测 `tests/unit/sqlite-index.test.js`（9 项）与注入用例 I16（两后端 top-k 集合相等 + reindex 后
+  size = 真相层记录数）；门禁 Q1/Q5/Q2 保持绿。绕过 `build()` 直接 `search()` 抛 `E_INDEX_STALE`。
+
+## 附录 B · curate 自动裁决（history）
+
+> doc-kind: history
+> doc-version: 0.6
+> verified-at: 2026-11-14
+> verified-against: versions/CURRENT（v0.6 / 0.6.2）
+
+> 源自原 原 docs/10（curate 自动裁决，v0.2.1-B，issue #21）。**已由 v0.2 起代码实现，本附录不再更新**；
+> 实现见 `src/cli/curate.js` 与 `service.curateApply()`，用法见 `docs/06` §9–§10。
+
+- **核心判断**：去重的最终判决由正在运行的 Agent 做，但链路要零人工胶水：
+  `memo curate prompt` 生成任务包（`$MEMO_HOME/curate/<batchId>.md` 人读 + 同名 `.json` 机读，Agent 只回填 JSON）
+  → 回填 `decisions[]` → `memo curate apply --file` 严格校验后落盘 → `memo curate status` 看进度。
+- **decision 取值**：`merge | a_wins | b_wins | keep_both`（a = ids[0]，与 `memory_curate` 一致，不引入新语义）。
+- **V1–V5 校验（原子，任一失败一条不落盘，均 `E_INVALID_ARG`）**：V1 JSON 可解析且含 `batchId`+`decisions[]`；
+  V2 `batchId` 对应任务包存在；V3 decision 在四值内；V4 ids 必须匹配任务包中某一对（顺序无关）；
+  V5 同一 pair 不得重复。V6：记录已被并发删/tombstone → 该条计 `skipped` 报告，不整体失败。
+- **batchId 幂等**：重复 apply 同一批次，已裁决 pair 全部计 `skipped`（按事件流 `curate_apply` 的裁决键聚合，
+  不重复写事件）；`status` 进度同样来自事件流，不靠状态文件。任务包文件被删 → apply 报未知批次，重新 prompt 即可。
+- **与 MCP 一致**：`memory_dedupe_scan`/`memory_curate(apply)` 与 CLI 同一份 `service.dedupeScan()`/`curateApply()`
+  数据与语义，pairs 不二次计算。单命令 `memo curate auto` 用确定性 `ruleJudge`（strong 比 hits，其余 keep_both，宁漏不误杀）。
+- **测试**：单测 `tests/unit/curate-prompt.test.js`、注入用例 I17（裁决收敛 + 二次 apply `applied 0`）。

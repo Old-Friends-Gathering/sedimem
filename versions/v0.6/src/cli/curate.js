@@ -1,7 +1,7 @@
-// cli/curate.js — `memo curate prompt|status|apply --file`（契约：docs/10-curate-auto.md）
+// cli/curate.js — `memo curate prompt|status|apply --file`（契约：docs/02 附录 B）
 // B 路任务包：生成裁决任务包（.md 人读 + .json 机读）→ Agent 回填 decisions → 严格校验后落盘。
 // 任务包 pairs 只取 service.dedupeScan() 返回（裁决 26/27），不二次计算相似度；
-// apply 逐条调 service.curateApply()（语义只有一处实现，docs/10 §5）。
+// apply 逐条调 service.curateApply()（语义只有一处实现，docs/02 附录 B）。
 
 import process from 'node:process';
 import { mkdirSync, readdirSync, readFileSync, writeFileSync, existsSync } from 'node:fs';
@@ -154,7 +154,7 @@ export async function curatePrompt(service, { limit, json = false } = {}) {
     policy: {
       scanThreshold: scan.threshold,
       scanDiceThreshold: scan.diceThreshold,
-      // 阈值来自 policy（唯一来源，docs/09/10）；读不到时退回 0.85
+      // 阈值来自 policy（唯一来源，docs/02 附录 A/B）；读不到时退回 0.85
       nearDupThreshold: Number(defaultPolicy.dedupe?.nearDupThreshold ?? 0.85),
     },
     meta: { clusters, strong, weak },
@@ -178,7 +178,7 @@ export async function curatePrompt(service, { limit, json = false } = {}) {
 }
 
 /**
- * 纯函数校验（V1 之外的结构校验，docs/10 §4）。任一失败抛 E_INVALID_ARG（人话原因），
+ * 纯函数校验（V1 之外的结构校验，docs/02 附录 B）。任一失败抛 E_INVALID_ARG（人话原因），
  * 调用方保证失败时一条都不落盘。
  * @param {{batchId: string, pairs: {ids: string[]}[]}} pkg 任务包
  * @param {{ids: string[], decision: string, note?: string}[]} decisions
@@ -238,7 +238,7 @@ export function readBatchPkg(memoHome, batchId) {
 
 /**
  * 事件流里已裁决的 pair 键集合（裁决 36 裁决键：curate_apply.detail.ids 排序串）。
- * 不靠额外状态文件——状态文件会与真相层漂移（docs/10 §6）。
+ * 不靠额外状态文件——状态文件会与真相层漂移（docs/02 附录 B）。
  */
 async function decidedKeys(service) {
   const { events } = await service.events({ ops: ['curate_apply'], limit: 1000000 });
@@ -327,7 +327,7 @@ export async function curateApplyFile(service, filePath) {
 
 /**
  * `memo curate status`：列出 curate/ 下全部批次与进度。
- * 「已裁决」= 事件流 curate_apply 按裁决键聚合后命中该 pair（docs/10 §6）。
+ * 「已裁决」= 事件流 curate_apply 按裁决键聚合后命中该 pair（docs/02 附录 B）。
  */
 export async function curateStatus(service) {
   const dir = join(service.memoHome, 'curate');

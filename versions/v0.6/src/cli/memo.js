@@ -33,7 +33,7 @@ const USAGE = `memo —— 本地跨会话记忆系统 v0.1
   memo doctor [--json]
   memo reindex
   memo curate export [--limit 20]
-  memo curate prompt  [--limit N] [--json]              # 生成裁决任务包（docs/10）
+  memo curate prompt  [--limit N] [--json]              # 生成裁决任务包（docs/02 附录 B）
   memo curate auto    [--limit N] [--dry-run] [--json]   # 自动裁决（JudgePort，确定性无 LLM；裁决 50）
   memo compact        [--dry-run] [--grace 7d] [--json]  # 物理清理：只删 purge+过期的墓碑（裁决 51）
   memo curate status                                  # 列出批次与进度
@@ -359,7 +359,7 @@ async function cmdDedupe(sub, opts, asJson) {
   }
 }
 
-/** memo curate（B 路，docs/10）：prompt/status 为新增；apply 兼容两个形状——
+/** memo curate（B 路，docs/02 附录 B）：prompt/status 为新增；apply 兼容两个形状——
  *  旧：`curate apply <batchId> --decisions <file|->`；新：`curate apply --file <pkg.json>`。 */
 async function cmdCurate(sub, positional, opts, asJson) {
   // 新增子命令走 src/cli/curate.js（任务包生成/状态/严格校验应用）

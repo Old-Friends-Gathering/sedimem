@@ -1,4 +1,4 @@
-// index/sqlite-index.js — SQLite FTS5 索引（实现 IndexPort，契约：docs/09-sqlite-index.md）
+// index/sqlite-index.js — SQLite FTS5 索引（实现 IndexPort，契约：docs/02 附录 A）
 // 与 InvertedIndex 同一套接口语义：score>0 才返回、score 降序、同分按 id 升序、
 // filter 在打分后过滤、limit undefined 不截断、add 无 id 抛 E_INVALID_RECORD。
 // 关键对齐点：写入侧把记录先过 tokenize()（与内存索引同一个，core/hash.js），
@@ -14,7 +14,7 @@ import { scopeKeyOf } from '../config/paths.js';
 const require = createRequire(import.meta.url);
 
 /**
- * 构造 FTS5 MATCH 表达式（纯函数，docs/09 §4.2）：
+ * 构造 FTS5 MATCH 表达式（纯函数，docs/02 附录 A）：
  * tokenize() 切词 → 每个 token 包成 "..." 字面量（内部 " 双写）→ OR 连接。
  * token 数 0 → null（调用方直接返回 []）。不用 AND：内存实现是命中任一词即累加。
  * @param {string} query
@@ -69,7 +69,7 @@ export class SqliteIndex {
     this._ensureConsistent();
   }
 
-  /** 单文件库路径（诊断/测试用；docs/09 §3） */
+  /** 单文件库路径（诊断/测试用；docs/02 附录 A） */
   get dbPath() { return this._path; }
 
   static loadSqlite() {
@@ -108,7 +108,7 @@ export class SqliteIndex {
     `);
   }
 
-  /** docs 与 fts 行数一致；SQLITE_CORRUPT / 行数不符 → 删库重建（docs/09 §6，索引是派生层） */
+  /** docs 与 fts 行数一致；SQLITE_CORRUPT / 行数不符 → 删库重建（docs/02 附录 A，索引是派生层） */
   _ensureConsistent() {
     let bad = null;
     try {
@@ -127,7 +127,7 @@ export class SqliteIndex {
       bad = e;
     }
     if (!bad) return;
-    // 删库重建：索引不含真相，删掉只会让下次启动变慢（docs/09 §3）
+    // 删库重建：索引不含真相，删掉只会让下次启动变慢（docs/02 附录 A）
     try { this.db.close(); } catch { /* 已损坏的句柄 close 失败可忽略：文件马上被删除 */ }
     for (const suffix of ['', '-wal', '-shm']) {
       try { rmSync(this._path + suffix, { force: true }); } catch { /* 尽力而为；重建前清场 */ }
@@ -209,7 +209,7 @@ export class SqliteIndex {
   }
 
   /**
-   * BM25 检索（docs/09 §4）：FTS5 bm25() 是负数，score = -rank 转正；
+   * BM25 检索（docs/02 附录 A）：FTS5 bm25() 是负数，score = -rank 转正；
    * 先打分后 filter；filter 存在且 limit 为数字时 SQL 窗口放大到 max(limit, 200)，
    * 过滤后不足再回查一次（窗口 ×10），避免过滤后假阴性。
    * @param {string} query

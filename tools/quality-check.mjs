@@ -511,8 +511,19 @@ async function q11WriteAndSessionContract() {
   record('Q11', '写侧粒度与会话库契约（policy.write 可配置 / 无静默截断 / session 禁 fact / I37–I39 在册）', problems.length === 0, problems);
 }
 
+
+async function q14DocsGovernance() {
+  const { checkDocs } = await import('./docs-drift-check.mjs');
+  const report = await checkDocs({ root: ROOT });
+  const problems = report.findings.map(
+    (f) => `${f.file}${f.line ? ':' + f.line : ''} [${f.rule}] ${f.message}`,
+  );
+  record('Q14', `文档治理（头部元信息 / 版本一致 / 无旧路径 / 测试数与 I 区间 / 门禁项数；脚本 tools/docs-drift-check.mjs）`,
+    problems.length === 0, problems);
+}
+
 const CHECKS = [q1ZeroDependencies, q2SourceSize, q3TestInventory, q4EvalAlignment,
-  q5ContractCoverage, q6DocLinks, q7VersionIntegrity, q8Encoding, q9WebUiBoundary, q10ReleaseSurface, q11WriteAndSessionContract];
+  q5ContractCoverage, q6DocLinks, q7VersionIntegrity, q8Encoding, q9WebUiBoundary, q10ReleaseSurface, q11WriteAndSessionContract, q14DocsGovernance];
 
 for (const check of CHECKS) {
   try {

@@ -1,0 +1,18 @@
+{
+  "entries": [
+    {
+      "rule": "R3",
+      "file": "docs/03-iterability-and-versioning.md",
+      "pattern": "versions/v0\\.[0-5]",
+      "reason": "版本演进示例：展示 X.Y 换目录的历史走法（v0.2→v0.6），不是让用户去用旧目录",
+      "until": "2027-06-30"
+    },
+    {
+      "rule": "R3",
+      "file": "docs/07-quality-and-security.md",
+      "pattern": "versions/v0\\.[0-5]",
+      "reason": "基线演进叙述：说明各版本冻结在哪个目录",
+      "until": "2027-06-30"
+    }
+  ]
+}

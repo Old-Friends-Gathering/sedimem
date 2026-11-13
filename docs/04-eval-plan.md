@@ -1,5 +1,11 @@
 # 04 · 评测方案（eval）
 
+> doc-kind: contract
+> doc-version: 0.6
+> verified-at: 2026-11-14
+> verified-against: versions/CURRENT（v0.6 / 0.6.2）
+
+
 ## 1. 三层，缺一不可
 
 | 层 | 测什么 | 在哪 | 何时跑 |
