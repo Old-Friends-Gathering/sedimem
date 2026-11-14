@@ -1,0 +1,12 @@
+{
+  "id": "I52",
+  "title": "任务库可管理：/api/tasks 列表按标题命名，rename/remove/tombstone 走写门禁",
+  "why": "用户要求任务库「按任务标题命名」且「可以自由删减」：会话临时库在 UI 里就是任务库，但此前只有 start/close 生命周期，没有列表、改名与删除。改名只改 sessions/<id>.json 的 title；删除是移入 trash/ 可恢复，并向 events.jsonl 追加 session_remove 审计行，绝不物理删除真相层。",
+  "pass": [
+    "GET /api/tasks 返回 {tasks:[{scope,title,status,records,...}]}，title 来自登记文件、缺失回落 id，坏文件跳过不抛",
+    "POST /api/tasks/rename {scope,title} 后 GET 立即反映新标题；title 1..80 字符去空白、禁换行，非法 400 E_INVALID_ARG",
+    "POST /api/tasks/remove {scope} 把 items/<scope>.jsonl 与 sessions/<id>.json 移入 trash/<yyyymmdd-HHMMSS>/，events.jsonl 追加 op=session_remove；之后 /api/scopes 不含该 scope；重复删 404 E_NOT_FOUND",
+    "POST /api/records/tombstone {scope,id,reason} 打单条墓碑，之后 /api/records?scope= 不含该 id",
+    "未开启写模式时三个 POST 全部 403 {code:'E_READ_ONLY'}，真相层零改动；错误响应不暴露内部路径"
+  ]
+}

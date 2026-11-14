@@ -1,9 +1,12 @@
 /**
  * 图谱工具栏（独立模块，控制 ui/graph.js 的文件规模）。
  *
- * v1.0 图谱可用性改造：新增缩放/适应/重排按钮、分库范围切换、搜索框、kind 图例；
+ * v1.0 图谱可用性改造：缩放/适应/重排按钮、分库范围切换、搜索框、kind 图例；
  * 保留原有「旋转视角」与边类型勾选。所有新元素 id 前缀 gx-（自动化验收定位用）。
  * 顺序纪律不变：「先清空 → 再逐个 append」（历史上 append 后 replaceChildren 导致控件丢失）。
+ * v1.1 设计系统改造：全部用 style.css 的 .toolbar 组件类——按钮 .sm/.ghost 变体、
+ * .sep 分隔、kind 筛选 chips 用 .badge（选中态 .b-accent + .dotk 色块）、搜索输入框；
+ * 去掉行内样式。逻辑与事件行为不动，渲染部分照旧只在 #graph-toolbar（.toolbar）内。
  */
 
 export function renderToolbar({
@@ -26,11 +29,17 @@ export function renderToolbar({
 }) {
   toolbarEl.replaceChildren();
 
-  const btn = (id, text, fn, title) => {
+  const sep = () => {
+    const s = document.createElement('span');
+    s.className = 'sep';
+    return s;
+  };
+
+  const btn = (id, text, fn, title, cls = 'sm') => {
     const b = document.createElement('button');
     b.id = id; b.type = 'button'; b.textContent = text;
     b.title = title || text;
-    b.style.cssText = 'margin-right:6px;padding:2px 8px;cursor:pointer;';
+    if (cls) b.className = cls;
     b.addEventListener('click', fn);
     return b;
   };
@@ -42,27 +51,33 @@ export function renderToolbar({
   );
 
   // 分库范围：只显示当前分库 / 全部（切换触发按需重新拉数据）
-  const scopeBtn = btn('gx-scope', onlyThisScope ? '只显示当前分库' : '显示全部',
-    () => actions.toggleScope(), '切换：只看当前分库 / 全部');
-  toolbarEl.append(scopeBtn);
+  toolbarEl.append(
+    btn('gx-scope', onlyThisScope ? '只显示当前分库' : '显示全部',
+      () => actions.toggleScope(), '切换：只看当前分库 / 全部', 'ghost'),
+    sep(),
+  );
 
-  // kind 图例：点击切换该 kind 显隐；隐藏态加 gx-off 并降透明度
+  // kind 筛选 chips：.badge + .dotk 色块；选中态 .b-accent，隐藏态 gx-off（降透明+划线）
   const legend = document.createElement('span');
   legend.id = 'gx-legend';
-  legend.style.cssText = 'margin:0 10px;display:inline-flex;gap:6px;align-items:center;';
+  legend.className = 'gx-legend';
+  legend.style.cssText = 'display:inline-flex;gap:6px;align-items:center;flex-wrap:wrap;';
   for (const [kind, color] of Object.entries(kindColors)) {
     const chip = document.createElement('button');
     chip.type = 'button';
     chip.dataset.kind = kind;
-    chip.textContent = kind;
     chip.title = '点击显示 / 隐藏该类型';
-    chip.style.cssText = 'border:none;cursor:pointer;padding:1px 7px;border-radius:10px;'
-      + `font:12px sans-serif;background:${color};color:#0b0d12;`;
-    if (kindsOff.has(kind)) { chip.classList.add('gx-off'); chip.style.opacity = '0.35'; chip.style.textDecoration = 'line-through'; }
+    chip.className = 'badge';
+    if (!kindsOff.has(kind)) chip.classList.add('b-accent');
+    else chip.classList.add('gx-off');
+    const dot = document.createElement('span');
+    dot.className = 'dotk';
+    dot.style.color = color; // .dotk 用 currentColor 染色，文字颜色不受影响
+    chip.append(dot, document.createTextNode(kind));
     chip.addEventListener('click', () => onKindToggle(kind));
     legend.append(chip);
   }
-  if (kindColors && Object.keys(kindColors).length) toolbarEl.append(legend);
+  if (kindColors && Object.keys(kindColors).length) toolbarEl.append(legend, sep());
 
   // 搜索框：输入即时高亮，回车聚焦第一个命中
   const searchInput = document.createElement('input');
@@ -70,35 +85,35 @@ export function renderToolbar({
   searchInput.type = 'search';
   searchInput.placeholder = '搜索节点…';
   searchInput.value = search;
-  searchInput.style.cssText = 'margin-right:10px;width:150px;padding:2px 6px;';
   searchInput.addEventListener('input', () => onSearch(searchInput.value));
   searchInput.addEventListener('keydown', (ev) => {
     if (ev.key === 'Enter') { ev.preventDefault(); onSearchEnter(); }
     if (ev.key === 'Escape') { searchInput.value = ''; onSearch(''); searchInput.blur(); ev.stopPropagation(); }
   });
-  toolbarEl.append(searchInput);
+  toolbarEl.append(searchInput, sep());
   refs.searchInput = searchInput;
 
   /* ---------- 以下为原有控件：旋转视角 + 边类型勾选 ---------- */
   const rotWrap = document.createElement('label');
-  rotWrap.style.marginRight = '12px';
+  rotWrap.className = 'sm';
+  rotWrap.style.cssText = 'display:inline-flex;gap:5px;align-items:center;color:var(--sd-muted);font-size:var(--fs-xs);';
   const rotInput = document.createElement('input');
   rotInput.type = 'checkbox';
   rotInput.checked = false;
   rotInput.addEventListener('change', () => { state.rotateMode = rotInput.checked; });
   const rotSpan = document.createElement('span');
-  rotSpan.textContent = ' 旋转视角';
+  rotSpan.textContent = '旋转视角';
   rotWrap.append(rotInput, rotSpan);
   toolbarEl.append(rotWrap);
 
   const mk = (key, label, onChange) => {
     const labelEl = document.createElement('label');
-    labelEl.style.marginRight = '12px';
+    labelEl.style.cssText = 'display:inline-flex;gap:5px;align-items:center;color:var(--sd-muted);font-size:var(--fs-xs);margin-left:8px;';
     const input = document.createElement('input');
     input.type = 'checkbox';
     input.addEventListener('change', () => onChange(input.checked));
     const span = document.createElement('span');
-    span.textContent = ` ${label}`;
+    span.textContent = label;
     labelEl.append(input, span);
     checks[key] = input;
     return labelEl;

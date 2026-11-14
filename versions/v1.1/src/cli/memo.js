@@ -44,6 +44,9 @@ const USAGE = `memo —— 本地跨会话记忆系统 v0.1
   memo session status [--scope s] [--json]
   memo session close [--scope s]                                # 晋升 decision/gotcha + 交接文档 + 其余墓碑
   memo session sweep [--older-than 14d] [--json]                # 只报告僵尸会话，不删
+  memo session list [--json]                                     # 任务库清单（标题/记录数/状态/时间/scope）
+  memo session rename --scope session:<id> --title <t> [--json]  # 任务库改名（1..80 字符）
+  memo session remove --scope session:<id> [--yes] [--json]     # 删任务库→trash/（无 --yes 仅预览，退出码 2）
   memo migrate dsh-memory [--db path]
   memo serve [--port N] [--no-ui]                             # 只读 Web UI/API（默认 127.0.0.1:7788；--no-ui 只提供 API）
 

@@ -5,8 +5,10 @@
  * → { ok, src, path, dryRun, parsed, byKind, samples? }
  * apply 成功响应应带 written / skipped 计数（预览响应无）。
  *
+ * 结构约定（设计系统）：来源选择用 .toolbar（选中来源 button.primary，主操作=预览），
+ * 预览结果放 .card > .card-b 的 table；错误提示 .err，成功提示 .note。
  * 安全约定：预览表格经 renderImportPreview 输出转义 HTML，DOMParser 挂载；
- * 模块内禁止 HTML 拼接与 eval。
+ * 模块内禁止 HTML 拼接用户数据与 eval。
  */
 import { escapeHtml } from './search-view.js';
 import { readOnlyFromSummary } from './edit-view.js';
@@ -95,62 +97,81 @@ export async function mountImportView({ container, apiGet, apiPost }) {
     readonly = readOnlyFromSummary(await apiGet('/summary'));
   } catch { /* 拿不到按只读兜底 */ }
 
-  const wrap = document.createElement('div');
-  wrap.className = 'import-layout card';
-  const srcRow = document.createElement('div');
-  srcRow.className = 'import-sources';
+  /* 来源选择 + 路径 + 动作：一行 .toolbar。 */
+  const toolbar = document.createElement('div');
+  toolbar.className = 'toolbar';
   const pathInput = document.createElement('input');
   pathInput.type = 'text';
-  pathInput.className = 'form-control';
   pathInput.placeholder = '导入文件/目录的绝对路径';
   pathInput.setAttribute('aria-label', '导入路径');
+  pathInput.style.flex = '1';
+  pathInput.style.minWidth = '220px';
   const previewBtn = document.createElement('button');
   previewBtn.type = 'button';
-  previewBtn.className = 'btn';
+  previewBtn.className = 'primary';
   previewBtn.textContent = '预览';
   const applyBtn = document.createElement('button');
   applyBtn.type = 'button';
-  applyBtn.className = 'btn btn-primary';
   applyBtn.textContent = '写入';
   applyBtn.disabled = true; // 必须先预览
-  const msg = document.createElement('div');
-  msg.className = 'import-msg';
-  msg.setAttribute('role', 'status');
-  const resultBox = document.createElement('div');
-  wrap.append(srcRow, pathInput, previewBtn, applyBtn, msg, resultBox);
-  container.replaceChildren(wrap);
 
-  if (readonly) {
-    msg.textContent = '当前为只读模式，用 `memo serve --write` 启动后才能导入。';
-    previewBtn.disabled = true;
-    applyBtn.disabled = true;
-  }
-
-  // 五个来源按钮：单选高亮
+  const srcButtons = [];
   for (const s of SOURCES) {
     const b = document.createElement('button');
     b.type = 'button';
-    b.className = `btn import-src${s.src === src ? ' btn-primary' : ''}`;
+    b.className = `import-src${s.src === src ? ' primary' : ''}`;
     b.dataset.src = s.src;
     b.textContent = s.label;
     b.disabled = readonly;
     b.addEventListener('click', () => {
       src = s.src;
-      for (const x of srcRow.querySelectorAll('.import-src')) {
-        x.classList.toggle('btn-primary', x.dataset.src === src);
-      }
+      for (const x of srcButtons) x.classList.toggle('primary', x.dataset.src === src);
     });
-    srcRow.append(b);
+    srcButtons.push(b);
+    toolbar.append(b);
+  }
+  const sep = document.createElement('span');
+  sep.className = 'sep';
+  toolbar.append(sep, pathInput, previewBtn, applyBtn);
+
+  const msg = document.createElement('div');
+  msg.className = 'note';
+  msg.setAttribute('role', 'status');
+
+  /* 结果区：.card > .card-h（标题 + badge）> .card-b（预览表格）。 */
+  const resultCard = document.createElement('div');
+  resultCard.className = 'card';
+  const resultHead = document.createElement('div');
+  resultHead.className = 'card-h';
+  const resultTitle = document.createElement('h3');
+  resultTitle.textContent = '预览结果';
+  const resultBadge = document.createElement('span');
+  resultBadge.className = 'badge';
+  resultHead.append(resultTitle, resultBadge);
+  const resultBody = document.createElement('div');
+  resultBody.className = 'card-b';
+  resultCard.append(resultHead, resultBody);
+
+  container.replaceChildren(toolbar, msg, resultCard);
+
+  if (readonly) {
+    msg.textContent = '当前为只读模式，用 `memo serve --write` 启动后才能导入。';
+    msg.className = 'note';
+    previewBtn.disabled = true;
+    applyBtn.disabled = true;
+  } else {
+    msg.textContent = '选择来源、填写路径，先预览确认解析结果。';
   }
 
   const setMsg = (text, isErr = false) => {
     msg.textContent = text;
-    msg.classList.toggle('err', isErr);
+    msg.className = isErr ? 'err' : 'note';
   };
 
-  const showResult = (html) => {
+  const showResult = (html, badgeText) => {
     const doc = new DOMParser().parseFromString(html, 'text/html');
-    resultBox.replaceChildren(...Array.from(doc.body.childNodes));
+    resultBody.replaceChildren(...Array.from(doc.body.childNodes));
+    resultBadge.textContent = badgeText ?? '';
   };
 
   async function doImport(apply) {
@@ -168,12 +189,13 @@ export async function mountImportView({ container, apiGet, apiPost }) {
     }
     if (apply) {
       setMsg(renderImportApplied(r), false);
+      resultBadge.textContent = '已写入';
       applyBtn.disabled = true;
       lastPreview = null;
       return;
     }
     lastPreview = r;
-    showResult(renderImportPreview({ result: r }));
+    showResult(renderImportPreview({ result: r }), `parsed ${r?.parsed ?? 0}`);
     setMsg(`解析出 ${r?.parsed ?? 0} 条，确认无误后点「写入」。`);
     applyBtn.disabled = false;
   }

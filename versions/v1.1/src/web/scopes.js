@@ -6,6 +6,20 @@ import fsp from 'node:fs/promises';
 import path from 'node:path';
 import { SCOPE_PATTERN } from '../core/scope-state.js';
 import { scopeFromItemsFileName } from '../config/paths.js';
+import { readSessionRegistry } from '../session/lifecycle.js';
+
+/** 任务库（session:<id>）的显示名：优先 meta.title，其次 id。读不到（无登记文件）→ null。
+ *  只读一次 JSON，不建缓存：观察台是只读快照，标题改了刷新即见。 */
+async function sessionTitle(memoHome, scope) {
+  if (!scope.startsWith('session:')) return null;
+  try {
+    const meta = await readSessionRegistry(memoHome, scope);
+    const title = typeof meta?.title === 'string' ? meta.title.trim() : '';
+    return title || scope.slice('session:'.length);
+  } catch {
+    return null;
+  }
+}
 
 /**
  * 列出所有分库。
@@ -27,6 +41,9 @@ export async function listScopes(memoHome, currentScope) {
     const scope = scopeFromItemsFileName(name);
     if (scope === null) continue;
     if (!SCOPE_PATTERN.test(scope)) continue; // 不是分库文件（或名字不合法）→ 不列
+    // 任务库不是分库：它是「一个任务的临时记忆」，有自己的入口（/api/tasks + 任务页）。
+    // 混进分库下拉会让人以为可以像长期记忆一样跨任务共用（用户 m15238 明确要求分开）。
+    if (scope.startsWith('session:')) continue;
     const full = path.join(dir, name);
     let stat;
     let text;
@@ -38,8 +55,10 @@ export async function listScopes(memoHome, currentScope) {
       continue;
     }
     const records = text.split('\n').filter((l) => l.trim().length > 0).length;
+    const title = await sessionTitle(memoHome, scope);
     out.push({
       scope,
+      ...(title ? { title } : {}),
       records,
       bytes: Buffer.byteLength(text, 'utf8'),
       mtime: (stat?.mtime ?? new Date(0)).toISOString(),

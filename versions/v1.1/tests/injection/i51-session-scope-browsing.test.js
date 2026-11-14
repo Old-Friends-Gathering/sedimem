@@ -2,7 +2,7 @@
 //
 // 钉住三件事：
 //   1. SCOPE_PATTERN 认 `session:<id>`（少了它 listScopes 会把任务库过滤掉，UI 任务页永远空）
-//   2. GET /api/scopes 列出磁盘上真实存在的 session:* 文件（含 records 计数）
+//   2. GET /api/scopes **不**把任务库混进分库列表（v1.1 起任务库走 /api/tasks，用户要求两者分开）
 //   3. GET /api/records?scope=session:<id> 返回 200 且只含该任务库的记录
 // 反例也要钉：`session:../etc/passwd` 这类仍必须 400（放开前缀不能放开穿越）。
 
@@ -26,7 +26,7 @@ test('I51 SCOPE_PATTERN 接受 session:<id>，仍拒绝路径穿越', () => {
   assert.equal(SCOPE_PATTERN.test('session:UPPER'), false);
 });
 
-test('I51 /api/scopes 列出任务库，/api/records?scope= 能读到它的记录', async () => {
+test('I51 任务库不混进分库列表，但 /api/records?scope= 能读到它的记录', async () => {
   const home = await fsp.mkdtemp(path.join(os.tmpdir(), 'memo-i51-'));
   const sessionScope = 'session:20261114-2221-6a5b';
   const main = await createMemoryService({ memoHome: home, scope: 'repo:i51', cwd: home });
@@ -44,7 +44,7 @@ test('I51 /api/scopes 列出任务库，/api/records?scope= 能读到它的记�
     assert.equal(scopesRes.status, 200);
     const scopes = (await scopesRes.json()).scopes.map((s) => s.scope);
     assert.ok(scopes.includes('repo:i51'), `主库应在列表里：${scopes.join(',')}`);
-    assert.ok(scopes.includes(sessionScope), `任务库应在列表里：${scopes.join(',')}`);
+    assert.ok(!scopes.includes(sessionScope), `任务库不应混进分库列表：${scopes.join(',')}`);
 
     const recRes = await fetch(`${web.url}api/records?scope=${encodeURIComponent(sessionScope)}`);
     assert.equal(recRes.status, 200, '按任务库取记录必须 200');

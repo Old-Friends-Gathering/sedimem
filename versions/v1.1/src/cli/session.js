@@ -4,6 +4,9 @@
 // 零依赖（只用 node 内置）；不改 src/cli/memo.js（W3 再接入口）。
 
 import { readFile } from 'node:fs/promises';
+import { existsSync } from 'node:fs';
+import path from 'node:path';
+import { itemsFileName } from '../config/paths.js';
 import { systemClock } from '../core/clock.js';
 import { PROMOTE_KINDS } from '../session/cli-support.js';
 
@@ -13,6 +16,7 @@ import {
   SESSION_PREFIX, isSessionScope,
   startSession, sessionStatus, sweepSessions,
   resolveParentScope, updateSessionRegistry,
+  listSessions, renameSession, removeSession,
 } from '../session/lifecycle.js';
 import { normalizeCheckpoint, parseDshSummary, writeCheckpoint } from '../session/checkpoint.js';
 import { autoCheckpoint } from '../session/checkpoint-llm.js';
@@ -26,6 +30,9 @@ const USAGE = `memo session —— 会话临时记忆库（可丢弃、可晋升
   memo session status --scope session:<id> [--json]
   memo session close --scope session:<id> [--json]               晋升 decision/gotcha → 主库 + 写交接 + 其余 tombstone
   memo session sweep [--older-than 14d] [--json]                 只报告僵尸 session 候选，不删
+  memo session list [--json]                                     任务库清单：标题 | 记录数 | 状态 | 更新时间 | scope
+  memo session rename --scope session:<id> --title <t> [--json]  任务库改名（1..80 字符，禁换行）
+  memo session remove --scope session:<id> [--yes] [--json]      删任务库（移入 trash/；无 --yes 只预览，退出码 2）
 
 提示: 临时库 close 时只晋升 decision/gotcha；fact 禁止写入（E_SCRATCH_KIND_FORBIDDEN）。`;
 
@@ -345,6 +352,58 @@ export async function sessionCli(args, { service, memoHome, clock = systemClock,
         (c) => `  ${c.scope}  开始于 ${c.startedAt}（${Math.floor(c.ageMs / 86_400_000)} 天前）  ${c.title}\n`,
       ).join('');
       return emit(head + body, result);
+    }
+
+    // ===== I52：任务库管理（list / rename / remove）=====
+    case 'list': {
+      const { tasks } = listSessions({ memoHome });
+      if (asJson) return emit('', { tasks });
+      if (tasks.length === 0) return emit('没有任务库（sessions/ 下无登记文件）\n', { tasks });
+      const rows = tasks.map((t) => [
+        t.title, String(t.records), t.status, t.updatedAt ?? '', t.scope,
+      ]);
+      const widths = ['标题', '记录数', '状态', '更新时间', 'scope'].map(
+        (h, i) => Math.max(h.length + 2, ...rows.map((r) => String(r[i]).length + 2)),
+      );
+      const line = (cells) => cells.map((c, i) => String(c).padEnd(widths[i])).join('');
+      const head = line(['标题', '记录数', '状态', '更新时间', 'scope']) + '\n';
+      return emit(head + rows.map((r) => line(r) + '\n').join(''), { tasks });
+    }
+
+    case 'rename': {
+      const scope = requireScope(opts);
+      if (opts.title === undefined || opts.title === true || opts.title === '') {
+        throw new UsageError(`需要 --title <t>（1..80 字符，禁换行）\n${USAGE}`);
+      }
+      const { title, previous } = renameSession({ memoHome, scope, title: String(opts.title) });
+      return emit(
+        `session ${scope.slice(SESSION_PREFIX.length)} 已改名: ${JSON.stringify(previous)} → ${JSON.stringify(title)}\n`,
+        { scope, title, previous },
+      );
+    }
+
+    case 'remove': {
+      const scope = requireScope(opts);
+      const sessionId = scope.slice(SESSION_PREFIX.length);
+      // 预览（无 --yes）：打印将移动的文件，退出码 2（与用法错误同档，提示需确认）
+      if (opts.yes !== true) {
+        const candidates = [
+          path.join(memoHome, 'items', itemsFileName(scope)),
+          path.join(memoHome, 'sessions', `${sessionId}.json`),
+        ].filter((p) => existsSync(p));
+        if (candidates.length === 0) {
+          throw err('E_NOT_FOUND', `removeSession: session ${scope} 不存在（items 与 sessions 文件均缺失）`);
+        }
+        writeOut(`将移动以下文件到 ${path.join(memoHome, 'trash', '<yyyymmdd-HHMMSS>')}/：\n`);
+        for (const p of candidates) writeOut(`  ${path.basename(p)}\n`);
+        writeOut(`确认请加 --yes：memo session remove --scope ${scope} --yes\n`);
+        return 2;
+      }
+      const { movedTo, files } = removeSession({ memoHome, scope, clock });
+      return emit(
+        `session ${sessionId} 已移入回收站 ${movedTo}（${files.join(', ')}）\n`,
+        { scope, movedTo, files },
+      );
     }
 
     default:

@@ -8,8 +8,10 @@
  * - POST /api/write             body { kind, title, subject, predicate, value, text }（新增）
  * 编辑必须带 ifMatch（当前记录的 validFrom）；409 = 并发改动冲突。
  *
- * 安全约定：渲染全部经 renderEditForm 输出转义 HTML，再用 DOMParser 挂载
- * （与 search 页同一模式）；模块内禁止 HTML 拼接与 eval。
+ * 结构约定（设计系统）：.split.list 左 .task-list（.task-item > .tt/.tm）
+ * + 右 .task-detail（.th 标题 + .acts 保存/取消，字段用 .kv 两列布局）。
+ * 安全约定：渲染全部经 renderEditForm / renderRecordList 输出转义 HTML，再用
+ * DOMParser 挂载；模块内禁止 HTML 拼接用户数据与 eval。
  */
 import { escapeHtml } from './search-view.js';
 
@@ -97,7 +99,8 @@ export function buildWritePayload({ form }) {
 const FALLBACK_KINDS = ['fact', 'pref', 'decision', 'gotcha', 'state'];
 
 /**
- * 渲染左侧记录选择列表（点击项 → 选中态；前缀 = kind，正文截 64 字）。
+ * 渲染左侧记录选择列表（点击项 → 选中态；.tt 标题 / .tm 元信息）。
+ * 输出为 .task-item 按钮序列（无外层包裹，挂载方直接放进 .task-list）。
  * @param {{items: Array<object>, selectedId?: string}} args
  * @returns {string}
  */
@@ -106,22 +109,28 @@ export function renderRecordList({ items = [], selectedId = '' } = {}) {
   for (const r of items) {
     const raw = String(r?.text ?? r?.value ?? r?.id ?? '');
     const text = raw.length > 64 ? `${raw.slice(0, 64)}…` : raw;
-    const on = r?.id && r.id === selectedId ? ' selected' : '';
+    const on = r?.id && r.id === selectedId ? ' active' : '';
+    const selAttr = r?.id && r.id === selectedId ? ' data-selected="1"' : '';
+    const kind = String(r?.kind ?? 'fact');
+    const id = String(r?.id ?? '');
     parts.push(
-      `<li class="edit-rec${on}" data-id="${escapeHtml(r?.id ?? '')}">`,
-      `<span class="badge b-${escapeHtml(r?.kind ?? 'fact')}">${escapeHtml(r?.kind ?? 'fact')}</span> `,
-      escapeHtml(text),
-      '</li>',
+      `<button type="button" class="task-item${on}" data-id="${escapeHtml(id)}"${selAttr}>`,
+      `<span class="tt"><span class="badge b-${escapeHtml(kind)}">${escapeHtml(kind)}</span> ${escapeHtml(text)}</span>`,
+      `<span class="tm">${escapeHtml(kind)} · ${escapeHtml(id.slice(0, 12))}</span>`,
+      '</button>',
     );
   }
-  if (parts.length === 0) parts.push('<li class="dim">没有匹配的记录，试试其他关键词。</li>');
-  return `<ul class="edit-rec-list">${parts.join('')}</ul>`;
+  if (parts.length === 0) {
+    parts.push('<div class="empty"><span class="big">没有匹配的记录</span><span>试试其他关键词。</span></div>');
+  }
+  return parts.join('');
 }
 
-/* ---------------- 表单 HTML（转义后经 DOMParser 挂载, 统一走 DOMParser） ---------------- */
+/* ---------------- 表单 HTML（转义后经 DOMParser 挂载） ---------------- */
 
 /**
- * 渲染编辑表单。所有动态值（记录字段、kind 列表）一律 escapeHtml。
+ * 渲染编辑表单（.task-detail 片段：.th 标题 + .acts 保存/取消；.tb 内 .kv 两列表单）。
+ * 所有动态值（记录字段、kind 列表）一律 escapeHtml；提交按钮经 form 属性关联表单。
  * @param {{kinds?: string[], record?: null|object, readonly?: boolean}} args
  * @returns {string}
  */
@@ -134,22 +143,34 @@ export function renderEditForm({ kinds = null, record = null, readonly = true } 
     const sel = record?.kind === k ? ' selected' : '';
     return `<option value="${esc(k)}"${sel}>${esc(k)}</option>`;
   }).join('');
+  const field = (name, label, control) =>
+    `<label class="k" for="sd-f-${name}">${label}</label>${control}`;
   const v = (f) => esc(record?.[f] ?? '');
   const banner = ro
-    ? '<div class="edit-readonly-note">当前为只读模式，用 <code>memo serve --write</code> 启动后才能提交。</div>'
+    ? '<div class="note edit-readonly-note">当前为只读模式，用 <code>memo serve --write</code> 启动后才能提交。</div>'
     : '';
   return [
-    '<form class="edit-form card">',
-    `<div class="form-row"><label>kind</label><select name="kind" class="form-control"${disabled}>${opts}</select></div>`,
-    `<div class="form-row"><label>title</label><input name="title" class="form-control" value="${v('title')}"${disabled}></div>`,
-    `<div class="form-row"><label>subject</label><input name="subject" class="form-control" value="${v('subject')}"${disabled}></div>`,
-    `<div class="form-row"><label>predicate</label><input name="predicate" class="form-control" value="${v('predicate')}"${disabled}></div>`,
-    `<div class="form-row"><label>value</label><input name="value" class="form-control" value="${v('value')}"${disabled}></div>`,
-    `<div class="form-row"><label>text</label><textarea name="text" class="form-control" rows="4"${disabled}>${v('text')}</textarea></div>`,
-    `<div class="edit-msg" role="status"></div>`,
-    `<button type="submit" class="btn btn-primary edit-submit"${disabled}>${record ? '保存（supersede）' : '新增（write）'}</button>`,
-    banner,
+    '<div class="task-detail">',
+    '<div class="th">',
+    `<h3>${record ? '编辑记录' : '新建记录'}</h3>`,
+    '<div class="acts">',
+    `<button type="submit" form="sd-edit-form" class="primary edit-submit"${disabled}>${record ? '保存（supersede）' : '新增（write）'}</button>`,
+    '<button type="button" class="ghost edit-cancel">取消</button>',
+    '</div>',
+    '</div>',
+    '<div class="tb">',
+    '<form id="sd-edit-form" class="kv" autocomplete="off">',
+    field('kind', 'kind', `<select name="kind" id="sd-f-kind"${disabled}>${opts}</select>`),
+    field('title', 'title', `<textarea name="title" id="sd-f-title" rows="2"${disabled}>${v('title')}</textarea>`),
+    field('subject', 'subject', `<input name="subject" id="sd-f-subject" value="${v('subject')}"${disabled}>`),
+    field('predicate', 'predicate', `<input name="predicate" id="sd-f-predicate" value="${v('predicate')}"${disabled}>`),
+    field('value', 'value', `<input name="value" id="sd-f-value" value="${v('value')}"${disabled}>`),
+    field('text', 'text', `<textarea name="text" id="sd-f-text" rows="4"${disabled}>${v('text')}</textarea>`),
     '</form>',
+    `<div class="edit-msg" role="status"></div>`,
+    banner,
+    '</div>',
+    '</div>',
   ].join('');
 }
 
@@ -172,41 +193,36 @@ export async function mountEditView({ container, apiGet, apiPost }) {
     readonly = readOnlyFromSummary(s);
   } catch { /* summary 拿不到按只读兜底，不阻塞页面 */ }
 
-  /* 布局骨架：全部 createElement + textContent，杜绝 HTML 拼接。 */
+  /* 布局骨架：.split.list（左 .task-list 卡 + 右 .task-detail 卡）。 */
   const wrap = document.createElement('div');
-  wrap.className = 'edit-layout';
+  wrap.className = 'split list';
   const left = document.createElement('div');
-  left.className = 'edit-left card';
+  left.className = 'task-list';
   const right = document.createElement('div');
-  right.className = 'edit-right';
+  right.className = 'task-detail';
   wrap.append(left, right);
   container.replaceChildren(wrap);
 
-  const title = document.createElement('h3');
-  title.textContent = record ? '编辑记录' : '新建记录';
   const search = document.createElement('input');
   search.type = 'search';
-  search.className = 'form-control';
   search.placeholder = '按关键词搜索记录，回车查询';
   search.setAttribute('aria-label', '记录搜索');
-  const listBox = document.createElement('div');
   const newBtn = document.createElement('button');
   newBtn.type = 'button';
-  newBtn.className = 'btn';
+  newBtn.className = 'sm';
   newBtn.textContent = '+ 新建记录';
-  left.append(search, listBox, newBtn);
-
-  const formBox = document.createElement('div');
-  right.append(title, formBox);
+  const listBox = document.createElement('div');
+  listBox.style.display = 'contents'; // 让 .task-item 直接落在 .task-list 布局里
+  left.append(search, newBtn, listBox);
 
   const setMsg = (text, isErr = false) => {
-    const m = formBox.querySelector('.edit-msg');
+    const m = right.querySelector('.edit-msg');
     if (m) m.textContent = text, m.classList.toggle('err', isErr);
   };
 
   /** 表单当前值 → form 对象。 */
   const readForm = () => {
-    const f = formBox.querySelector('form');
+    const f = right.querySelector('form');
     if (!f) return {};
     const out = {};
     for (const k of ['kind', 'title', 'subject', 'predicate', 'value', 'text']) {
@@ -219,10 +235,9 @@ export async function mountEditView({ container, apiGet, apiPost }) {
   function renderForm() {
     const html = renderEditForm({ kinds, record, readonly });
     const doc = new DOMParser().parseFromString(html, 'text/html');
-    formBox.replaceChildren(...Array.from(doc.body.childNodes));
-    title.textContent = record ? '编辑记录' : '新建记录';
-    const f = formBox.querySelector('form');
-    f?.addEventListener('submit', onSubmit);
+    right.replaceChildren(...Array.from(doc.body.childNodes));
+    right.querySelector('form')?.addEventListener('submit', onSubmit);
+    right.querySelector('.edit-cancel')?.addEventListener('click', () => renderForm()); // 取消=还原当前记录
   }
 
   /** 搜索（q 为空取最近记录）。 */
@@ -234,7 +249,7 @@ export async function mountEditView({ container, apiGet, apiPost }) {
       const html = renderRecordList({ items: d?.records ?? [], selectedId: record?.id ?? '' });
       const doc = new DOMParser().parseFromString(html, 'text/html');
       listBox.replaceChildren(...Array.from(doc.body.childNodes));
-      for (const li of listBox.querySelectorAll('.edit-rec')) {
+      for (const li of listBox.querySelectorAll('.task-item')) {
         li.addEventListener('click', () => selectRecord(String(li.dataset.id ?? '')));
       }
     } catch (err) {
@@ -255,7 +270,7 @@ export async function mountEditView({ container, apiGet, apiPost }) {
       const html = renderRecordList({ items: d.records, selectedId: id });
       const doc = new DOMParser().parseFromString(html, 'text/html');
       listBox.replaceChildren(...Array.from(doc.body.childNodes));
-      for (const li of listBox.querySelectorAll('.edit-rec')) {
+      for (const li of listBox.querySelectorAll('.task-item')) {
         li.addEventListener('click', () => selectRecord(String(li.dataset.id ?? '')));
       }
     } catch (err) {

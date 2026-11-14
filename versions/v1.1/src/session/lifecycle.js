@@ -4,7 +4,10 @@
 // 本模块只做数据层，不自动触发（不做自动建库/自动压缩/自动关闭）。
 
 import { randomBytes } from 'node:crypto';
-import { readdirSync, readFileSync, existsSync, mkdirSync, writeFileSync } from 'node:fs';
+import {
+  readdirSync, readFileSync, existsSync, mkdirSync, writeFileSync,
+  appendFileSync, renameSync, statSync,
+} from 'node:fs';
 import path from 'node:path';
 import { systemClock } from '../core/clock.js';
 import { itemsFileName, scopeFromItemsFileName } from '../config/paths.js';
@@ -350,4 +353,135 @@ export function sweepSessions({ service, memoHome, olderThanMs, clock = systemCl
     });
   }
   return { scanned, candidates };
+}
+
+// ===== 任务库管理（I52）：listSessions / renameSession / removeSession =====
+// 用户要求「任务库按任务标题命名」「可以自由删减」：会话临时库在 UI 里就是任务库，
+// 这里提供跨 session 的数据层操作（不自动触发、不现开服务，直接读真相层文件）。
+
+/** items/<scope>.jsonl 里 status==='active' 的行数；文件缺失/坏行按 0 处理 */
+function countActiveRecords(itemsPath) {
+  let records = 0;
+  try {
+    const lines = readFileSync(itemsPath, 'utf8').split('\n');
+    for (const line of lines) {
+      const t = line.trim();
+      if (t === '') continue;
+      try {
+        const r = JSON.parse(t);
+        if (r && typeof r === 'object' && r.status === 'active') records++;
+      } catch { /* 坏行跳过 */ }
+    }
+  } catch { /* 文件缺失等 → 0 */ }
+  return records;
+}
+
+/**
+ * 列出 $MEMO_HOME/sessions/*.json 里的全部任务库（含已关闭），按 updatedAt 降序。
+ * 坏文件（非 JSON / 非对象）跳过不抛；records 只数 active 行。
+ * @param {{memoHome: string}} args
+ * @returns {{tasks: Array<{scope, id, title, status, startedAt, closedAt, records, updatedAt}>}}
+ */
+export function listSessions({ memoHome }) {
+  if (!memoHome) throw err('E_INVALID_ARG', 'listSessions: memoHome is required');
+  const sessionsDir = path.join(memoHome, 'sessions');
+  const tasks = [];
+  if (!existsSync(sessionsDir)) return { tasks };
+  for (const name of readdirSync(sessionsDir)) {
+    if (!name.endsWith('.json')) continue;
+    const id = name.slice(0, -'.json'.length);
+    const scope = SESSION_PREFIX + id;
+    let meta;
+    try {
+      meta = JSON.parse(readFileSync(path.join(sessionsDir, name), 'utf8'));
+    } catch { continue; }
+    if (!meta || typeof meta !== 'object') continue;
+    const itemsPath = path.join(memoHome, 'items', itemsFileName(scope));
+    // updatedAt：优先真相层文件 mtime（写入越晚越新），缺失回落 startedAt
+    let updatedAt = typeof meta.startedAt === 'string' ? meta.startedAt : '';
+    try {
+      updatedAt = statSync(itemsPath).mtime.toISOString();
+    } catch { /* items 缺失回落 */ }
+    tasks.push({
+      scope,
+      id: typeof meta.id === 'string' && meta.id !== '' ? meta.id : id,
+      title: typeof meta.title === 'string' && meta.title !== '' ? meta.title : id,
+      status: typeof meta.status === 'string' ? meta.status : 'unknown',
+      startedAt: typeof meta.startedAt === 'string' ? meta.startedAt : null,
+      closedAt: typeof meta.closedAt === 'string' ? meta.closedAt : null,
+      records: countActiveRecords(itemsPath),
+      updatedAt,
+    });
+  }
+  tasks.sort((a, b) => (b.updatedAt ?? '').localeCompare(a.updatedAt ?? ''));
+  return { tasks };
+}
+
+/**
+ * 任务库改名（只改登记文件里的 title，保留其它字段）。
+ * title 去首尾空白后须 1..80 字符且不含换行，否则抛 E_INVALID_ARG。
+ * @param {{memoHome: string, scope: string, title: string}} args
+ * @returns {{scope, title, previous}}
+ */
+export function renameSession({ memoHome, scope, title }) {
+  if (!memoHome) throw err('E_INVALID_ARG', 'renameSession: memoHome is required');
+  if (!isSessionScope(scope)) {
+    throw err('E_INVALID_ARG', `renameSession: scope 必须形如 ${SESSION_PREFIX}<id>，收到 ${JSON.stringify(scope)}`);
+  }
+  if (typeof title !== 'string') {
+    throw err('E_INVALID_ARG', `renameSession: title 必须是非空字符串，收到 ${typeof title}`);
+  }
+  const trimmed = title.trim();
+  if (trimmed.length === 0 || trimmed.length > 80 || /[\n\r]/.test(trimmed)) {
+    throw err('E_INVALID_ARG',
+      `renameSession: title 去首尾空白后须 1..80 字符且不含换行，收到长度 ${trimmed.length}`);
+  }
+  const cur = readSessionRegistry(memoHome, scope);
+  if (!cur) {
+    throw err('E_NOT_FOUND', `renameSession: session ${scope} 不存在（sessions/<id>.json 缺失或损坏）`);
+  }
+  const previous = typeof cur.title === 'string' ? cur.title : '';
+  writeSessionRegistry(memoHome, scope, { ...cur, title: trimmed });
+  return { scope, title: trimmed, previous };
+}
+
+/**
+ * 删除任务库：把 items/<scope>.jsonl 与 sessions/<id>.json 移到
+ * $MEMO_HOME/trash/<yyyymmdd-HHMMSS>/ 下（可人工恢复），并向 events.jsonl
+ * 追加 {ts, op:'session_remove', scope, detail:{movedTo}} 审计行。
+ * 两个文件都不存在时抛 E_NOT_FOUND。
+ * @param {{memoHome: string, scope: string, clock?: object}} args
+ * @returns {{scope, movedTo, files: string[]}} files 为移动的文件名列表
+ */
+export function removeSession({ memoHome, scope, clock = systemClock }) {
+  if (!memoHome) throw err('E_INVALID_ARG', 'removeSession: memoHome is required');
+  if (!isSessionScope(scope)) {
+    throw err('E_INVALID_ARG', `removeSession: scope 必须形如 ${SESSION_PREFIX}<id>，收到 ${JSON.stringify(scope)}`);
+  }
+  const sessionId = scope.slice(SESSION_PREFIX.length);
+  const itemsPath = path.join(memoHome, 'items', itemsFileName(scope));
+  const regPath = sessionRegistryPath(memoHome, sessionId);
+  const sources = [itemsPath, regPath].filter((p) => existsSync(p));
+  if (sources.length === 0) {
+    throw err('E_NOT_FOUND', `removeSession: session ${scope} 不存在（items 与 sessions 文件均缺失）`);
+  }
+  const d = new Date(clock.nowMs ? clock.nowMs() : Date.now());
+  const p2 = (n) => String(n).padStart(2, '0');
+  const stamp = `${d.getFullYear()}${p2(d.getMonth() + 1)}${p2(d.getDate())}` +
+    `-${p2(d.getHours())}${p2(d.getMinutes())}${p2(d.getSeconds())}`;
+  const movedTo = path.join(memoHome, 'trash', stamp);
+  mkdirSync(movedTo, { recursive: true });
+  const files = [];
+  for (const src of sources) {
+    const dest = path.join(movedTo, path.basename(src));
+    renameSync(src, dest);
+    files.push(path.basename(src));
+  }
+  // 审计事件（与 store.appendEvent 同一行格式：{ts,op,scope,id,detail}）
+  const ts = clock.now ? clock.now() : new Date().toISOString();
+  appendFileSync(
+    path.join(memoHome, 'events.jsonl'),
+    JSON.stringify({ ts, op: 'session_remove', scope, id: null, detail: { movedTo } }) + '\n',
+  );
+  return { scope, movedTo, files };
 }

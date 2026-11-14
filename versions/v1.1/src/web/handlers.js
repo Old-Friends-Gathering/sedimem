@@ -8,14 +8,18 @@ import { apiSummary, apiBrief, apiRecords, apiGraph, apiTimeline } from './api/r
 import { apiSearch } from './api/search.js';
 import { apiHygiene, apiConflicts } from './api/hygiene.js';
 import { apiToday } from './api/today.js';
-import { handleWriteApi, readJsonBody } from './api/write.js';
+import { handleWriteApi, readJsonBody, apiTasks } from './api/write.js';
 
-/** 写端点（W7）：POST /api/write|supersede|forget，走 handleWriteApi 门禁（只读 403 / Origin 校验） */
-const WRITE_PATHS = new Set(['/api/write', '/api/supersede', '/api/forget']);
+/** 写端点（W7 + I52）：POST /api/write|supersede|forget|tasks/rename|tasks/remove|records/tombstone，
+ *  走 handleWriteApi 门禁（只读 403 / Origin 校验） */
+const WRITE_PATHS = new Set([
+  '/api/write', '/api/supersede', '/api/forget',
+  '/api/tasks/rename', '/api/tasks/remove', '/api/records/tombstone',
+]);
 
 /** POST 写请求的错误码 → HTTP 状态映射（区别于只读 GET 的映射） */
 function writeErrorStatus(code) {
-  if (code === 'E_READONLY' || code === 'E_BAD_ORIGIN') return 403;
+  if (code === 'E_READONLY' || code === 'E_READ_ONLY' || code === 'E_BAD_ORIGIN') return 403;
   if (code === 'E_PAYLOAD_TOO_LARGE') return 413;
   if (code === 'E_CONFLICT') return 409;
   if (code === 'E_NOT_FOUND') return 404;
@@ -35,6 +39,7 @@ const ROUTES = new Map([
   ['/api/timeline', apiTimeline],
   ['/api/search', apiSearch],
   ['/api/conflicts', apiConflicts],
+  ['/api/tasks', apiTasks],
 ]);
 
 /** 从 E_CORRUPT_JSONL 的 message 解析 file/line（与 service._parseCorruptLocation 同格式）。 */

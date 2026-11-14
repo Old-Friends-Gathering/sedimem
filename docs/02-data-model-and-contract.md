@@ -1048,3 +1048,27 @@ v1.0 是重构版本，**行为不改，只改结构与文档**。以下五条�
 | `ui/edit-view.js` | `mountEditView` `buildSupersedePayload` `buildWritePayload` `canSubmit` `formIsDirty` `readOnlyFromSummary` `renderEditForm` `renderRecordList` |
 | `ui/import-view.js` | `mountImportView` `renderImportPreview` `renderImportApplied` `importQuery` `SOURCES` |
 
+
+## §3.22 v1.1 内部导出登记（第十二轮）
+Q5 契约覆盖按「导出名必须出现在 docs/」判定，这里逐模块登记 v1.1 新增与历史遗漏的导出；语义以各模块顶部注释为准。
+
+**会话（`src/session/`）**：`listSessions`、`renameSession`、`removeSession`、`readSessionRegistry`、`writeSessionRegistry`、`updateSessionRegistry`、`sessionRegistryPath`、`resolveParentScope`、`assertSessionOpen`、`SCRATCH_FORBIDDEN_KINDS`、`autoCheckpoint`、`readDshTranscript`、`readCodexRollout`、`toTurns`、`parseJsonl`、`compactTranscript`。
+
+**写入/生命周期（`src/api/`）**：`init`、`reload`、`_policy`。
+
+**Web 写端点（`src/web/api/write.js`）**：`apiTasks`、`apiTaskRename`、`apiTaskRemove`、`apiRecordTombstone`、`handleWriteApi`、`readJsonBody`、`assertSameOrigin`、`assertWritable`。
+
+**文本与时间（`src/core/`）**：`containsCjk`、`parseAsOf`、`nowIso`、`DAY_MS`。
+
+**CLI 杂项**：`llmCli`、`resolveMemoHome`、`splitSections`、`fileSha256`、`parseSource`、`countByKind`。
+
+**其它**：`CHECKPOINT_SECTION_MAX_CHARS`、`CHECKPOINT_TOTAL_MAX_CHARS`、`V0_1_ROOT`。
+
+**裁决 113（任务库不是分库）**：`session:<id>` 是「一个任务的临时记忆」，与长期记忆分库是两种东西。
+`GET /api/scopes` **不得**返回 `session:*`（混进分库下拉会让用户以为可以跨任务共用记忆）；
+任务库的唯一入口是 `GET /api/tasks`（带 `title`/`records`/`status`）与任务页；
+`GET /api/records?scope=session:<id>` 仍允许（任务详情要用），但不出现在分库选择器里。
+
+**裁决 114（删除是可审计的删除）**：单条记录走 `forget` → 墓碑（`status=tombstoned`，真相层不减行）；
+任务库走 `removeSession` → 整库文件移入 `$MEMO_HOME/trash/<yyyymmdd-HHMMSS>/` 并向 `events.jsonl` 追加
+`op:'session_remove'`。UI 的删除按钮只在 `--write` 下可用，且必须二次确认；没有静默删除。

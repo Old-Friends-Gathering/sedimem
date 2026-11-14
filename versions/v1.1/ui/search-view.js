@@ -1,9 +1,10 @@
 /**
- * search-view.js —— 搜索页渲染（B3 / 竞品短板 #8，docs/plans/v0.4-competitive-gaps.md D8）。
+ * search-view.js —— 搜索页渲染（B3 / D8；W9 换新设计系统的结构）。
  *
- * DOM-free 纯函数：输入 {query, items, degraded, limit}，输出 HTML 字符串。
- * 安全约定：**所有插值必须 escapeHtml**——返回的 HTML 由 app.js 整段写入容器，
- * 转义是唯一防线（app.js 不再二次处理，测试断言 script 注入被转义）。
+ * DOM-free 纯函数：输入 {query, items, degraded, limit}，输出 HTML 字符串
+ * （app.js 用 DOMParser 解析后挂载，不走 innerHTML）。
+ * 安全约定：**所有插值必须 escapeHtml**——转义是唯一防线，测试断言 script 注入被转义。
+ * 结构：顶部 degraded .note → 计数行 → .sr 列表，每条 .sr-item（.title / .meta / .txt）。
  */
 
 const ESC_MAP = { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' };
@@ -17,27 +18,39 @@ export function escapeHtml(s) {
   return String(s ?? '').replace(/[&<>"']/g, (c) => ESC_MAP[c]);
 }
 
+/** 摘要：首行之后的正文截到 ~120 字（.txt 由 CSS 控制行高，两行内可读）。 */
+function excerpt(text) {
+  const t = String(text ?? '');
+  return t.length > 120 ? `${t.slice(0, 120)}…` : t;
+}
+
+/** 标题：title > label > 正文首行。 */
+function titleOf(item) {
+  const firstLine = String(item?.text ?? '').split('\n')[0] ?? '';
+  return String(item?.title ?? item?.label ?? firstLine ?? '');
+}
+
 /**
- * 单条结果 → .hitrow：badge(kind) + 转义后的 text + 小字（score/basis/日期）。
- * 字段防御式读取：缺 basis 就不显示，日期取 createdAt ?? validFrom 截前 10 位。
- * @param {{kind?: string, text?: string, label?: string, score?: number,
+ * 单条结果 → .sr-item：.title + .meta（kind badge / score / basis badge）+ .txt 摘要。
+ * 字段防御式读取：缺 basis 就不显示 badge，日期取 createdAt ?? validFrom 截前 10 位。
+ * @param {{kind?: string, text?: string, label?: string, title?: string, score?: number,
  *          basis?: string, createdAt?: string, validFrom?: string}} item
  * @returns {string}
  */
-function hitRow(item) {
-  const text = String(item?.text ?? item?.label ?? '');
+function srItem(item) {
   const kind = String(item?.kind ?? 'fact');
   const score = Number(item?.score);
-  const meta = [];
-  if (Number.isFinite(score)) meta.push(`score ${score.toFixed(2)}`);
-  if (item?.basis) meta.push(escapeHtml(item.basis));
+  const basis = String(item?.basis ?? '');
   const date = String(item?.createdAt ?? item?.validFrom ?? '').slice(0, 10);
+  const meta = [`<span class="badge">${escapeHtml(kind)}</span>`];
+  if (Number.isFinite(score)) meta.push(`score ${score.toFixed(2)}`);
+  if (basis) meta.push(`<span class="badge ${basis.includes('+') ? 'b-info' : ''}">${escapeHtml(basis)}</span>`);
   if (date) meta.push(escapeHtml(date));
   return [
-    '<div class="hitrow">',
-    `<span class="badge b-${escapeHtml(kind)}">${escapeHtml(kind)}</span>`,
-    `<div class="hit-text">${escapeHtml(text)}</div>`,
-    meta.length > 0 ? `<div class="meta">${meta.join(' · ')}</div>` : '',
+    '<div class="sr-item">',
+    `<div class="title">${escapeHtml(titleOf(item))}</div>`,
+    `<div class="meta">${meta.join('')}</div>`,
+    `<div class="txt">${escapeHtml(excerpt(item?.text))}</div>`,
     '</div>',
   ].join('');
 }
@@ -56,20 +69,22 @@ export function renderSearchResults({ query = '', items = null, degraded = false
   }
   const q = String(query ?? '');
   const parts = [];
-  // 降级提示置顶（语义道不可用不能静默假装，D1 的降级语义在 UI 侧的对应物）
+  // 降级提示置顶（语义道不可用不能静默假装）
   if (degraded) {
-    parts.push('<div class="err">语义道不可用，已降级为词法检索。</div>');
+    parts.push('<div class="note">语义道不可用，已降级为词法检索（bm25）。</div>');
   }
   const total = items.length;
   const shown = Number.isFinite(Number(limit)) && Number(limit) > 0 ? items.slice(0, Number(limit)) : items;
   if (total === 0) {
-    parts.push(`<div class="search-empty">没有匹配「${escapeHtml(q)}」的记忆。换个说法试试？</div>`);
+    parts.push(`<div class="empty"><div class="big">没有匹配「${escapeHtml(q)}」的记忆。</div>换个说法试试？</div>`);
     return parts.join('');
   }
-  parts.push(`<div class="search-q">「${escapeHtml(q)}」· ${total} 条结果</div>`);
-  for (const it of shown) parts.push(hitRow(it));
+  parts.push(`<div class="dim">「${escapeHtml(q)}」 · ${total} 条结果</div>`);
+  parts.push('<div class="sr">');
+  for (const it of shown) parts.push(srItem(it));
+  parts.push('</div>');
   if (shown.length < total) {
-    parts.push(`<div class="search-more">结果较多，仅显示前 ${shown.length} 条。</div>`);
+    parts.push(`<div class="dim">结果较多，仅显示前 ${shown.length} 条。</div>`);
   }
   return parts.join('');
 }

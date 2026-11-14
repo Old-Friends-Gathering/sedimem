@@ -707,3 +707,14 @@ node versions/v1.1/src/cli/memo.js import agents ~/.codex/AGENTS.md --apply
 | `#/session` | 会话临时库列表与 checkpoint | 只读（关闭会话用 CLI） |
 | `#/handoff` | 交接文档 | 只读 |
 | `#/settings` | 版本/契约/阈值/kinds/健康 | 只读 |
+
+### 17.4 任务库的日常管理（v1.1）
+
+```bash
+memo session list                                  # 标题 / 记录数 / 状态 / 更新时间 / scope
+memo session rename --scope session:<id> --title "新名字"
+memo session remove --scope session:<id>           # 只预览要移动的文件，退出码 2
+memo session remove --scope session:<id> --yes     # 移到 $MEMO_HOME/trash/<ts>/ 并写 events 审计
+```
+
+观测台「任务」页做同样的事：点任务看细节、重命名、删除任务库、删单条记录（需 `memo serve --write`）。

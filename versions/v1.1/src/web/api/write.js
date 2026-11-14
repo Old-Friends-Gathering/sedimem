@@ -8,7 +8,8 @@
 //   2. 防 CSRF：Origin/Referer 存在且 host 非 loopback 或端口与本服务不同 → 403 E_BAD_ORIGIN
 //   3. 请求体 ≤ 64KB（E_PAYLOAD_TOO_LARGE）；非法 JSON → 400 E_INVALID_JSON
 //   4. 编辑审计：每次成功写入追加一条 op=ui_edit 事件（绝不原地改真相层：编辑走 supersede）
-import { invalid, notFound } from '../../core/errors.js';
+import { invalid, invalidArg, notFound } from '../../core/errors.js';
+import { isSessionScope, listSessions, renameSession, removeSession } from '../../session/lifecycle.js';
 
 /** 请求体上限：64KB */
 const MAX_BODY_BYTES = 64 * 1024;
@@ -144,20 +145,95 @@ export async function apiForget(service, body) {
   return result;
 }
 
+// ===== I52：任务库管理端点（GET /api/tasks 在 handlers.js 注册，POST 写端点在此）=====
+
+/** GET /api/tasks — 任务库清单（复用 listSessions；只读） */
+export function apiTasks(service) {
+  const { tasks } = listSessions({ memoHome: service.memoHome });
+  return { tasks };
+}
+
+function requireSessionScope(scope) {
+  if (typeof scope !== 'string' || scope.length === 0 || !isSessionScope(scope)) {
+    throw invalidArg('tasks: scope 必须形如 session:<id>');
+  }
+  return scope;
+}
+
+/** POST /api/tasks/rename — body {scope, title} */
+export async function apiTaskRename(service, body) {
+  const scope = requireSessionScope(body.scope);
+  if (typeof body.title !== 'string' || body.title.length === 0) {
+    throw invalidArg('tasks/rename: title (non-empty string) is required');
+  }
+  try {
+    const { title, previous } = renameSession({ memoHome: service.memoHome, scope, title: body.title });
+    const task = listSessions({ memoHome: service.memoHome }).tasks.find((t) => t.scope === scope) ?? null;
+    return { task, title, previous };
+  } catch (e) {
+    if (e?.code === 'E_INVALID_ARG') throw invalidArg('tasks/rename: title 须 1..80 字符（去空白）且不含换行');
+    throw e;
+  }
+}
+
+/** POST /api/tasks/remove — body {scope} */
+export async function apiTaskRemove(service, body) {
+  const scope = requireSessionScope(body.scope);
+  const { movedTo, files } = removeSession({ memoHome: service.memoHome, scope });
+  // 不把绝对路径递给浏览器：只回 trash 子目录名与文件名
+  return { movedTo: movedTo.split(/[/\\]/).pop(), files };
+}
+
+/** POST /api/records/tombstone — body {scope, id, reason}；对指定分库的记录打墓碑 */
+export async function apiRecordTombstone(service, body, opts = {}) {
+  if (typeof body.id !== 'string' || body.id.length === 0) {
+    throw invalidArg('records/tombstone: id is required');
+  }
+  const reason = typeof body.reason === 'string' && body.reason !== '' ? body.reason : 'ui-tombstone';
+  // 指定了 scope 时对该分库现开/复用服务；未指定用启动分库
+  let target = service;
+  if (body.scope !== undefined && body.scope !== null && body.scope !== '') {
+    if (typeof body.scope !== 'string' || !isSessionScope(body.scope)) {
+      throw invalidArg('records/tombstone: scope 必须形如 session:<id> 或省略');
+    }
+    const { createMemoryService } = await import('../../api/service.js');
+    target = await createMemoryService({ memoHome: service.memoHome, scope: body.scope });
+  }
+  try {
+    const current = await target.get(body.id);
+    if (!current) throw notFound(`records/tombstone: record ${body.id} not found`);
+    await target.forget({ id: body.id, reason });
+    await audit(target, body.id, 'forget', reason);
+  } finally {
+    if (target !== service) await target.close().catch(() => {});
+  }
+  return { id: body.id };
+}
+
 /**
  * 分发一个 POST 写请求（handlers.js 调用）。
+ * I52 任务库端点：未开启写模式 → 403 {code:'E_READ_ONLY'}（与既有 E_READONLY 语义一致，
+ * 用独立 code 供 UI 区分「任务库写被拒」）。
  * @param {object} service MemoryService
  * @param {string} pathname 请求路径
  * @param {object} body 已解析的 JSON body
  * @param {{write?: boolean, serverPort?: number}} opts 写模式与端口上下文
  */
 export async function handleWriteApi(service, pathname, body, opts) {
+  const isTaskWrite = pathname === '/api/tasks/rename' || pathname === '/api/tasks/remove'
+    || pathname === '/api/records/tombstone';
+  if (isTaskWrite && opts?.write !== true) {
+    throw coded('E_READ_ONLY', '服务处于只读模式：任务库写操作需启动时传 {write:true} 或设置 MEMO_WRITE=1');
+  }
   assertWritable(opts);
   assertSameOrigin(opts?.req, opts?.serverPort);
   const routes = {
     '/api/write': apiWrite,
     '/api/supersede': apiSupersede,
     '/api/forget': apiForget,
+    '/api/tasks/rename': apiTaskRename,
+    '/api/tasks/remove': apiTaskRemove,
+    '/api/records/tombstone': apiRecordTombstone,
   };
   const handler = routes[pathname];
   if (!handler) return { status: 404, body: { ok: false, code: 'E_NOT_FOUND', message: `unknown endpoint: ${pathname}` } };

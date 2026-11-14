@@ -99,9 +99,11 @@ export async function createWebServer({
     const pathname = url.pathname;
 
     if (pathname.startsWith('/api/')) {
-      // W7：POST 只放行人类可写端点（后续仍有 只读门禁/Origin 校验 在 write 通道内执行）；其余方法一律 405
+      // W7+I52：POST 只放行写端点（后续仍有 只读门禁/Origin 校验 在 write 通道内执行）；其余方法一律 405
       const isWritePost = req.method === 'POST'
-        && (pathname === '/api/write' || pathname === '/api/supersede' || pathname === '/api/forget');
+        && (pathname === '/api/write' || pathname === '/api/supersede' || pathname === '/api/forget'
+          || pathname === '/api/tasks/rename' || pathname === '/api/tasks/remove'
+          || pathname === '/api/records/tombstone');
       if (req.method !== 'GET' && !isWritePost) {
         res.writeHead(405, { 'content-type': 'application/json; charset=utf-8' });
         res.end(JSON.stringify({ ok: false, code: 'E_METHOD', message: `${req.method} not allowed (read-only GET API)` }));
