@@ -30,7 +30,10 @@ export const THRESHOLDS = {
   // v0.6 调高到 13000：会话临时库新增 src/session/*（lifecycle 190 + checkpoint 150 +
   // handoff 110 ≈ 450 行）+ cli/session 130 行 + core/record 的契约代码 ~60 行。
   // 单文件 900 硬线**不动**：放宽总量只允许「多几个职责单一的小模块」。
-  maxTotalSrcLines: 15000,
+  // v1.0.1 调到 16000：W2 去重把三份重复实现收成 core/text.js + core/time.js（≈190 行，
+  // 换掉 8+4 处散落实现，净增但可测），W4 会话 LLM 新增 session/transcript.js +
+  // checkpoint-llm.js（≈400 行，有 I45 守着）。单文件 400 硬线仍然不动。
+  maxTotalSrcLines: 16000,
   /** 单元测试文件数下限 */
   minTestFiles: 8,
   /** 契约文档对 src 导出名的覆盖率（%）；内部工具函数在 contract-exempt.json 里登记豁免 */
@@ -361,9 +364,11 @@ async function q9WebUiBoundary() {
       }
     }
     // 5) 零构建 + 规模阈值（docs/08 §8 声明的 Q9 语义，之前只写在文档里没实现）：
-    //    单文件 ≤ 600 行、ui/ 总量 ≤ 3500 行、无 package.json/node_modules/构建产物
+    //    单文件 ≤ 600 行、ui/ 总量 ≤ 3700 行、无 package.json/node_modules/构建产物
+    //    3700（v1.0.1）：新增侧边栏+顶栏布局与图谱工具栏样式约 130 行 CSS；
+    //    同时删掉自研 3D 布局 layout.js（241 行）——净增是「换库后的一次性样式成本」。
     const UI_MAX_FILE_LINES = 600;
-    const UI_MAX_TOTAL_LINES = 3500;
+    const UI_MAX_TOTAL_LINES = 3700;
     let uiTotalLines = 0;
     for (const f of uiSrcs) {
       const n = (await fsp.readFile(f, 'utf8')).split('\n').length;
@@ -407,7 +412,7 @@ async function q9WebUiBoundary() {
       problems.push(`${rel(staticPath)}: 未识别"只服务 ui 目录"的解析逻辑（需 createStaticHandler + uiDir + path.resolve）`);
     }
   }
-  record('Q9', `Web UI 层边界（ui ${uiFiles} 文件：无越界 import/外链/innerHTML/eval，零构建 + 单文件≤600 行 + 总量≤3500 行，static 白名单）`,
+  record('Q9', `Web UI 层边界（ui ${uiFiles} 文件：无越界 import/外链/innerHTML/eval，零构建 + 单文件≤600 行 + 总量≤3700 行，static 白名单）`,
     problems.length === 0, problems.slice(0, 12));
 }
 

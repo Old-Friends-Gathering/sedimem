@@ -176,7 +176,9 @@
       "brief": {
         "maxOutputTokens": 400
       }
-    }
+    },
+    "apiKeyEnv": "MEMO_LLM_API_KEY",
+    "apiKeyFile": ""
   },
   "derive": {
     "promptVersion": "d1-v1",

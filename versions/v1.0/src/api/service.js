@@ -52,10 +52,44 @@ export function mergePolicy(base, override) {
  */
 function parseLlmPort({ policy, memoHome, clock }) {
   try {
-    return createLlmPort({ policy, memoHome, clock });
+    return createLlmPort({ policy: withLlmEnvOverrides(policy), memoHome, clock });
   } catch (err) {
     return { name: 'none', model: null, ready: false, reason: err?.code ?? 'E_LLM_INIT', complete: async () => ({ ok: false, error: { code: 'E_LLM_UNAVAILABLE', message: String(err?.message ?? err) } }) };
   }
+}
+
+/**
+ * 用环境变量覆盖 policy.llm（不把任何密钥写进仓库）。
+ *
+ * 为什么需要：MCP server 由宿主以 stdio 子进程拉起，必须能在「不改仓库里的 policy.json」
+ * 的前提下开启 LLM —— 否则要么把 key 写进版本库，要么每次改配置都提一个 PR。
+ * 支持：MEMO_LLM_PROVIDER / MEMO_LLM_EGRESS / MEMO_LLM_BASE_URL / MEMO_LLM_MODEL /
+ *       MEMO_LLM_API_KEY / MEMO_LLM_API_KEY_FILE / MEMO_LLM_DAILY_CNY
+ */
+function withLlmEnvOverrides(policy) {
+  const env = typeof process !== 'undefined' ? process.env ?? {} : {};
+  const pick = (k) => (typeof env[k] === 'string' && env[k].trim() ? env[k].trim() : null);
+  const provider = pick('MEMO_LLM_PROVIDER');
+  const egress = pick('MEMO_LLM_EGRESS');
+  const baseUrl = pick('MEMO_LLM_BASE_URL');
+  const model = pick('MEMO_LLM_MODEL');
+  const apiKey = pick('MEMO_LLM_API_KEY');
+  const apiKeyFile = pick('MEMO_LLM_API_KEY_FILE');
+  const daily = pick('MEMO_LLM_DAILY_CNY');
+  if (!provider && !egress && !baseUrl && !model && !apiKey && !apiKeyFile && !daily) return policy;
+  const llm = { ...(policy?.llm ?? {}) };
+  if (provider) llm.provider = provider;
+  if (egress) llm.egress = egress;
+  if (baseUrl) llm.baseUrl = baseUrl;
+  if (model) llm.model = model;
+  if (apiKey) llm.apiKey = apiKey;
+  if (apiKeyFile) llm.apiKeyFile = apiKeyFile;
+  if (daily && Number.isFinite(Number(daily))) llm.dailyLimitCny = Number(daily);
+  // provider 从 none 切到真实实现时，egress 必须一起放开，否则端口构造期就会拒绝
+  if (llm.provider && llm.provider !== 'none' && (!llm.egress || llm.egress === 'local-only')) {
+    llm.egress = 'egress-allowed';
+  }
+  return { ...(policy ?? {}), llm };
 }
 
 /**

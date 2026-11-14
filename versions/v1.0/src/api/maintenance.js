@@ -6,6 +6,7 @@
 import { withPatch } from '../core/record.js';
 import { clusterNearDuplicates } from '../hygiene/conflict.js';
 import { isExpired } from '../hygiene/decay.js';
+import { nowIso, DAY_MS } from '../core/time.js';
 import { defaultPolicy as POLICY } from '../config/policy.js';
 // 错误工厂从 service.js 反向引用（错误文本被测试断言，必须单一来源）。
 import { invalidArg, notFound } from '../core/errors.js';
@@ -157,7 +158,7 @@ export async function doctor(svc) {
  * 为什么是常量而不是内联数字：policy.quota.purgeGraceMs 尚未登记进 config/policy.json，
  * 缺省链「显式入参 > policy > 7d」只在这一处落地，避免魔法数字散落。
  */
-const DEFAULT_PURGE_GRACE_MS = 7 * 24 * 60 * 60 * 1000;
+const DEFAULT_PURGE_GRACE_MS = 7 * DAY_MS; // 7 天（毫秒常量单点化到 core/time.js#DAY_MS）
 
 /**
  * 物理压实（契约 docs/02 §3.13 裁决 51）：只物理删除**同时**满足三重条件的记录：
@@ -284,7 +285,7 @@ export async function curateApply(svc, { batchId, decisions } = {}) {
 
 /** pairIndex 路径的落盘（原 curateApply 主体，抽出复用；非破坏） */
 export async function commitPairVerdict(svc, a, b, d, detail) {
-  const now = svc._nowIso();
+  const now = nowIso(svc.clock);
   const maxConf = Math.max(a.confidence ?? 0, b.confidence ?? 0);
   let newRecord = null;
   if (d === 'a_wins' || d === 'merge') {
@@ -344,7 +345,7 @@ export async function applyIdsDecision(svc, d) {
     return { ids, applied: false, decision, newRecord: null };
   }
 
-  const now = svc._nowIso();
+  const now = nowIso(svc.clock);
   const maxConf = Math.max(...recs.map((r) => r.confidence ?? 0));
   const detail = { via: 'dedupe_ids', decision, ids, note: d.note ?? null };
   let newRecord = null;

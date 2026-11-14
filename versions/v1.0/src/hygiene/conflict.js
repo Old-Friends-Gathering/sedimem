@@ -1,62 +1,24 @@
 // hygiene/conflict.js — 同 slot 冲突裁决（规则化，v0.1 无 LLM）
 // 原则（对应 MemoryBank 事故防线）：不确定就 dispute，绝不静默覆盖。
 
-import { normalizeText, tokenize } from '../core/hash.js';
+import { normalizeText, tokenize, containment, charBigrams } from '../core/text.js';
+import { parseComparable } from '../core/time.js';
+
+// W2 单点化：文本相似度实现搬至 core/text.js（charBigrams/signatureSimilarity
+// 经 re-export 保持既有导入路径），时间可比较解析搬至 core/time.js。
+export { charBigrams, signatureSimilarity } from '../core/text.js';
+export { parseComparable };
 
 /**
- * 近重复相似度（裁决 14/15）：containment = |A∩B| / min(|A|,|B|)。
- * token 集合来自 core/hash.js 的 tokenize（中文 2-gram + 英文去停用词，已去重）。
- * 选 containment 而非 Jaccard：同一事实的不同长度措辞，短句应被长句吸收。
- * 空文本（无 token）→ 0，避免空集误判全匹配。
+ * 近重复相似度（裁决 14/15）：containment = |A∩B| / min(|A|,|B|)，实现见 core/text.js。
+ * 选 containment 而非 Jaccard：同一事实的不同长度措辞，短句应被长句吸收；
+ * 空文本（无 token）→ 0。保留旧名 textSimilarity 是既有模块契约的一部分。
  * @param {string} aText
  * @param {string} bText
  * @returns {number} [0, 1]
  */
 export function textSimilarity(aText, bText) {
-  const a = new Set(tokenize(String(aText ?? '')));
-  const b = new Set(tokenize(String(bText ?? '')));
-  if (a.size === 0 || b.size === 0) return 0;
-  let inter = 0;
-  for (const t of a) if (b.has(t)) inter += 1;
-  return inter / Math.min(a.size, b.size);
-}
-
-/**
- * 汉字二元组集合（裁决 26）：只用 normalizeText 后的 Han 连续段切 2-gram。
- * 为什么不用全字符：拉丁短句里 "th"/"he"/"ing" 这类碎片会把无关英文对推到 0.2+，
- * 实测英文无关对误聚 13.68%（@0.15）——不可接受；而英文改写本身词面重合度高，
- * containment（词级）已能覆盖（实测 0.43–0.5），故 Dice 只服务中文。
- * @param {string} s
- * @returns {Set<string>} 无汉字 → 空集合
- */
-export function charBigrams(s) {
-  const norm = normalizeText(String(s ?? ''));
-  const grams = new Set();
-  for (const run of norm.match(/\p{Script=Han}+/gu) ?? []) {
-    if (run.length === 1) { grams.add(run); continue; }
-    for (let i = 0; i + 1 < run.length; i++) grams.add(run.slice(i, i + 2));
-  }
-  return grams;
-}
-
-/**
- * 对称相似度（裁决 26）：汉字二元组 Dice = 2|A∩B| / (|A|+|B|)。
- * 用途：只做「候选发现」，不做判决。任一侧不含汉字 → 返回 0（交给 containment）。
- * 实测（40 条无关中文技术事实 / 6 组真人改写）：
- *   - 阈值 0.15：无关对误聚 1.41%（11/780），改写召回 5/6（唯一漏掉的是内容词全换的极端改写）
- *   - containment 对中文改写几乎为 0（0.06–0.12），所以这一路是中文去重的唯一在线手段
- * 阈值取 0.15（宁多不漏），判决交给 Agent（memory_curate），误聚只浪费一次判断，不会误删。
- * @param {string} aText
- * @param {string} bText
- * @returns {number} [0, 1]
- */
-export function signatureSimilarity(aText, bText) {
-  const a = charBigrams(aText);
-  const b = charBigrams(bText);
-  if (a.size === 0 || b.size === 0) return 0;
-  let inter = 0;
-  for (const g of a) if (b.has(g)) inter += 1;
-  return (2 * inter) / (a.size + b.size);
+  return containment(aText, bText);
 }
 
 /** scope+subject+predicate 三者在 normalizeText 后相等 */
@@ -67,59 +29,6 @@ export function sameSlot(a, b) {
     normalizeText(String(a.subject ?? '')) === normalizeText(String(b.subject ?? '')) &&
     normalizeText(String(a.predicate ?? '')) === normalizeText(String(b.predicate ?? ''))
   );
-}
-
-/**
- * 把字符串值解析为可比较量。
- * 支持：纯数字（含负数/小数）；ISO 日期时间；m/d、m/d/yyyy、yyyy/m/d 日期。
- * 解析不了 → { type: null }（调用方必须走 dispute 分支）。
- * @returns {{type:'number'|'date'|null, n?:number}}
- */
-export function parseComparable(value) {
-  if (value === null || value === undefined) return { type: null };
-  const s = String(value).trim();
-  if (s === '') return { type: null };
-
-  // 数字：123 / -1.5 / 1,000.25
-  const numStr = s.replace(/,/g, '');
-  if (/^[+-]?\d+(\.\d+)?$/.test(numStr) && Number.isFinite(Number(numStr))) {
-    return { type: 'number', n: Number(numStr) };
-  }
-
-  // ISO 日期/时间：2026-03-01、2026-03-01T00:00:00Z、2026-03、20260301
-  const iso = s.match(/^(\d{4})-(\d{2})(?:-(\d{2}))?(?:[T ].*)?$/);
-  if (iso) {
-    const t = Date.parse(s.includes('T') || s.includes(' ') ? s : `${s}T00:00:00Z`);
-    if (Number.isFinite(t)) return { type: 'date', n: t };
-    // yyyy-mm 形式
-    const ym = Date.parse(`${s}-01T00:00:00Z`);
-    if (Number.isFinite(ym)) return { type: 'date', n: ym };
-  }
-  if (/^\d{8}$/.test(s)) {
-    const t = Date.parse(`${s.slice(0, 4)}-${s.slice(4, 6)}-${s.slice(6, 8)}T00:00:00Z`);
-    if (Number.isFinite(t)) return { type: 'date', n: t };
-  }
-
-  // m/d 或 m/d/yyyy（月/日，eval I2 的「截止 3/1 → 4/1」语义）；缺年按 2000 固定锚年，
-  // 保证同年内比较单调且与年份无关（两侧同格式时可比）。
-  const md = s.match(/^(\d{1,2})\/(\d{1,2})(?:\/(\d{4}))?$/);
-  if (md) {
-    const month = Number(md[1]);
-    const day = Number(md[2]);
-    const year = md[3] ? Number(md[3]) : 2000;
-    if (month >= 1 && month <= 12 && day >= 1 && day <= 31) {
-      return { type: 'date', n: Date.UTC(year, month - 1, day) };
-    }
-  }
-  // yyyy/m/d
-  const ymd = s.match(/^(\d{4})\/(\d{1,2})\/(\d{1,2})$/);
-  if (ymd) {
-    const t = Date.UTC(Number(ymd[1]), Number(ymd[2]) - 1, Number(ymd[3]));
-    if (Number.isFinite(t)) return { type: 'date', n: t };
-  }
-
-  // 其他一切（含自由文本、真布尔语义等）不可解析
-  return { type: null };
 }
 
 /**

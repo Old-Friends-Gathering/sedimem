@@ -28,6 +28,34 @@ export const PURPOSES = {
  * @param {(url: string, init: object) => Promise<any>} [opts.fetchImpl]  fetch 注入，默认 globalThis.fetch
  * @param {(ms: number) => Promise<void>} [opts.sleep]  重试退避 sleep 注入，默认真实 setTimeout
  */
+
+/** 解析 API key：内联 → env → 文件；返回 { apiKey, keySource }，永不抛。 */
+function resolveApiKey(llm, memoHome) {
+  if (typeof llm.apiKey === 'string' && llm.apiKey.trim()) {
+    return { apiKey: llm.apiKey.trim(), keySource: 'policy' };
+  }
+  const envName = llm.apiKeyEnv || 'MEMO_LLM_API_KEY';
+  const fromEnv = typeof process !== 'undefined' ? process.env?.[envName] : undefined;
+  if (typeof fromEnv === 'string' && fromEnv.trim()) {
+    return { apiKey: fromEnv.trim(), keySource: `env:${envName}` };
+  }
+  const filePath = llm.apiKeyFile
+    || (typeof process !== 'undefined' && process.env?.HOME
+      ? `${process.env.HOME}/.config/sedimem/llm-key`
+      : null);
+  if (filePath) {
+    try {
+      // 只读一次、只看第一行非空：文件里允许带注释与换行
+      const raw = readFileSync(filePath, 'utf8');
+      const line = raw.split('\n').map((l) => l.trim()).find((l) => l && !l.startsWith('#'));
+      if (line) return { apiKey: line, keySource: `file:${filePath}` };
+    } catch { /* 文件不存在是正常状态（未配置） */ }
+  }
+  return { apiKey: '', keySource: 'missing' };
+}
+
+import { readFileSync } from 'node:fs';
+
 export function createLlmPort({ policy, memoHome, clock = () => Date.now(), fetchImpl, sleep } = {}) {
   const llm = policy && policy.llm;
   if (!llm || typeof llm !== 'object') {
@@ -48,6 +76,12 @@ export function createLlmPort({ policy, memoHome, clock = () => Date.now(), fetc
     throw err;
   }
 
+  // 密钥解析顺序：policy.llm.apiKey（内联）→ 环境变量（apiKeyEnv，默认 MEMO_LLM_API_KEY）
+  //   → 密钥文件（apiKeyFile，默认 ~/.config/sedimem/llm-key，0600）。
+  // 为什么要文件：DSH 给 stdio 子进程会 scrub 含 KEY/TOKEN/SECRET 的环境变量，
+  // 而 MCP server 正是 stdio 子进程 —— 只靠 env 的话，插件永远拿不到 key。
+  const { apiKey, keySource } = resolveApiKey(llm, memoHome);
+
   const isNone = provider === 'none';
   let baseUrl = null;
 
@@ -66,8 +100,12 @@ export function createLlmPort({ policy, memoHome, clock = () => Date.now(), fetc
   return {
     name: 'llm-port',
     model: llm.model || '',
-    ready: !isNone,
-    reason: isNone ? 'provider none' : 'ok',
+    ready: !isNone && Boolean(apiKey),
+    reason: isNone ? 'provider none' : (apiKey ? 'ok' : 'missing-api-key'),
+    keySource,
+    provider,
+    baseUrl: baseUrl || null,
+    dailyLimitCny: llm.dailyLimitCny ?? null,
 
     /**
      * 执行一次补全。永不抛异常（除 purpose 非法等参数错误返回失败对象）。
@@ -104,7 +142,7 @@ export function createLlmPort({ policy, memoHome, clock = () => Date.now(), fetc
       });
       const headers = {
         'content-type': 'application/json',
-        ...(llm.apiKey ? { authorization: `Bearer ${llm.apiKey}` } : {}),
+        ...(apiKey ? { authorization: `Bearer ${apiKey}` } : {}),
       };
 
       const maxRetries = typeof llm.maxRetries === 'number' ? llm.maxRetries : 1;
