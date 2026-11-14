@@ -30,7 +30,7 @@ function baseName(path) {
 }
 
 /**
- * 一条指针记录 → 列表行数据（时间 / 会话 id / 路径）。
+ * 一条指针记录 → 列表行数据（时间 / 任务 id / 路径）。
  * @param {object} record
  * @returns {{ts: string, sessionId: string, path: string, label: string}}
  */
@@ -38,7 +38,7 @@ export function buildHandoffRow(record) {
   const ts = String(record?.createdAt ?? record?.ts ?? '');
   const sessionId = String(record?.source?.session ?? record?.session ?? '');
   const path = pickHandoffPath(record);
-  return { ts, sessionId, path, label: `${ts || '–'} · ${sessionId || '未知会话'} · ${path}` };
+  return { ts, sessionId, path, label: `${ts || '–'} · ${sessionId || '未知任务'} · ${path}` };
 }
 
 /** 顶部只读说明。 */
@@ -110,7 +110,7 @@ async function showHandoff(detail, apiGet, row) {
   }
   if (row.sessionId) {
     const meta = el('div', 'm', '');
-    meta.textContent = `会话：${row.sessionId}`;
+    meta.textContent = `任务：${row.sessionId}`;
     detail.append(meta);
   }
   const pre = el('pre', 'handoff-content');

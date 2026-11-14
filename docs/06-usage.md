@@ -496,13 +496,16 @@ node eval/bench-scale.mjs --n 100000 --backend sqlite
 输出 write/search 的 p50·p95、冷启动、RSS。**10k 条以上请用 `policy.index.backend = "sqlite"`**
 （实测 memory 后端 10k 条 search p50 ≈ 85ms，sqlite 后端约一个数量级之内）。
 
-## 17. 会话临时库与写侧契约（v0.6）
+## 17. 任务库（`session:` scope）与写侧契约（v0.6）
 
-### 17.1 为什么要有临时库
+### 17.1 为什么要有任务库
 
-长期库只收「可判断的事实」，而会话里的过程性内容（下一步做什么、踩过什么坑）没有落点——
-压缩发生在上下文里，进程一关就没了。临时库（`session:<id>` scope）就是这个**会话级、可丢弃、可晋升**
+长期库只收「可判断的事实」，而任务过程里的内容（下一步做什么、踩过什么坑、卡在哪）没有落点——
+压缩发生在上下文里，进程一关就没了。任务库（`session:<id>` scope）就是这个**任务级、可丢弃、可晋升**
 的中间层：过程先落盘，close 时只把 `decision`/`gotcha` 晋升回主库，其余随库 tombstone。
+
+> 为什么按「任务」而不是「会话」：多 agent 联合开发时，同一个任务会由多个 agent、多个会话接力完成，
+> 会话边界会切碎上下文；任务边界才是该交接、该晋升的单位。技术标识仍是 `session:`（兼容既有分库）。
 
 ### 17.2 四个命令的真实输出
 
@@ -602,7 +605,7 @@ close 做四件事，顺序固定：
 | `memo capture list --status pending` / `accept --ids …` / `reject --ids … --note …` | 审阅候选队列；accept 走完整写入门禁 | §16.3 |
 | `memo conflicts [--json]` | 按 slot 列出分歧记录（含候选对与相似度） | §16.4 |
 | `memo conflicts resolve --slot <slot> --winner <recordId>` | 分歧裁决（走 `curateApply`，非破坏、幂等） | §16.4 |
-| `memo session start --title "…"` | 开会话临时库（`session:<id>` scope；禁写 fact） | §17.2 |
+| `memo session start --title "…"` | 开任务库（`session:<id>` scope；禁写 fact） | §17.2 |
 | `memo session checkpoint --scope session:<id> --file cp.json`（或 `--from-summary dsh-summary.json`） | 追加 8 段 checkpoint；可接 DSH 压缩摘要 | §17.3–17.4 |
 | `memo session status --scope session:<id>` | 看临时库状态（open/closed、checkpoint 数、fact 数） | §17.2 |
 | `memo session close --scope session:<id>` | 晋升 decision/gotcha 回主库、写交接文档、其余 tombstone（幂等） | §17.5 |

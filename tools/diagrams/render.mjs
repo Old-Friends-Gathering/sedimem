@@ -164,7 +164,7 @@ const DIAGRAMS = {
       <div class="label">这些门被测到什么程度</div>
       <div class="chips">
         ${['I2 同值重复', 'I7 换措辞近重复', 'I8 10 进程并发', 'I13 投毒 10 变体',
-           'I26 落盘前脱敏', 'I27 冲突裁决', 'I28 候选不直写', 'I36 注入租界/预算', 'I45 会话 LLM 抽取']
+           'I26 落盘前脱敏', 'I27 冲突裁决', 'I28 候选不直写', 'I36 注入租界/预算', 'I45 任务 LLM 抽取']
           .map((x) => `<span class="chip">${x}</span>`).join('')}
       </div>
     </div>
@@ -201,10 +201,10 @@ const DIAGRAMS = {
   `),
 
   session: () => P(`
-    ${head('SESSION MEMORY', '会话临时库：给一次任务用的一次性记忆', 'close 时把「值得留的」晋升进主库，其余随库丢弃')}
+    ${head('TASK STORE', '任务库：一个任务一条临时记忆', '按任务分库（不按会话）· close 时只晋升值得留的，其余丢弃')}
     <div class="stage">
       <div class="col">
-        <div class="card"><div class="t">memo session start</div><div class="mono">scope = session:20261114-1030-ab12</div><div class="d">独立分库；<b>禁写 fact</b>（临时库不该沉淀世界事实）</div></div>
+        <div class="card"><div class="t">memo session start</div><div class="mono">scope = session:&lt;task-id&gt;</div><div class="d">按任务建库；<b>禁写 fact</b>（任务过程不该沉淀世界事实）</div></div>
         <div class="arrow" style="align-self:flex-start;padding-left:18px">↓</div>
         <div class="card"><div class="t">checkpoint ×N</div><div class="d">8 段：intent / concepts / files / errorsAndFixes / pendingJobs / currentState / nextSteps / criticalContext</div></div>
         <div class="arrow" style="align-self:flex-start;padding-left:18px">↓</div>
@@ -214,8 +214,8 @@ const DIAGRAMS = {
       <div class="col">
         <div class="card ok"><div class="t">晋升到主库</div><div class="d pill"><span class="tag g">decision</span><span class="tag g">gotcha</span></div><div class="d">打 <span class="mono">from-session:&lt;id&gt;</span> 标签，可追溯来源</div></div>
         <div class="card"><div class="t">交接文档</div><div class="mono">docs/handoffs/&lt;id&gt;.md</div><div class="d">六段：目标 / 做完了什么 / 卡在哪 / 下一步 / 关键文件 / 约束</div></div>
-        <div class="card"><div class="t">自动收尾</div><div class="d"><span class="mono">memo session sweep</span> 扫僵尸会话（>14 天未关），只报告不自动删</div></div>
-        <div class="card"><div class="t">可选用 LLM 压缩</div><div class="d"><span class="mono">--auto --llm</span>：读会话 transcript 抽 8 段；无 key 时自动回落规则抽取</div></div>
+        <div class="card"><div class="t">自动收尾</div><div class="d"><span class="mono">memo session sweep</span> 扫僵尸任务（>14 天未关），只报告不自动删</div></div>
+        <div class="card"><div class="t">可选用 LLM 压缩</div><div class="d"><span class="mono">--auto --llm</span>：读任务 transcript 抽 8 段；无 key 时自动回落规则抽取</div></div>
       </div>
     </div>
     <div class="band">
@@ -264,7 +264,7 @@ const DIAGRAMS = {
     ${head('GATES', '五层门禁：自己会腐化，所以让机器盯着', '本地脚本 = CI 脚本，改阈值必须先改契约')}
     <div class="stage" style="flex-direction:column; gap:12px">
       ${[
-        ['质量 14 项', 'Q1 零依赖 · Q2 规模 · Q3 测试清单 · Q4 评测对齐 · Q5 契约覆盖 · Q6 链接 · Q7 版本自包含 · Q8 编码 · Q9 Web 边界 · Q10 发布面 · Q11 写侧与会话 · Q13 vendor · Q14 文档治理 · Q15 LLM 契约', 'ok'],
+        ['质量 14 项', 'Q1 零依赖 · Q2 规模 · Q3 测试清单 · Q4 评测对齐 · Q5 契约覆盖 · Q6 链接 · Q7 版本自包含 · Q8 编码 · Q9 Web 边界 · Q10 发布面 · Q11 写侧与任务库 · Q13 vendor · Q14 文档治理 · Q15 LLM 契约', 'ok'],
         ['安全 9 项', '无个人路径 · 无凭据/私钥 · 无内网域名 · 模板不含 home · .gitignore 覆盖 · LICENSE · 无超大文件 · 历史面轻扫 · 运行时回环断言', 'ok'],
         ['覆盖率门禁', 'lines ≥ 89% · functions ≥ 90% · branches ≥ 77%（低于阈值直接 fail，不看人）', 'ok'],
         ['docs-drift', '文档里的命令/路径/版本必须能被脚本验证存在，防「文档漂移」', 'warn'],

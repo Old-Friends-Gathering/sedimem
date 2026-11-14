@@ -479,7 +479,7 @@ async function loadImport() {
   importMounted = { scope };
 }
 
-/* W8：会话 / 交接页统一懒加载（只读，无需记忆挂载状态） */
+/* W8：任务 / 交接页统一懒加载（只读，无需记忆挂载状态） */
 /* ---------------- 路由 ---------------- */
 
 const ROUTES = ['today', 'graph', 'search', 'hygiene', 'edit', 'import', 'settings', 'session', 'handoff'];

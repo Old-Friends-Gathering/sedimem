@@ -1,16 +1,16 @@
 /**
- * session-view.js —— 会话页（W8）：浏览 session:* 临时分库（只读）。
+ * session-view.js —— 任务页（W8）：浏览 session:* 任务库（只读）。
  *
  * 数据来源（全部复用现有只读接口，不改后端）：
- * - 会话列表：GET api/scopes 里 scope 以 `session:` 开头的分库（records 计数直接用列表返回值）
- * - 会话详情：GET api/records?scope=<session 库>&status=active，按 kind 分组展示
+ * - 任务列表：GET api/scopes 里 scope 以 `session:` 开头的分库（records 计数直接用列表返回值）
+ * - 任务详情：GET api/records?scope=<session 库>&status=active，按 kind 分组展示
  *
  * 安全约定：只读、无写操作；所有接口数据一律 textContent / createElement 写入，
  * 禁用 HTML 字符串拼接与 eval。state 记录的 8 段 checkpoint 用 <pre> 渲染。
  */
 import { el } from './dom.js';
 
-/** checkpoint 的 8 段固定顺序（与会话临时库契约一致）。 */
+/** checkpoint 的 8 段固定顺序（与任务库契约一致）。 */
 const CHECKPOINT_SECTIONS = [
   'intent', 'concepts', 'files', 'errorsAndFixes',
   'pendingJobs', 'currentState', 'nextSteps', 'criticalContext',
@@ -58,7 +58,7 @@ export function formatCheckpoint(record) {
 }
 
 /**
- * 一条会话分库 → 列表行数据（scope + 记录数）。
+ * 一条任务分库 → 列表行数据（scope + 记录数）。
  * @param {string} scope
  * @param {{records?: number}} [stats] —— /api/scopes 的单条分库对象
  * @returns {{scope: string, records: number, label: string}}
@@ -68,15 +68,15 @@ export function buildSessionRow(scope, stats) {
   return { scope: String(scope ?? ''), records, label: `${scope} · ${records} 条记录` };
 }
 
-/** 顶部只读说明（会话库可丢弃，关闭走 CLI，UI 不提供按钮）。 */
+/** 顶部只读说明（任务库可丢弃，关闭走 CLI，UI 不提供按钮）。 */
 function renderNote(container) {
   const note = el('p', 'dim');
-  note.textContent = '会话库是临时记忆（可丢弃）。关闭会话请用 CLI：`memo session close <id>`（UI 只读，不提供按钮）';
+  note.textContent = '一个任务可跨多个 agent 接力；关闭任务用 CLI：`memo session close <id>`（UI 只读，不提供按钮）';
   container.append(note);
 }
 
 /**
- * 挂载会话页（app.js 懒加载后调用；apiGet 由 app.js 注入，自动带当前 scope）。
+ * 挂载任务页（app.js 懒加载后调用；apiGet 由 app.js 注入，自动带当前 scope）。
  * @param {{container: Element, apiGet: Function}} deps
  * @returns {Promise<void>}
  */
@@ -95,7 +95,7 @@ export async function mountSessionView({ container, apiGet }) {
   const sessions = (Array.isArray(data?.scopes) ? data.scopes : [])
     .filter((s) => typeof s?.scope === 'string' && s.scope.startsWith('session:'));
   if (sessions.length === 0) {
-    container.append(el('p', 'dim', '当前没有会话临时库（session:*）。'));
+    container.append(el('p', 'dim', '当前没有任务库（session:*）。'));
     return;
   }
 
@@ -103,7 +103,7 @@ export async function mountSessionView({ container, apiGet }) {
   const layout = el('div', 'session-layout');
   const listBox = el('div', 'card session-list');
   const detail = el('div', 'card session-detail');
-  detail.append(el('p', 'dim', '点击左侧会话查看其中的记录。'));
+  detail.append(el('p', 'dim', '点击左侧任务查看其中的记录。'));
   layout.append(listBox, detail);
   container.append(layout);
 
@@ -117,7 +117,7 @@ export async function mountSessionView({ container, apiGet }) {
   }
 }
 
-/** 拉取一个会话库的 active 记录并按 kind 分组渲染进 detail。 */
+/** 拉取一个任务库的 active 记录并按 kind 分组渲染进 detail。 */
 async function showSession(detail, apiGet, scope) {
   detail.replaceChildren(el('h3', 'h3', scope), el('p', 'dim', '加载中…'));
   let data;
@@ -132,7 +132,7 @@ async function showSession(detail, apiGet, scope) {
   const grouped = groupByKind(data?.records);
   const kinds = Object.keys(grouped);
   if (kinds.length === 0) {
-    detail.append(el('p', 'dim', '该会话库没有 active 记录。'));
+    detail.append(el('p', 'dim', '该任务库没有 active 记录。'));
     return;
   }
   for (const kind of kinds) {

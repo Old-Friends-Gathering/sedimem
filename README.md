@@ -78,24 +78,24 @@ $NODE $V/src/cli/memo.js serve --port 7788   # 记忆中心 http://127.0.0.1:778
 | 简报 | 当前 scope 概览 | `memo brief` |
 | 治理 | 去重扫描、冲突裁决、新旧取代、墓碑删除 | `memo dedupe` / `curate` / `supersede` / `forget` |
 | LLM 派生 | 标题/摘要/标签旁路生成，默认关 | `memo derive` / `llm` |
-| 会话临时库 | 探索先进临时库，close 白名单晋升 | `memo session` |
+| 任务库 | 任务级临时记忆，close 白名单晋升 | `memo session` |
 | 记忆中心 | 九页 Web UI，默认只读 | `memo serve --port 7788` |
 | 体检 | 环境/分库/索引健康检查 | `memo doctor` / `stats` |
 | 迁移重建 | 版本目录迁移、索引删光重建 | `memo migrate` / `reindex` / `compact` |
 
 ## 记忆中心
 
-`memo serve --port 7788`，九页：今日 / 图谱 / 搜索 / 卫生 / 编辑 / 导入 / 会话 / 交接 / 设置。
+`memo serve --port 7788`，九页：今日 / 图谱 / 搜索 / 卫生 / 编辑 / 导入 / 任务 / 交接 / 设置。
 
 | ![今日：当天变化流](docs/shots/ui-today.png) | ![图谱：力导向 + kind 筛选](docs/shots/ui-graph.png) |
 |---|---|
-| ![卫生：待裁决簇 + 30 天趋势](docs/shots/ui-hygiene.png) | ![会话：临时库状态](docs/shots/ui-session.png) |
+| ![卫生：待裁决簇 + 30 天趋势](docs/shots/ui-hygiene.png) | ![任务：任务库状态](docs/shots/ui-session.png) |
 
 | 页 | 干什么 | 页 | 干什么 |
 |---|---|---|---|
 | 今日 | 当天变化流 | 编辑 | `--write` 才可改 |
 | 图谱 | 力导向全貌 + kind 筛选 | 导入 | 批量结构化 |
-| 搜索 | 带依据（basis）检索 | 会话 | 临时库状态 |
+| 搜索 | 带依据（basis）检索 | 任务 | 任务库状态 |
 | 卫生 | 待裁决簇 + 30 天趋势 | 交接 | 六段交接文档 |
 | 设置 | 分库 / 配色 / 策略只读 | | |
 
@@ -116,11 +116,11 @@ memo llm status && memo llm test && memo derive --rebuild
 > [!NOTE]
 > 开 LLM 后，标题/摘要/标签的生成请求会发往你配置的 provider；原始记忆文本仍只在本机，真相层不参与请求。
 
-## 会话临时库
+## 任务库（`session:` scope）
 
 探索性工作先进 `session:*` 临时库（禁写 fact）；close 只把 decision/gotcha 晋升主库（带 `from-session:<id>` 标签），其余随库废弃，并生成六段交接文档 `docs/handoffs/<id>.md`。
 
-![会话临时库：start → checkpoint → close](docs/shots/diagrams/session.png)
+![任务库：start → checkpoint → close](docs/shots/diagrams/session.png)
 
 ```bash
 memo session start --title "调试锁竞争"
@@ -178,7 +178,7 @@ claude mcp add --scope user memo -e MEMO_HOME=$HOME/.memo -- \
 | `write` / `search` / `brief` / `get` | 写入 / 检索 / 简报 / 取单条 |
 | `supersede` / `forget` | 新值取代旧记录 / 删除（默认写墓碑） |
 | `curate` / `dedupe` / `compact` | 裁决去重簇 / 扫描候选 / 压缩 |
-| `session` / `derive` / `llm` | 会话临时库 / 派生重建 / LLM 配置 |
+| `session` / `derive` / `llm` | 任务库 / 派生重建 / LLM 配置 |
 | `serve` / `doctor` / `stats` | 记忆中心 / 体检 / 统计 |
 | `reindex` / `migrate` / `view` | 重建索引 / 版本迁移 / 视图 |
 
