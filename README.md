@@ -197,7 +197,7 @@ claude mcp add --scope user memo -e MEMO_HOME=$HOME/.memo -- \
 
 ![五层门禁：质量 → 安全 → 覆盖率 → docs-drift → pages-verify](docs/shots/diagrams/gates.png)
 
-本地脚本 = CI 脚本：质量 14 项 + 安全 9 项 + 覆盖率（lines ≥ 89 / functions ≥ 90 / branches ≥ 77）+ docs-drift + pages-verify，另含 651 tests 与 eval I1–I50。
+本地脚本 = CI 脚本：质量 14 项 + 安全 9 项 + 覆盖率（lines ≥ 89 / functions ≥ 90 / branches ≥ 77）+ docs-drift + pages-verify，另含 653 tests 与 eval I1–I51。
 
 ```bash
 node tools/quality-check.mjs && node tools/security-check.mjs && node tools/coverage-gate.mjs
@@ -220,7 +220,8 @@ node tools/quality-check.mjs && node tools/security-check.mjs && node tools/cove
 | 版本 | 主题 | 状态 |
 |---|---|---|
 | v1.0.2 | 三处真 fix（思考链/重建/懒加载）+ 文档改图为主 | ✅ 已发布 |
-| **v1.0.3** | 分库归属硬门（跨库写入 fail-loud）+ CI 门禁不再被 tee 吞 | ✅ 当前 |
+| **v1.0.4** | 任务库（`session:*`）在观测台可浏览：`SCOPE_PATTERN` 补上 `session` 前缀 | ✅ 当前 |
+| v1.0.3 | 分库归属硬门（跨库写入 fail-loud）+ CI 门禁不再被 tee 吞 | 已发布 |
 | v1.0.1 | 图谱可用性 + 配色对齐 DSH | ✅ 已交付 |
 | v1.0.0 | 12 模块重构 + LLM 总结层 + 九页重做 | ✅ 已交付 |
 | 更早（v0.1–v0.6） | 核心层、语义道、pages-verify 等 | 🔒 冻结 |

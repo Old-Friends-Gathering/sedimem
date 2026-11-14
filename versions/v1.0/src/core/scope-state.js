@@ -12,8 +12,14 @@
 import fs from 'node:fs';
 import path from 'node:path';
 
-/** scope 形状：`repo:名字` / `dir:名字` / `user:名字` / `global:名字`，小写字母数字开头，允许 . _ -，总长 ≤64。 */
-export const SCOPE_PATTERN = /^(repo|dir|user|global):[a-z0-9][a-z0-9._-]{0,63}$/;
+/**
+ * scope 形状：`repo:名字` / `dir:名字` / `user:名字` / `global:名字` / `session:<id>`。
+ * 小写字母数字开头，允许 . _ -，总长 ≤64。
+ *
+ * 为什么必须含 `session`：任务库（`session:<id>`）也是分库，磁盘上是真实文件；
+ * 少了它会让 listScopes 过滤掉任务库、`?scope=session:…` 被判非法（v1.0.4 修）。
+ */
+export const SCOPE_PATTERN = /^(repo|dir|user|global|session):[a-z0-9][a-z0-9._-]{0,63}$/;
 
 /**
  * 覆盖文件按**客户端**隔离：`<memoHome>/.scope.<client>.json`。

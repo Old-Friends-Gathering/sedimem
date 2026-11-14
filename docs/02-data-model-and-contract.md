@@ -666,11 +666,31 @@ nightly metrics 新增 `searchCount` / `noHitRate` / `staleHitRate` / `avgTopSco
 | `src/cli/view.js` | `cmdView` `cmdBriefTier0` `L2_VIEW_FILE` |
 | `src/render/brief.js` | `renderBrief`（v0.3 起支持 `blocks` 分层，旧单对象签名兼容） |
 
+## §3.21 scope 前缀集合必须包含 session（裁决 112，v1.0.4）
+
+`SCOPE_PATTERN` 是唯一的分库名合法性判定，被三处消费：`resolveScope`（env/覆盖文件）、
+`src/web/scopes.js` 的 `listScopes`、`src/web/server.js` 的 `?scope=` 校验。
+
+**裁决**：允许的前缀是 `repo | dir | user | global | session`，缺任何一个都会造成静默功能缺失。
+
+v1.0.4 的真实缺陷：pattern 漏了 `session`，于是
+
+| 症状 | 机制 |
+|---|---|
+| 任务页永远显示「当前没有任务库」 | `listScopes` 用 pattern 过滤磁盘文件名，`items/session:*.jsonl` 全被丢弃 |
+| `GET /api/records?scope=session:<id>` 返回 400 | `server.js` 复用同一 pattern 判 `?scope=`，报 `E_INVALID_ARG` |
+
+修法只放开前缀，不放宽字符集：仍然「小写字母数字开头 + 只允许 `. _ -` + 总长 ≤64」，
+因此 `session:../etc/passwd`、`session:a/b`、`session:UPPER` 依旧被拒（I51 钉住）。
+
+**教训（写规则时用）**：枚举型白名单（kind、agent、scope 前缀、ops）新增成员时，
+必须 grep 这个常量的全部消费点；本项目里 scope 前缀被 3 处复用，漏一处就是"功能看起来没坏但看不到数据"。
+
 ## §3.15 跨平台真相层文件名（裁决 58）
 
 ### 裁决 58：Windows 上文件名不得含 `:`，映射必须收敛到 `config/paths.js`
 
-`scope` 恒含一个冒号（`repo:x` / `dir:x` / `user:x` / `global:x`）。POSIX 上 `items/<scope>.jsonl` 合法；
+`scope` 恒含一个冒号（`repo:x` / `dir:x` / `user:x` / `global:x` / `session:<id>`）。POSIX 上 `items/<scope>.jsonl` 合法；
 Windows 上 `:` 是 NTFS **备用数据流（ADS）**分隔符，`items/repo:x.jsonl` 会被写成文件 `repo` 的一个数据流。
 
 实测后果（均为静默失败，不是崩溃）：
