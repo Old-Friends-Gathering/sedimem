@@ -46,11 +46,18 @@ function srItem(item) {
   if (Number.isFinite(score)) meta.push(`score ${score.toFixed(2)}`);
   if (basis) meta.push(`<span class="badge ${basis.includes('+') ? 'b-info' : ''}">${escapeHtml(basis)}</span>`);
   if (date) meta.push(escapeHtml(date));
+  const title = titleOf(item);
+  // 标题取自正文首行时，摘要要从标题之后开始，否则同一句话会显示两遍
+  const full = String(item?.text ?? '');
+  const rest = full.startsWith(title) ? full.slice(title.length).replace(/^[\s:：·-]+/, '') : full;
+  const body = excerpt(rest);
+  // 正文与标题相同（短记录）时不再重复一行
+  const txt = body && body !== title ? `<div class="txt">${escapeHtml(body)}</div>` : '';
   return [
     '<div class="sr-item">',
-    `<div class="title">${escapeHtml(titleOf(item))}</div>`,
+    `<div class="title">${escapeHtml(title)}</div>`,
     `<div class="meta">${meta.join('')}</div>`,
-    `<div class="txt">${escapeHtml(excerpt(item?.text))}</div>`,
+    txt,
     '</div>',
   ].join('');
 }

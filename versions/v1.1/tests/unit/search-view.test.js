@@ -7,7 +7,7 @@ import assert from 'node:assert/strict';
 import { renderSearchResults, escapeHtml } from '../../ui/search-view.js';
 
 const ITEMS = [
-  { kind: 'fact', text: '事实甲：Node >= 22', score: 1.234, basis: 'bm25', createdAt: '2026-11-01T08:00:00Z' },
+  { kind: 'fact', text: '事实甲：Node >= 22\n部署机与 CI 都是 22 以上，低于 22 会缺 node:sqlite', score: 1.234, basis: 'bm25', createdAt: '2026-11-01T08:00:00Z' },
   { kind: 'decision', text: '决定：零第三方依赖', score: 0.87, createdAt: '2026-11-02T09:00:00Z' },
   { kind: 'gotcha', text: '坑：Windows 路径冒号', score: 0.5, basis: 'bm25+vector', validFrom: '2026-11-03T10:00:00Z' },
 ];
@@ -23,7 +23,10 @@ describe('search-view/renderSearchResults', () => {
     assert.match(html, /score 1\.23/);
     assert.match(html, /bm25\+vector/); // basis badge（b-info 变体）
     assert.match(html, /2026-11-03/); // createdAt 缺失时回退 validFrom
-    assert.match(html, /<div class="txt">/); // 摘要行
+    // 摘要行：正文与标题不同的记录才渲染（短记录不重复一行）
+    assert.match(html, /<div class="txt">/);
+    const dup = renderSearchResults({ query: 'q', items: [{ kind: 'fact', text: '只有一行' }] });
+    assert.doesNotMatch(dup, /<div class="txt">/, '正文等于标题时不应重复渲染');
   });
 
   test('空结果：给出 .empty 提示（含转义后的查询词）', () => {
