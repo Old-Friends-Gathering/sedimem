@@ -10,6 +10,9 @@
 ### Changed（文档按「图为主」重做）
 - `README.md` 182 行、13 张图；`docs/index.html` 251 行、9 张图：每节 = 标题 + 一张图 + ≤2 句图注。
 - 新增 `tools/diagrams/render.mjs`：HTML+CSS 排版 → 无头 Chrome 截图，产出 6 张示意图（arch / write / llm / session / read / gates），配色与产品 UI 同源。
+- 新增 `tools/diagrams/master.mjs`：整系统架构图（客户端 → 接口层 → MemoryService → 12 模块 → 数据层，含 ①②③ 主链路）与首屏 banner。
+- **中英双语**：`README.md`（中文，默认）+ `README.en.md`（英文，标注「中文版为准」）；项目站 `docs/index.html` + `docs/en/index.html`，带 hreflang 与语言切换。结构按 7 个优秀仓库实测规范重排（首屏 8 件事、30 行内出现可执行命令、对比表回答「为什么不用现成的」、<details> 折叠深内容）。
+- 英文页暂复用中文标注示意图，已在页面明示并开 issue #174 跟踪英文版示意图。
 
 ### Added
 - `tests/unit/llm-thinking-and-rebuild.test.js`（3 例）。

@@ -1,0 +1,276 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>sedimem — Local-first Personal AI Memory</title>
+<meta name="description" content="sedimem: a local-first personal AI memory system. Append-only truth layer; indexes, views and derivations are all rebuildable; one stdio MCP shared by three clients.">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self'; style-src 'self' 'unsafe-inline'">
+<link rel="alternate" hreflang="zh-CN" href="../index.html">
+<link rel="alternate" hreflang="en" href="./index.html">
+<style>
+:root{
+  --bg:#0a0f1c; --panel:#111827; --panel2:#161f33;
+  --accent:#4d6bfe; --text:#e6e9f5; --muted:#8a93b5;
+  --border:#24314d; --radius:16px;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{
+  background:var(--bg);color:var(--text);
+  font-family:"PingFang SC","Hiragino Sans GB","Microsoft YaHei",-apple-system,"Segoe UI",sans-serif;
+  line-height:1.6;padding:0 20px;
+}
+.topbar{
+  position:sticky;top:0;z-index:10;
+  background:rgba(10,15,28,.88);backdrop-filter:blur(8px);
+  border-bottom:1px solid var(--border);
+  display:flex;align-items:center;justify-content:space-between;
+  padding:12px 0;
+}
+.topbar .logo{font-weight:700;font-size:1.1rem;text-decoration:none;color:var(--text)}
+.topbar .logo b{color:var(--accent)}
+.topbar .links{display:flex;align-items:center;gap:18px;font-size:.9rem}
+.topbar a{color:var(--accent);text-decoration:none}
+.topbar a:hover{text-decoration:underline}
+.topbar .lang{color:var(--muted)}
+main{max-width:1080px;margin:0 auto;padding:48px 0 24px}
+h1{font-size:2.4rem;letter-spacing:.02em}
+h1 .dot{color:var(--accent)}
+h2{font-size:1.4rem;margin-bottom:12px;display:flex;align-items:center;gap:10px}
+h2::before{content:"";width:8px;height:22px;border-radius:4px;background:var(--accent)}
+p{color:var(--muted);max-width:46em}
+section{margin:56px 0}
+.subtitle{font-size:1.05rem;margin-top:10px}
+.pills{display:flex;flex-wrap:wrap;gap:12px;margin-top:18px}
+.pill{
+  background:var(--panel);border:1px solid var(--border);border-radius:12px;
+  padding:10px 18px;font-size:.95rem;
+}
+.pill b{color:var(--accent);font-size:1.15rem;margin-right:6px}
+figure{margin-top:22px}
+figure img{
+  width:100%;height:auto;display:block;
+  border-radius:14px;border:1px solid var(--border);
+  background:var(--panel);
+}
+figcaption{color:var(--muted);font-size:.88rem;margin-top:10px}
+.shot-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:16px;margin-top:22px}
+.shot-grid figure{margin:0}
+.chips{display:flex;flex-wrap:wrap;gap:8px;margin-top:14px}
+.chip{
+  background:var(--panel);border:1px solid var(--border);border-radius:999px;
+  padding:5px 14px;font-size:.85rem;color:var(--muted);
+}
+.chip.hl{color:var(--text);border-color:var(--accent)}
+pre{
+  background:var(--panel);border:1px solid var(--border);border-radius:var(--radius);
+  padding:16px 18px;overflow-x:auto;margin-top:14px;
+  font-family:"SF Mono",Menlo,Consolas,monospace;font-size:.85rem;line-height:1.7;
+}
+pre .c{color:var(--muted)}
+code.inline{
+  background:var(--panel);border:1px solid var(--border);border-radius:6px;
+  padding:1px 7px;font-family:Menlo,Consolas,monospace;font-size:.85em;
+}
+.timeline{list-style:none;margin-top:20px;border-left:2px solid var(--border)}
+.timeline li{position:relative;padding:8px 0 8px 24px;color:var(--muted);font-size:.95rem}
+.timeline li::before{
+  content:"";position:absolute;left:-6px;top:16px;width:10px;height:10px;
+  border-radius:50%;background:var(--accent);
+}
+.timeline li b{color:var(--text);margin-right:10px}
+.langfoot{
+  border-top:1px solid var(--border);margin-top:40px;padding:20px 0 0;
+  color:var(--muted);font-size:.88rem;text-align:center;
+}
+.langfoot a{color:var(--accent);text-decoration:none}
+.langfoot a:hover{text-decoration:underline}
+footer{
+  border-top:1px solid var(--border);margin-top:24px;padding:28px 0 40px;
+  color:var(--muted);font-size:.88rem;display:flex;flex-wrap:wrap;gap:8px 24px;
+}
+footer a{color:var(--accent);text-decoration:none}
+footer a:hover{text-decoration:underline}
+@media (max-width:760px){
+  .shot-grid{grid-template-columns:1fr}
+  h1{font-size:1.8rem}
+}
+</style>
+</head>
+<body>
+<main>
+
+<div class="topbar">
+  <a class="logo" href="./index.html">sedimem<b>.</b></a>
+  <div class="links">
+    <span class="lang"><a href="../index.html">中文</a> · English</span>
+    <a href="https://github.com/Old-Friends-Gathering/sedimem">GitHub</a>
+  </div>
+</div>
+
+<!-- Hero -->
+<section>
+  <h1>sedimem<span class="dot">.</span></h1>
+  <p class="subtitle">Local-first personal AI memory: an append-only truth layer; everything else is rebuildable.</p>
+  <div class="pills">
+    <span class="pill"><b>648</b>tests</span>
+    <span class="pill"><b>0</b>runtime deps</span>
+    <span class="pill"><b>12</b>modules</span>
+    <span class="pill"><b>v1.0.2</b>current</span>
+  </div>
+  <figure>
+    <img src="../shots/hero.png" alt="sedimem hero banner"
+         width="3200" height="840" loading="lazy"
+         style="aspect-ratio:3200/840">
+    <figcaption>The truth layer ~/.memo/items is append-only; indexes, views and derivations can all be rebuilt.</figcaption>
+  </figure>
+</section>
+
+<!-- Architecture -->
+<section>
+  <h2>System Architecture</h2>
+  <figure>
+    <img src="../shots/diagrams/master-arch.png" alt="Full architecture: clients → interface layer → MemoryService → 12 modules → data layer"
+         width="3520" height="1440" loading="lazy"
+         style="aspect-ratio:3520/1440">
+    <figcaption>Clients → interface layer → MemoryService → 12 modules → data layer; ①②③ mark the main paths.</figcaption>
+  </figure>
+</section>
+
+<!-- Write gates -->
+<section>
+  <h2>Four Write Gates</h2>
+  <figure>
+    <img src="../shots/diagrams/write.png" alt="Four write gates"
+         width="3200" height="1120" loading="lazy"
+         style="aspect-ratio:3200/1120">
+    <figcaption>schema → sanitization → dedupe (Dice 0.15 recall / 0.85 match) → conflict ruling (superseded / disputed).</figcaption>
+  </figure>
+</section>
+
+<!-- Read path -->
+<section>
+  <h2>Dual-Channel Read</h2>
+  <figure>
+    <img src="../shots/diagrams/read.png" alt="Read path: BM25 ± semantic → RRF → basis/degraded"
+         width="3200" height="1120" loading="lazy"
+         style="aspect-ratio:3200/1120">
+    <figcaption>BM25 ± semantic → RRF fusion (k=60); every result carries a basis, degrading to "degraded" when semantics are unavailable.</figcaption>
+  </figure>
+</section>
+
+<!-- LLM derivation -->
+<section>
+  <h2>LLM Derivation</h2>
+  <figure>
+    <img src="../shots/diagrams/llm.png" alt="LLM derivation layer: outbox → sidecar"
+         width="3200" height="1120" loading="lazy"
+         style="aspect-ratio:3200/1120">
+    <figcaption>Off by default: write → outbox → LlmPort → derived sidecar. Full rebuild of 33 records ≈1m50s, &lt;¥0.02.</figcaption>
+  </figure>
+</section>
+
+<!-- Session store -->
+<section>
+  <h2>Session Store</h2>
+  <figure>
+    <img src="../shots/diagrams/session.png" alt="Session scratch store lifecycle"
+         width="3200" height="1120" loading="lazy"
+         style="aspect-ratio:3200/1120">
+    <figcaption>session:* forbids facts; close promotes only decision / gotcha, plus a six-section handoff markdown.</figcaption>
+  </figure>
+  <div class="chips">
+    <span class="chip hl">memo session start</span>
+    <span class="chip">memo session checkpoint</span>
+    <span class="chip">memo session close</span>
+  </div>
+</section>
+
+<!-- Gates -->
+<section>
+  <h2>Five-Layer Gates</h2>
+  <figure>
+    <img src="../shots/diagrams/gates.png" alt="Five-layer quality gates"
+         width="3200" height="1120" loading="lazy"
+         style="aspect-ratio:3200/1120">
+    <figcaption>Quality 14 + security 9 + coverage + docs-drift + pages-verify; 648 tests, eval I1–I50.</figcaption>
+  </figure>
+</section>
+
+<!-- Memory center -->
+<section>
+  <h2>Memory Center</h2>
+  <div class="shot-grid">
+    <figure>
+      <img src="../shots/ui-today.png" alt="Today page" loading="lazy" style="aspect-ratio:1440/900">
+      <figcaption>Today: four change cards + timeline.</figcaption>
+    </figure>
+    <figure>
+      <img src="../shots/ui-graph.png" alt="Graph page" loading="lazy" style="aspect-ratio:1440/900">
+      <figcaption>Graph: kind filter + force layout.</figcaption>
+    </figure>
+    <figure>
+      <img src="../shots/ui-hygiene.png" alt="Hygiene page" loading="lazy" style="aspect-ratio:1440/900">
+      <figcaption>Hygiene: pending curation clusters + trends.</figcaption>
+    </figure>
+  </div>
+  <p style="margin-top:12px">Nine pages: Today / Graph / Search / Hygiene / Edit / Import / Session / Handoff / Settings. Start with <code class="inline">memo serve --port 7788</code>; add <code class="inline">--write</code> to enable editing.</p>
+</section>
+
+<!-- Three clients -->
+<section>
+  <h2>Three Clients</h2>
+  <p class="cap">All three clients share one stdio MCP (10 memory_* + 5 memory_session_* tools) and one <code>MEMO_HOME</code>.</p>
+<pre><code># DSH: ~/.dsh/profiles/&lt;profile&gt;/cordis.patch.yml
+- insert:
+    - id: memory-sedimem
+      name: '@deepseek-ai/dsh-mcp-client'
+      config:
+        serverName: memo
+        transport: stdio
+        command: /opt/homebrew/bin/node
+        args: ['/ABS/PATH/versions/v1.0/src/mcp/server.js']
+        env: { MEMO_HOME: '$HOME/.memo' }
+        toolCallTimeoutMs: 15000</code></pre>
+<pre><code># Codex CLI: ~/.codex/config.toml
+[mcp_servers.memo]
+command = "/opt/homebrew/bin/node"
+args = ["/ABS/PATH/versions/v1.0/src/mcp/server.js"]
+enabled = true
+[mcp_servers.memo.env]
+MEMO_HOME = "$HOME/.memo"</code></pre>
+<pre><code># Claude Code
+claude mcp add --scope user memo -e MEMO_HOME=$HOME/.memo -- \
+  /opt/homebrew/bin/node /ABS/PATH/versions/v1.0/src/mcp/server.js</code></pre>
+</section>
+
+<!-- Version timeline -->
+<section>
+  <h2>Version Timeline</h2>
+<ol class="timeline">
+  <li><b>v0.1</b> Truth layer + BM25 + gates</li>
+  <li><b>v0.2</b> Read-only console + versioning</li>
+  <li><b>v0.3</b> Layered views + injection tiers</li>
+  <li><b>v0.4</b> Semantic channel + sanitization</li>
+  <li><b>v0.5</b> DSH plugin + pages-verify</li>
+  <li><b>v0.6</b> Session store + bulk import</li>
+  <li><b>v1.0</b> 12-module refactor + center</li>
+  <li><b>v1.0.1</b> Graph usability + colors</li>
+  <li><b>v1.0.2</b> Thinking / rebuild / lazy fix</li>
+</ol>
+<p class="cap">Rule: <code>X.Y</code> gets a new directory (currently <code>versions/v1.0</code>), <code>X.Y.Z</code> patches in place; current version <b>v1.0.2</b>.</p>
+</section>
+
+<div class="langfoot"><a href="../index.html">中文</a> · English</div>
+
+<footer>
+  <a href="https://github.com/Old-Friends-Gathering/sedimem">GitHub: Old-Friends-Gathering/sedimem</a>
+  <span>License: MIT</span>
+  <span>Updated: 2026-11-14</span>
+  <p class="cap" style="opacity:.72">Diagrams are annotated in Chinese for now; English-annotated versions are tracked in issue #174.</p>
+</footer>
+<p style="text-align:center;margin-top:8px">This is the English version; the Chinese page is authoritative.</p>
+
+</main>
+</body>
+</html>

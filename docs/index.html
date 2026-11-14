@@ -4,73 +4,89 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>sedimem — 本地优先的个人 AI 记忆系统</title>
+<meta name="description" content="sedimem：本地优先的个人 AI 记忆系统。真相层只追加，索引/视图/派生全部可重建，三端共用同一 stdio MCP。">
 <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self'; style-src 'self' 'unsafe-inline'">
+<link rel="alternate" hreflang="zh-CN" href="./index.html">
+<link rel="alternate" hreflang="en" href="./en/index.html">
 <style>
 :root{
-  --bg:#0b1020; --card:#141a2c; --accent:#4d6bfe;
-  --text:#e6e9f5; --muted:#8a93b5; --border:#232b45;
-  --radius:16px;
+  --bg:#0a0f1c; --panel:#111827; --panel2:#161f33;
+  --accent:#4d6bfe; --text:#e6e9f5; --muted:#8a93b5;
+  --border:#24314d; --radius:16px;
 }
 *{box-sizing:border-box;margin:0;padding:0}
 body{
-  background:var(--bg); color:var(--text);
+  background:var(--bg);color:var(--text);
   font-family:"PingFang SC","Hiragino Sans GB","Microsoft YaHei",sans-serif;
-  line-height:1.6; padding:0 20px;
+  line-height:1.6;padding:0 20px;
 }
+.topbar{
+  position:sticky;top:0;z-index:10;
+  background:rgba(10,15,28,.88);backdrop-filter:blur(8px);
+  border-bottom:1px solid var(--border);
+  display:flex;align-items:center;justify-content:space-between;
+  padding:12px 0;
+}
+.topbar .logo{font-weight:700;font-size:1.1rem;text-decoration:none;color:var(--text)}
+.topbar .logo b{color:var(--accent)}
+.topbar .links{display:flex;align-items:center;gap:18px;font-size:.9rem}
+.topbar a{color:var(--accent);text-decoration:none}
+.topbar a:hover{text-decoration:underline}
+.topbar .lang{color:var(--muted)}
 main{max-width:1080px;margin:0 auto;padding:48px 0 24px}
 h1{font-size:2.4rem;letter-spacing:.02em}
 h1 .dot{color:var(--accent)}
 h2{font-size:1.4rem;margin-bottom:12px;display:flex;align-items:center;gap:10px}
-h2::before{content:"";width:8px;height:22px;border-radius:4px;background:var(--accent);display:inline-block}
+h2::before{content:"";width:8px;height:22px;border-radius:4px;background:var(--accent)}
 p{color:var(--muted);max-width:46em}
 section{margin:56px 0}
 .subtitle{font-size:1.05rem;margin-top:10px}
-.badges{display:flex;flex-wrap:wrap;gap:12px;margin-top:18px}
-.badge{
-  background:var(--card);border:1px solid var(--border);border-radius:12px;
+.pills{display:flex;flex-wrap:wrap;gap:12px;margin-top:18px}
+.pill{
+  background:var(--panel);border:1px solid var(--border);border-radius:12px;
   padding:10px 18px;font-size:.95rem;
 }
-.badge b{color:var(--accent);font-size:1.15rem;margin-right:6px}
+.pill b{color:var(--accent);font-size:1.15rem;margin-right:6px}
 figure{margin-top:22px}
 figure img{
   width:100%;height:auto;display:block;
-  border-radius:var(--radius);border:1px solid var(--border);
-  background:var(--card);
+  border-radius:14px;border:1px solid var(--border);
+  background:var(--panel);
 }
 figcaption{color:var(--muted);font-size:.88rem;margin-top:10px}
 .shot-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:16px;margin-top:22px}
 .shot-grid figure{margin:0}
 .chips{display:flex;flex-wrap:wrap;gap:8px;margin-top:14px}
 .chip{
-  background:var(--card);border:1px solid var(--border);border-radius:999px;
+  background:var(--panel);border:1px solid var(--border);border-radius:999px;
   padding:5px 14px;font-size:.85rem;color:var(--muted);
 }
 .chip.hl{color:var(--text);border-color:var(--accent)}
 pre{
-  background:var(--card);border:1px solid var(--border);border-radius:var(--radius);
+  background:var(--panel);border:1px solid var(--border);border-radius:var(--radius);
   padding:16px 18px;overflow-x:auto;margin-top:14px;
   font-family:"SF Mono",Menlo,Consolas,monospace;font-size:.85rem;line-height:1.7;
 }
 pre .c{color:var(--muted)}
-pre .a{color:var(--accent)}
 code.inline{
-  background:var(--card);border:1px solid var(--border);border-radius:6px;
+  background:var(--panel);border:1px solid var(--border);border-radius:6px;
   padding:1px 7px;font-family:Menlo,Consolas,monospace;font-size:.85em;
 }
-.note{
-  display:inline-block;background:rgba(77,107,254,.12);color:var(--accent);
-  border:1px solid var(--accent);border-radius:10px;padding:6px 14px;
-  font-size:.9rem;margin-top:14px;font-weight:600;
-}
-.timeline{list-style:none;margin-top:20px;border-left:2px solid var(--border);padding-left:0}
+.timeline{list-style:none;margin-top:20px;border-left:2px solid var(--border)}
 .timeline li{position:relative;padding:8px 0 8px 24px;color:var(--muted);font-size:.95rem}
 .timeline li::before{
   content:"";position:absolute;left:-6px;top:16px;width:10px;height:10px;
   border-radius:50%;background:var(--accent);
 }
 .timeline li b{color:var(--text);margin-right:10px}
+.langfoot{
+  border-top:1px solid var(--border);margin-top:40px;padding:20px 0 0;
+  color:var(--muted);font-size:.88rem;text-align:center;
+}
+.langfoot a{color:var(--accent);text-decoration:none}
+.langfoot a:hover{text-decoration:underline}
 footer{
-  border-top:1px solid var(--border);margin-top:64px;padding:28px 0 40px;
+  border-top:1px solid var(--border);margin-top:24px;padding:28px 0 40px;
   color:var(--muted);font-size:.88rem;display:flex;flex-wrap:wrap;gap:8px 24px;
 }
 footer a{color:var(--accent);text-decoration:none}
@@ -84,21 +100,40 @@ footer a:hover{text-decoration:underline}
 <body>
 <main>
 
-<!-- hero -->
+<div class="topbar">
+  <a class="logo" href="./index.html">sedimem<b>.</b></a>
+  <div class="links">
+    <span class="lang">中文 / <a href="en/index.html">English</a></span>
+    <a href="https://github.com/Old-Friends-Gathering/sedimem">GitHub</a>
+  </div>
+</div>
+
+<!-- 首屏 -->
 <section>
   <h1>sedimem<span class="dot">.</span></h1>
   <p class="subtitle">本地优先的个人 AI 记忆系统：真相层只追加，其余全部可重建。</p>
-  <div class="badges">
-    <span class="badge"><b>648</b>tests</span>
-    <span class="badge"><b>I1–I50</b>评测对</span>
-    <span class="badge"><b>0</b>runtime 依赖</span>
-    <span class="badge"><b>v1.0.1</b>当前版本</span>
+  <div class="pills">
+    <span class="pill"><b>648</b>tests</span>
+    <span class="pill"><b>0</b>运行时依赖</span>
+    <span class="pill"><b>12</b>模块</span>
+    <span class="pill"><b>v1.0.2</b>当前版本</span>
   </div>
   <figure>
-    <img src="shots/diagrams/arch.png" alt="三层架构：真相层 → 派生层 → 界面层"
-         width="3200" height="1120" loading="lazy"
-         style="aspect-ratio:3200/1120">
-    <figcaption>三层单向：真相层 → 派生层 → 界面层，12 个模块各守边界。</figcaption>
+    <img src="shots/hero.png" alt="sedimem 首屏横幅"
+         width="3200" height="840" loading="lazy"
+         style="aspect-ratio:3200/840">
+    <figcaption>真相层 ~/.memo/items 只追加；索引、视图、派生皆可重建。</figcaption>
+  </figure>
+</section>
+
+<!-- 整体架构 -->
+<section>
+  <h2>整体架构</h2>
+  <figure>
+    <img src="shots/diagrams/master-arch.png" alt="整系统架构图：客户端→接口层→MemoryService→12 模块→数据层"
+         width="3520" height="1440" loading="lazy"
+         style="aspect-ratio:3520/1440">
+    <figcaption>客户端 → 接口层 → MemoryService → 12 模块 → 数据层；①②③ 标出主链路。</figcaption>
   </figure>
 </section>
 
@@ -109,34 +144,30 @@ footer a:hover{text-decoration:underline}
     <img src="shots/diagrams/write.png" alt="写入四道门"
          width="3200" height="1120" loading="lazy"
          style="aspect-ratio:3200/1120">
-    <figcaption>schema → 脱敏 → 去重 → 冲突裁决，全过才追加真相层；真相层永不原地改。</figcaption>
+    <figcaption>schema → 脱敏 → 去重（Dice 0.15 召回 / 0.85 判重）→ 冲突裁决（superseded / disputed）。</figcaption>
   </figure>
 </section>
 
-<!-- 检索 -->
+<!-- 读路径 -->
 <section>
-  <h2>双路检索</h2>
+  <h2>双路读</h2>
   <figure>
-    <img src="shots/diagrams/read.png" alt="读路径：BM25 + 语义 → RRF"
+    <img src="shots/diagrams/read.png" alt="读路径：BM25±语义 → RRF → basis/degraded"
          width="3200" height="1120" loading="lazy"
          style="aspect-ratio:3200/1120">
-    <figcaption>BM25 + 可选语义，RRF(k=60) 融合；语义不可用时自动 degraded 并说明原因。</figcaption>
+    <figcaption>BM25 ± 语义 → RRF k=60 融合；每条结果带 basis，语义不可用时降级 degraded。</figcaption>
   </figure>
 </section>
 
 <!-- LLM 派生层 -->
 <section>
-  <h2>LLM 总结层（可选）</h2>
+  <h2>LLM 派生层</h2>
   <figure>
-    <img src="shots/diagrams/llm.png" alt="LLM 派生层"
+    <img src="shots/diagrams/llm.png" alt="LLM 派生层：outbox → sidecar"
          width="3200" height="1120" loading="lazy"
          style="aspect-ratio:3200/1120">
-    <figcaption>默认关闭；开启后走 outbox 异步派生，失败只降级，真相层字节不变。33 条全量重建 ≈1m50s、&lt;¥0.02。</figcaption>
+    <figcaption>默认关：写 → outbox → LlmPort → derived sidecar。33 条全量重建 ≈1m50s、&lt;¥0.02。</figcaption>
   </figure>
-<pre><span class="c"># 三行开启</span>
-mkdir -p ~/.config/sedimem && printf '%s\n' '&lt;key&gt;' > ~/.config/sedimem/llm-key && chmod 600 ~/.config/sedimem/llm-key
-<span class="a">export</span> MEMO_LLM_PROVIDER=openai-compatible MEMO_LLM_BASE_URL=https://open.bigmodel.cn/api/paas/v4 MEMO_LLM_MODEL=glm-5.3-flash
-memo llm status | memo llm test   <span class="c"># 然后 memo derive --rebuild</span></pre>
 </section>
 
 <!-- 会话临时库 -->
@@ -146,58 +177,50 @@ memo llm status | memo llm test   <span class="c"># 然后 memo derive --rebuild
     <img src="shots/diagrams/session.png" alt="会话临时库生命周期"
          width="3200" height="1120" loading="lazy"
          style="aspect-ratio:3200/1120">
-    <figcaption>start → checkpoint → close：只晋升 decision / gotcha，其余随库丢弃，附六段交接文档。</figcaption>
+    <figcaption>session:* 禁写 fact；close 只晋升 decision / gotcha，附六段交接 md。</figcaption>
   </figure>
   <div class="chips">
     <span class="chip hl">memo session start</span>
     <span class="chip">memo session checkpoint</span>
-    <span class="chip">memo session status</span>
     <span class="chip">memo session close</span>
-    <span class="chip">memo session sweep</span>
   </div>
 </section>
 
-<!-- 记忆中心九页 -->
-<section>
-  <h2>记忆中心九页</h2>
-  <div class="shot-grid">
-    <figure>
-      <img src="shots/ui-today.png" alt="今日页" loading="lazy" style="aspect-ratio:16/10">
-      <figcaption>今日页：四类变更卡 + 时间线。</figcaption>
-    </figure>
-    <figure>
-      <img src="shots/ui-graph.png" alt="图谱页" loading="lazy" style="aspect-ratio:16/10">
-      <figcaption>图谱页：kind 筛选 + 力导向。</figcaption>
-    </figure>
-    <figure>
-      <img src="shots/ui-hygiene.png" alt="卫生页" loading="lazy" style="aspect-ratio:16/10">
-      <figcaption>卫生页：待裁决簇 + 30 天趋势。</figcaption>
-    </figure>
-  </div>
-  <div class="chips">
-    <span class="chip hl">今日</span><span class="chip">图谱</span><span class="chip">搜索</span>
-    <span class="chip">卫生</span><span class="chip">编辑</span><span class="chip">导入</span>
-    <span class="chip">会话</span><span class="chip">交接</span><span class="chip">设置</span>
-  </div>
-  <p style="margin-top:12px">启动：<code class="inline">memo serve --port 7788</code>；加 <code class="inline">--write</code> 才可编辑（token + If-Match）。</p>
-</section>
-
-<!-- 门禁 -->
+<!-- 五层门禁 -->
 <section>
   <h2>五层门禁</h2>
   <figure>
     <img src="shots/diagrams/gates.png" alt="五层门禁"
          width="3200" height="1120" loading="lazy"
          style="aspect-ratio:3200/1120">
-    <figcaption>质量 14 项 + 安全 9 项 + 覆盖率（lines≥89）+ docs-drift + pages-verify。</figcaption>
+    <figcaption>质量 14 + 安全 9 + 覆盖率 + docs-drift + pages-verify；648 tests、eval I1–I50。</figcaption>
   </figure>
-  <span class="note">本地 = CI：同一套门禁，本地过了才提交。</span>
+</section>
+
+<!-- 记忆中心 -->
+<section>
+  <h2>记忆中心九页</h2>
+  <div class="shot-grid">
+    <figure>
+      <img src="shots/ui-today.png" alt="今日页" loading="lazy" style="aspect-ratio:1440/900">
+      <figcaption>今日页：四类变更卡 + 时间线。</figcaption>
+    </figure>
+    <figure>
+      <img src="shots/ui-graph.png" alt="图谱页" loading="lazy" style="aspect-ratio:1440/900">
+      <figcaption>图谱页：kind 筛选 + 力导向。</figcaption>
+    </figure>
+    <figure>
+      <img src="shots/ui-hygiene.png" alt="卫生页" loading="lazy" style="aspect-ratio:1440/900">
+      <figcaption>卫生页：待裁决簇 + 趋势。</figcaption>
+    </figure>
+  </div>
+  <p style="margin-top:12px">九页：今日 / 图谱 / 搜索 / 卫生 / 编辑 / 导入 / 会话 / 交接 / 设置。启动：<code class="inline">memo serve --port 7788</code>，加 <code class="inline">--write</code> 才可编辑。</p>
 </section>
 
 <!-- 三端接入 -->
 <section>
   <h2>三端接入</h2>
-<p class="cap">三端各配一条 stdio MCP，指向同一个 <code>server.js</code> 与同一个 <code>MEMO_HOME</code>；常驻进程记得先 <code>memory_scope</code> 对齐分库。</p>
+  <p class="cap">三端共用同一 stdio MCP（10 个 memory_* + 5 个 memory_session_*）与同一 <code>MEMO_HOME</code>。</p>
 <pre><code># DSH：~/.dsh/profiles/&lt;profile&gt;/cordis.patch.yml
 - insert:
     - id: memory-sedimem
@@ -218,28 +241,27 @@ enabled = true
 MEMO_HOME = "$HOME/.memo"</code></pre>
 <pre><code># Claude Code
 claude mcp add --scope user memo -e MEMO_HOME=$HOME/.memo -- \
-  /opt/homebrew/bin/node /ABS/PATH/versions/v1.0/src/mcp/server.js
-
-# 自检（期望 PASS）
-bash versions/v1.0/configs/verify-three-clients.sh</code></pre>
+  /opt/homebrew/bin/node /ABS/PATH/versions/v1.0/src/mcp/server.js</code></pre>
 </section>
 
-<!-- 版本 -->
+<!-- 版本时间线 -->
 <section>
   <h2>版本时间线</h2>
 <ol class="timeline">
-  <li><b>v0.1</b> 真相层 + BM25 + 四道门写入</li>
-  <li><b>v0.2</b> 只读观察台（今日/图谱/卫生）+ 版本目录规则</li>
-  <li><b>v0.3</b> 分层视图 L2 场景块 / L3 画像 / 注入分级</li>
-  <li><b>v0.4</b> 语义道（EmbedderPort）+ 半自动捕获 + 入库脱敏 + 分歧视图</li>
-  <li><b>v0.5</b> DSH 插件化 + 双主题 + pages-verify</li>
-  <li><b>v0.6</b> 会话临时库 + 批量导入 + 交接文档 + 写侧粒度契约</li>
-  <li><b>v1.0</b> 12 模块重构 + LLM 总结层 + 记忆中心九页</li>
-  <li><b>v1.0.1</b> 图谱可用性 + 配色对齐 DSH</li>
-  <li><b>v1.0.2</b> 思考链/重建/懒加载三处真 fix + 文档改「图为主」</li>
+  <li><b>v0.1</b> 真相层 + BM25 + 四道门</li>
+  <li><b>v0.2</b> 只读观察台 + 版本规则</li>
+  <li><b>v0.3</b> 分层视图 + 注入分级</li>
+  <li><b>v0.4</b> 语义道 + 入库脱敏</li>
+  <li><b>v0.5</b> DSH 插件化 + pages-verify</li>
+  <li><b>v0.6</b> 会话临时库 + 批量导入</li>
+  <li><b>v1.0</b> 12 模块重构 + 记忆中心</li>
+  <li><b>v1.0.1</b> 图谱可用性 + 配色对齐</li>
+  <li><b>v1.0.2</b> 思考链 / 重建 / 懒加载修复</li>
 </ol>
-<p class="cap">规则：<code>X.Y</code> 换目录（当前 <code>versions/v1.0</code>），<code>X.Y.Z</code> 同目录补丁；指针在 <code>versions/CURRENT</code>。</p>
+<p class="cap">规则：<code>X.Y</code> 换目录（当前 <code>versions/v1.0</code>），<code>X.Y.Z</code> 同目录补丁；当前版本 <b>v1.0.2</b>。</p>
 </section>
+
+<div class="langfoot">中文 · <a href="en/index.html">English</a></div>
 
 <footer>
   <a href="https://github.com/Old-Friends-Gathering/sedimem">GitHub: Old-Friends-Gathering/sedimem</a>
