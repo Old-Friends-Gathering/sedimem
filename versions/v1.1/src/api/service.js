@@ -17,7 +17,7 @@ import * as writePath from './write-path.js';
 import * as searchPath from './search-path.js';
 import * as maintenance from './maintenance.js';
 import { createLlmPort } from '../llm/port.js';
-import { loadDerived, appendDerived, rebuildDerived } from '../llm/derived-store.js';
+import { loadDerived, appendDerived } from '../llm/derived-store.js';
 import { enqueueDerive, claimBatch, completeItem } from '../llm/outbox.js';
 import { applyDerivation } from '../llm/derive.js';
 
