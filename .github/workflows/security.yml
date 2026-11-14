@@ -32,8 +32,11 @@ jobs:
       - uses: actions/setup-node@v7
         with:
           node-version: '22'
-      - name: 安全门禁（8 项）
-        run: node tools/security-check.mjs --json | tee security-report.json
+      - name: 安全门禁（9 项）
+        # set -o pipefail：否则失败会被 tee 的退出码吞掉，CI 永远绿（真实缺陷，v1.0.3 修）
+        run: |
+          set -o pipefail
+          node tools/security-check.mjs --json | tee security-report.json
       - name: 归档安全报告
         if: always()
         uses: actions/upload-artifact@v7

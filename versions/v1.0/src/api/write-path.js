@@ -213,7 +213,9 @@ export async function supersedeRecord(svc, { oldId, value, text, title, source, 
     // （textHardMaxChars / titleEnforce 等）在 supersede 路径整体失效。
   }, { clock: svc.clock, policy: svc.policy ?? POLICY });
   await svc._commit(record, 'write', { action: 'supersede', reason: reason ?? 'manual' });
-  const closed = withPatch(old, { status: 'superseded', validTo: svc._nowIso() });
+  // 裁决 111：遗留行的 scope 可能还是改名前的旧值——快照必须归一到当前分库，
+  // 否则这条 supersede 会静默写到旧文件里（真实事故：删除/取代看起来没生效）。
+  const closed = withPatch(old, { status: 'superseded', validTo: svc._nowIso(), scope: svc.scope });
   await svc._commit(closed, 'supersede', { reason: reason ?? 'manual', by: record.id });
   return { record, warnings: supWarnings };
 }
@@ -228,6 +230,7 @@ export async function forgetRecord(svc, { id, mode = 'tombstone', reason }) {
   const tomb = withPatch(rec, {
     status: 'tombstoned',
     validTo: rec.validTo ?? svc._nowIso(),
+    scope: svc.scope, // 裁决 111：同上，避免把墓碑写回遗留 scope 文件
     tags,
   });
   await svc._commit(tomb, 'forget', { mode, reason: reason ?? null });

@@ -1,5 +1,16 @@
 # CHANGELOG · v1.0
 
+## [1.0.3] — 2026-11-14
+
+### Fixed（跨库写入 + CI 门禁被吞，都是真实操作撞出来的）
+- **改名遗留行导致 forget/supersede 静默失效**：`strata → sedimem` 迁移后，部分行的 `scope` 字段仍是 `repo:strata`，而文件已在 `repo:sedimem`。`forget` / `supersede` 用 `withPatch(旧记录, ...)` 生成快照时会**沿用旧 scope** → 快照被写进旧分库文件，当前分库读不到，表现为「删除了但看起来没生效」且不报错。现在：`commit()` 增加 `E_SCOPE_MISMATCH` 硬门（禁止跨库写入），`forgetRecord` / `supersedeRecord` 把快照 scope 归一到当前分库（自愈遗留行）。新增 `tests/unit/legacy-scope.test.js`（I1/I2/I3）守住三条不变式。
+- **CI 的安全门禁失败被 `tee` 吞掉**：`node tools/security-check.mjs --json | tee report.json` 的退出码是 `tee` 的，S7 报错也不会让 job 红（实测：hero.png 超 1MB，本地红、CI 绿）。改为 `set -o pipefail`。
+- **`docs/shots/hero.png` 1.01 MB 超限**：重采样到 2400×630（737 KB），继续遵守「单文件 ≤1MB」而不放宽规则。
+
+### Changed
+- `docs/02` 增裁决 111（scope 归属：快照必须写在当前分库，跨库写入 fail-loud）。
+- 测试数 648 → **651**（`docs/07`、README 基线同步）。
+
 ## [1.0.2] — 2026-11-14
 
 ### Fixed（三处真实故障，都是实测撞出来的）
