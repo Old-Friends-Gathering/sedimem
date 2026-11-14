@@ -893,7 +893,7 @@ v0.4 的取舍依据是竞品调研（`docs/research/competitive-dsh-plugins-202
 ## 附录 A · SQLite FTS5 后端（history）
 
 > doc-kind: history
-> doc-version: 1.0
+> doc-version: 1.1
 > verified-at: 2026-11-14
 > verified-against: versions/CURRENT（v1.0 / 1.0.0）
 
@@ -966,7 +966,7 @@ v1.0 是重构版本，**行为不改，只改结构与文档**。以下五条�
    `E_SCOPE_MISMATCH`（跨库写入 fail-loud，不允许静默写歪）。
 2. `forgetRecord` / `supersedeRecord` 打快照时显式把 `scope` 归一到 `svc.scope`
    —— 这是对遗留行的自愈，不改变记录的语义与 id。
-3. 由 `versions/v1.0/tests/unit/legacy-scope.test.js` 的 I1/I2/I3 守住；
+3. 由 `versions/v1.1/tests/unit/legacy-scope.test.js` 的 I1/I2/I3 守住；
    修数据用 `items/<scope>.jsonl` 的显式迁移，不允许靠「再 forget 一次」蒙混。
 
 ## §3.19 v1.0 LLM 派生层契约（裁决 83–88）与导出登记

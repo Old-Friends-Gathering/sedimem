@@ -1,0 +1,9 @@
+{
+  "id": "I44",
+  "name": "派生不得改真相",
+  "expects": [
+    "含真相字段判 failed",
+    "derived 无 kind/text/value",
+    "kindHint 只审计"
+  ]
+}

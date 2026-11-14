@@ -149,7 +149,7 @@ Each client gets one stdio MCP entry pointing at the same `server.js` and the sa
         serverName: memo
         transport: stdio
         command: node
-        args: ['/ABS/PATH/versions/v1.0/src/mcp/server.js']
+        args: ['/ABS/PATH/versions/v1.1/src/mcp/server.js']
         env: { MEMO_HOME: '$HOME/.memo' }
 ```
 
@@ -157,7 +157,7 @@ Each client gets one stdio MCP entry pointing at the same `server.js` and the sa
 # Codex CLI: ~/.codex/config.toml
 [mcp_servers.memo]
 command = "node"
-args = ["/ABS/PATH/versions/v1.0/src/mcp/server.js"]
+args = ["/ABS/PATH/versions/v1.1/src/mcp/server.js"]
 enabled = true
 [mcp_servers.memo.env]
 MEMO_HOME = "$HOME/.memo"
@@ -166,10 +166,10 @@ MEMO_HOME = "$HOME/.memo"
 ```bash
 # Claude Code
 claude mcp add --scope user memo -e MEMO_HOME=$HOME/.memo -- \
-  node /ABS/PATH/versions/v1.0/src/mcp/server.js
+  node /ABS/PATH/versions/v1.1/src/mcp/server.js
 ```
 
-Self-check: `bash versions/v1.0/configs/verify-three-clients.sh` (expect `PASS`).
+Self-check: `bash versions/v1.1/configs/verify-three-clients.sh` (expect `PASS`).
 
 Tool surface: 10 `memory_*` + 5 `memory_session_*`, identical across all three clients.
 

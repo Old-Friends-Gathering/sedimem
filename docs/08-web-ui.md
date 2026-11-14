@@ -1,7 +1,7 @@
 # 08 · Web UI（记忆观察台）—— v0.6 现状
 
 > doc-kind: contract
-> doc-version: 1.0
+> doc-version: 1.1
 > verified-at: 2026-11-14
 > verified-against: versions/CURRENT（v1.0 / 1.0.0）
 
