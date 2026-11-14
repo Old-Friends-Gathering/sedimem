@@ -299,11 +299,11 @@ const CARDS = {
 };
 
 const only = process.argv.slice(2);
+const ALL = new Set();
 const names = only.length ? only : Object.keys(CARDS);
 
-for (const name of names) {
+for (const name of names.filter((n) => CARDS[n])) {
   const build = CARDS[name];
-  if (!build) throw new Error(`unknown card: ${name}`);
   const dir = mkdtempSync(join(tmpdir(), 'sedimem-card-'));
   const html = join(dir, `${name}.html`);
   writeFileSync(html, build());
@@ -327,3 +327,97 @@ for (const name of names) {
   }
   console.log(`✓ ${name}.png`);
 }
+
+/* ─────────────────────────── Twitter / X 横幅（1600×900，16:9） ─────────────────────────── */
+
+const XW = 1600;
+const XH = 900;
+
+const XCSS = `
+  *{margin:0;padding:0;box-sizing:border-box}
+  html,body{width:${XW}px;height:${XH}px}
+  body{
+    background:
+      radial-gradient(1100px 700px at 88% 0%, rgba(245,196,81,.18), transparent 60%),
+      radial-gradient(900px 620px at 0% 100%, rgba(108,140,255,.2), transparent 62%),
+      #0B0E1A;
+    color:#F5F7FF;font-family:"Inter","PingFang SC",system-ui,sans-serif;
+    padding:64px 72px;display:flex;flex-direction:column;overflow:hidden;position:relative;
+  }
+  .grid{position:absolute;inset:0;background-image:
+    linear-gradient(rgba(255,255,255,.03) 1px,transparent 1px),
+    linear-gradient(90deg,rgba(255,255,255,.03) 1px,transparent 1px);
+    background-size:64px 64px}
+  .brand{display:flex;align-items:center;gap:14px;font-size:27px;color:#98A2C0;letter-spacing:.4px}
+  .brand b{color:#F5F7FF;font-weight:800}
+  .dot{width:15px;height:15px;border-radius:5px;background:#F5C451;box-shadow:0 0 26px rgba(245,196,81,.8)}
+  h1{margin-top:52px;font-size:96px;line-height:1.1;font-weight:900;letter-spacing:-2px}
+  h1 em{font-style:normal;color:#F5C451}
+  .sub{margin-top:30px;font-size:36px;line-height:1.45;color:#C9D2EA;max-width:1120px}
+  .spacer{flex:1}
+  .row{display:flex;gap:16px;flex-wrap:wrap}
+  .chip{font-size:27px;padding:14px 24px;border-radius:999px;border:1px solid rgba(255,255,255,.16);
+    background:rgba(255,255,255,.05);color:#DDE4F7;font-weight:650}
+  .chip.gold{border-color:rgba(245,196,81,.5);color:#FFDD8A;background:rgba(245,196,81,.12)}
+  .mono{font-family:"SF Mono",ui-monospace,Menlo,monospace}
+  .foot{display:flex;justify-content:space-between;align-items:center;font-size:25px;color:#98A2C0;
+    border-top:1px solid rgba(255,255,255,.1);padding-top:24px;margin-top:34px}
+  .foot b{color:#F5C451}
+`;
+
+const XCARDS = {
+  /* 首发主图：一句钩子 + 一句它是什么 */
+  'x-launch': () => `<!doctype html><html lang="en"><head><meta charset="utf-8"><style>${XCSS}</style></head>
+<body><div class="grid"></div>
+  <div class="brand"><span class="dot"></span><b>sedimem</b><span>· local-first AI memory</span></div>
+  <h1>Your AI forgets you<br/><em>every single session.</em></h1>
+  <div class="sub">I built it a memory that only appends —<br/>one truth layer, shared by DSH · Codex · Claude Code.</div>
+  <div class="spacer"></div>
+  <div class="row">
+    <span class="chip gold">0 runtime deps</span>
+    <span class="chip">local only</span>
+    <span class="chip">MIT</span>
+    <span class="chip">651 tests</span>
+  </div>
+  <div class="foot"><span>append-only truth layer · everything else rebuildable</span><span><b>github.com/Old-Friends-Gathering/sedimem</b></span></div>
+</body></html>`,
+
+  /* 第二条用图：三层结构，讲"为什么不会记乱" */
+  'x-arch': () => `<!doctype html><html lang="en"><head><meta charset="utf-8"><style>${XCSS}</style></head>
+<body><div class="grid"></div>
+  <div class="brand"><span class="dot"></span><b>sedimem</b><span>· how it works</span></div>
+  <h1 style="font-size:76px">One truth layer.<br/><em>Everything else can be rebuilt.</em></h1>
+  <div class="sub" style="font-size:32px">Delete the index, the graph, the summaries — they come back.<br/>The JSONL never changes a byte.</div>
+  <div class="spacer"></div>
+  <div class="row">
+    <span class="chip gold">truth layer · append-only JSONL</span>
+    <span class="chip">derived · FTS5 / graph / briefs</span>
+    <span class="chip">UI · read-only, 9 pages</span>
+  </div>
+  <div class="foot"><span>as-of queries · supersede never edits in place</span><span><b>sedimem</b></span></div>
+</body></html>`,
+};
+
+for (const [name, build] of Object.entries(XCARDS)) {
+  ALL.add(name);
+  if (only.length && !only.includes(name)) continue;
+  const dir = mkdtempSync(join(tmpdir(), 'sedimem-xcard-'));
+  const html = join(dir, `${name}.html`);
+  writeFileSync(html, build());
+  const out = join(OUT, `${name}.png`);
+  try {
+    execFileSync(
+      process.env.CHROME || '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome',
+      ['--headless=new','--disable-gpu','--hide-scrollbars','--force-device-scale-factor=2',
+        `--window-size=${XW},${XH}`, `--screenshot=${out}`, `file://${html}`],
+      { stdio: 'pipe' },
+    );
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+  console.log(`✓ ${name}.png`);
+}
+
+for (const n of Object.keys(CARDS)) ALL.add(n);
+const unknown = only.filter((n) => !ALL.has(n));
+if (unknown.length) throw new Error(`unknown card(s): ${unknown.join(', ')}`);

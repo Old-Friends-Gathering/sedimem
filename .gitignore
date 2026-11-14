@@ -22,3 +22,6 @@ versions/*/eval/results/tmp-*
 # 防止 shell 重定向/临时输出误入仓库（2026-11-14 事故：#145 混入 versions/v0.6/mcp===）
 *===
 *.tmp-*
+
+# 打包产物（图卡/文案导出）不入库
+*.zip
