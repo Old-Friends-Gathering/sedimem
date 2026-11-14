@@ -1,7 +1,7 @@
 // hygiene/conflict.js — 同 slot 冲突裁决（规则化，v0.1 无 LLM）
 // 原则（对应 MemoryBank 事故防线）：不确定就 dispute，绝不静默覆盖。
 
-import { normalizeText, tokenize, containment, charBigrams, signatureSimilarity } from '../core/text.js';
+import { normalizeText, tokenize, containment, charBigrams } from '../core/text.js';
 import { parseComparable } from '../core/time.js';
 
 // W2 单点化：文本相似度实现搬至 core/text.js（charBigrams/signatureSimilarity
