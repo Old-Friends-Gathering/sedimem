@@ -112,6 +112,7 @@ const CASE_FILES = [
   ['I48', 'i48-ui-readonly.test.js'],
   ['I49', 'i49-import.test.js'],
   ['I50', 'i50-session-handoff.test.js'],
+  ['I51', 'i51-session-scope-browsing.test.js'],
 ];
 
 function runCase(id, file) {

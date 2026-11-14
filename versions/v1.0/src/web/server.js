@@ -55,7 +55,7 @@ export async function createWebServer({
     if (requested === undefined || requested === null || requested === '') return svc;
     const wanted = String(requested);
     if (!SCOPE_PATTERN.test(wanted)) {
-      const err = new Error(`scope 不合法（需形如 repo:name / dir:name）: ${JSON.stringify(wanted)}`);
+      const err = new Error(`scope 不合法（需形如 repo:name / dir:name / session:id）: ${JSON.stringify(wanted)}`);
       err.code = 'E_INVALID_ARG';
       throw err;
     }
@@ -127,7 +127,7 @@ export async function createWebServer({
           ok: false,
           code,
           message: code === 'E_INVALID_ARG'
-            ? 'scope 不合法（需形如 repo:name / dir:name）'
+            ? 'scope 不合法（需形如 repo:name / dir:name / session:id）'
             : '切换分库失败',
         }));
         return;

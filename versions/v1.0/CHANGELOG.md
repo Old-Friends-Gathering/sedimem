@@ -1,5 +1,21 @@
 # CHANGELOG · v1.0
 
+## [1.0.4] — 2026-11-14
+
+### Fixed
+
+- **任务库在观测台里看不见（真 bug）**：`SCOPE_PATTERN` 只认 `repo|dir|user|global`，漏了 `session`。
+  后果有两层：`listScopes()` 用这个 pattern 过滤磁盘文件，于是 `items/session:*.jsonl` 全被丢掉（任务页永远显示
+  「当前没有任务库」）；即使绕过列表，`GET /api/records?scope=session:<id>` 也会被判 `E_INVALID_ARG`（400）。
+  现在 pattern 增加 `session` 前缀，同时保留「小写字母数字开头、只允许 `. _ -`」的限制，
+  `session:../etc/passwd` 之类仍然被拒。
+- 观测台 400 文案补充形态说明：`repo:name / dir:name / session:id`。
+
+### Added
+
+- `tests/injection/i51-session-scope-browsing.test.js`：钉住「任务库可被 `/api/scopes` 列出、`?scope=` 能读到记录」，
+  并钉住放开前缀后仍拒绝路径穿越。测试数 651 → **653**。
+
 ## [1.0.3] — 2026-11-14
 
 ### Fixed（跨库写入 + CI 门禁被吞，都是真实操作撞出来的）
