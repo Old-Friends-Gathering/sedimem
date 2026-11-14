@@ -28,7 +28,7 @@ test('groupByKind：非数组 / 缺 kind 防御式处理', () => {
 });
 
 const CHECKPOINT = {
-  intent: '做会话页',
+  intent: '做任务页',
   concepts: ['session', 'handoff'],
   files: ['ui/session-view.js'],
   errorsAndFixes: [],
@@ -48,7 +48,7 @@ test('formatCheckpoint：8 段按固定顺序渲染成纯文本', () => {
     assert.ok(i > last, `段 ${head} 应存在且有序`);
     last = i;
   }
-  assert.ok(text.includes('做会话页'));
+  assert.ok(text.includes('做任务页'));
   assert.ok(text.includes('session\nhandoff'), '数组段逐行展示');
   // 空数组段只留标题，不出现占位内容
   assert.ok(!text.includes('[]'));

@@ -83,24 +83,24 @@ $NODE $V/src/cli/memo.js serve --port 7788   # Memory Hub at http://127.0.0.1:77
 | Brief | Current-scope overview | `memo brief` |
 | Hygiene | Dedupe scan, conflict adjudication, supersede, tombstone delete | `memo dedupe` / `curate` / `supersede` / `forget` |
 | LLM derived | Bypass generation of title/summary/tags, off by default | `memo derive` / `llm` |
-| Session scratch | Exploratory work goes to a scratch store first; close promotes via whitelist | `memo session` |
+| Task store | Per-task scratch memory; close promotes via whitelist | `memo session` |
 | Memory Hub | Nine-page Web UI, read-only by default | `memo serve --port 7788` |
 | Doctor | Environment / store / index health checks | `memo doctor` / `stats` |
 | Migrate & rebuild | Version-dir migration, full index rebuild | `memo migrate` / `reindex` / `compact` |
 
 ## Memory Hub
 
-`memo serve --port 7788`, nine pages: Today / Graph / Search / Hygiene / Edit / Import / Session / Handoffs / Settings.
+`memo serve --port 7788`, nine pages: Today / Graph / Search / Hygiene / Edit / Import / Task / Handoffs / Settings.
 
 | ![Today: stream of the day's changes](docs/shots/ui-today.png) | ![Graph: force-directed + kind filter](docs/shots/ui-graph.png) |
 |---|---|
-| ![Hygiene: pending clusters + 30-day trend](docs/shots/ui-hygiene.png) | ![Session: scratch-store status](docs/shots/ui-session.png) |
+| ![Hygiene: pending clusters + 30-day trend](docs/shots/ui-hygiene.png) | ![Task: task-store status](docs/shots/ui-session.png) |
 
 | Page | Purpose | Page | Purpose |
 |---|---|---|---|
 | Today | See today's changes | Edit | Change with `--write` mode on |
 | Graph | Force-directed overview | Import | Bulk structured input |
-| Search | Search with basis | Session | Scratch-store status |
+| Search | Search with basis | Task | Task-store status |
 | Hygiene | Pending-cluster cleanup | Handoffs | Six-section handoff docs |
 | | | Settings | Store scope & theme |
 
@@ -121,11 +121,11 @@ Measured cost (GLM-5.3-Flash): full rebuild of 33 records ≈1m50s, **<¥0.02**;
 > [!NOTE]
 > With LLM on, title/summary/tag generation requests go to your configured provider; raw memory text stays local, and the truth layer never participates in requests.
 
-## Session scratch store
+## Task store (scope `session:` )
 
-Exploratory work goes first into a `session:*` scratch store (fact writes forbidden). On close, only decision/gotcha entries are promoted to the main store (tagged `from-session:<id>`); the rest is discarded, and a six-section handoff doc is written to `docs/handoffs/<id>.md`.
+A task's working state lives in a `session:*` store (fact writes forbidden). We key it by **task**, not by chat session: with multiple agents collaborating, one task spans several sessions and agents, so the task is the unit that gets handed off. On close, only decision/gotcha entries are promoted to the main store (tagged `from-session:<id>`); the rest is discarded, and a six-section handoff doc is written to `docs/handoffs/<id>.md`.
 
-![Session scratch store: start → checkpoint → close](docs/shots/diagrams/session.png)
+![Task store: start → checkpoint → close](docs/shots/diagrams/session.png)
 
 ```bash
 memo session start --title "Debug lock contention"

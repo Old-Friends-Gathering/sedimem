@@ -170,14 +170,14 @@ footer a:hover{text-decoration:underline}
   </figure>
 </section>
 
-<!-- Session store -->
+<!-- Task store -->
 <section>
-  <h2>Session Store</h2>
+  <h2>Task Store</h2>
   <figure>
-    <img src="../shots/diagrams/session.png" alt="Session scratch store lifecycle"
+    <img src="../shots/diagrams/session.png" alt="Task store lifecycle"
          width="3200" height="1120" loading="lazy"
          style="aspect-ratio:3200/1120">
-    <figcaption>session:* forbids facts; close promotes only decision / gotcha, plus a six-section handoff markdown.</figcaption>
+    <figcaption>Keyed by task, not by chat session — multiple agents can hand off one task. <code class="inline">session:*</code> forbids facts; close promotes only decision / gotcha, plus a handoff markdown.</figcaption>
   </figure>
   <div class="chips">
     <span class="chip hl">memo session start</span>
@@ -214,7 +214,7 @@ footer a:hover{text-decoration:underline}
       <figcaption>Hygiene: pending curation clusters + trends.</figcaption>
     </figure>
   </div>
-  <p style="margin-top:12px">Nine pages: Today / Graph / Search / Hygiene / Edit / Import / Session / Handoff / Settings. Start with <code class="inline">memo serve --port 7788</code>; add <code class="inline">--write</code> to enable editing.</p>
+  <p style="margin-top:12px">Nine pages: Today / Graph / Search / Hygiene / Edit / Import / Task / Handoff / Settings. Start with <code class="inline">memo serve --port 7788</code>; add <code class="inline">--write</code> to enable editing.</p>
 </section>
 
 <!-- Three clients -->

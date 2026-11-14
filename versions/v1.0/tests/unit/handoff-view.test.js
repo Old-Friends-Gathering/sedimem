@@ -18,7 +18,7 @@ test('pickHandoffPath：predicate=handoff 时取 value，否则空串', () => {
   assert.equal(pickHandoffPath('string'), '');
 });
 
-test('buildHandoffRow：时间 / 会话 id / 路径三字段', () => {
+test('buildHandoffRow：时间 / 任务 id / 路径三字段', () => {
   const row = buildHandoffRow({
     createdAt: '2026-11-14T04:00:00Z',
     source: { session: 'session:abc' },

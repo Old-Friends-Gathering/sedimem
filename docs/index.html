@@ -170,11 +170,11 @@ footer a:hover{text-decoration:underline}
   </figure>
 </section>
 
-<!-- 会话临时库 -->
+<!-- 任务库 -->
 <section>
-  <h2>会话临时库</h2>
+  <h2>任务库</h2>
   <figure>
-    <img src="shots/diagrams/session.png" alt="会话临时库生命周期"
+    <img src="shots/diagrams/session.png" alt="任务库生命周期"
          width="3200" height="1120" loading="lazy"
          style="aspect-ratio:3200/1120">
     <figcaption>session:* 禁写 fact；close 只晋升 decision / gotcha，附六段交接 md。</figcaption>
@@ -214,7 +214,7 @@ footer a:hover{text-decoration:underline}
       <figcaption>卫生页：待裁决簇 + 趋势。</figcaption>
     </figure>
   </div>
-  <p style="margin-top:12px">九页：今日 / 图谱 / 搜索 / 卫生 / 编辑 / 导入 / 会话 / 交接 / 设置。启动：<code class="inline">memo serve --port 7788</code>，加 <code class="inline">--write</code> 才可编辑。</p>
+  <p style="margin-top:12px">九页：今日 / 图谱 / 搜索 / 卫生 / 编辑 / 导入 / 任务 / 交接 / 设置。启动：<code class="inline">memo serve --port 7788</code>，加 <code class="inline">--write</code> 才可编辑。</p>
 </section>
 
 <!-- 三端接入 -->
@@ -253,7 +253,7 @@ claude mcp add --scope user memo -e MEMO_HOME=$HOME/.memo -- \
   <li><b>v0.3</b> 分层视图 + 注入分级</li>
   <li><b>v0.4</b> 语义道 + 入库脱敏</li>
   <li><b>v0.5</b> DSH 插件化 + pages-verify</li>
-  <li><b>v0.6</b> 会话临时库 + 批量导入</li>
+  <li><b>v0.6</b> 任务库 + 批量导入</li>
   <li><b>v1.0</b> 12 模块重构 + 记忆中心</li>
   <li><b>v1.0.1</b> 图谱可用性 + 配色对齐</li>
   <li><b>v1.0.2</b> 思考链 / 重建 / 懒加载修复</li>

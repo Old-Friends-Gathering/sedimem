@@ -19,7 +19,7 @@
     <button id="tab-hygiene" data-route="hygiene">卫生</button>
     <button id="tab-edit" data-route="edit">编辑</button>
     <button id="tab-import" data-route="import">导入</button>
-    <button id="tab-session" data-route="session">会话</button>
+    <button id="tab-session" data-route="session">任务</button>
     <button id="tab-handoff" data-route="handoff">交接</button>
     <button id="tab-settings" data-route="settings">设置</button>
   </nav>
@@ -115,10 +115,10 @@
     <div id="settings-container"></div>
   </section>
 
-  <!-- ============ 会话（W8，内容委托 session-view.js，只读） ============ -->
+  <!-- ============ 任务（W8，内容委托 session-view.js，只读） ============ -->
   <section id="session">
-    <h2>会话记忆</h2>
-    <div class="sub">session:* 临时分库的只读浏览；关闭会话走 CLI，本页不提供写操作。</div>
+    <h2>任务记忆</h2>
+    <div class="sub">任务库（session:* 分库）的只读浏览：一个任务可跨多个 agent 接力，关闭走 CLI，本页不提供写操作。</div>
     <div id="session-container"></div>
   </section>
 
