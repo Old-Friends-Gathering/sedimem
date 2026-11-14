@@ -9,7 +9,7 @@ import { API, TZ_OFFSET, api, apiPost, currentScope, hrefFor } from './api.js';
 import { loadLazyView } from './lazy.js';
 import { el, localDateStr } from './dom.js';
 import { renderSearchResults } from './search-view.js';
-import { resolveScope, hrefFor as buildHref } from './scope.js';
+import { resolveScope } from './scope.js';
 
 
 
