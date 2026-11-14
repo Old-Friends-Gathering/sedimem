@@ -1,5 +1,29 @@
 # CHANGELOG · v1.0
 
+## [1.0.1] — 2026-11-14
+
+补齐 v1.0 延后的两个批次，并把 LLM 变成「可配置但默认关闭」：
+
+- **W2 去重（P1）**：新增 `core/text.js`（normalizeText / tokenize / charBigrams / containment /
+  signatureSimilarity）与 `core/time.js`（parseAsOf / parseComparable / isExpired / nowIso）；
+  `hygiene/conflict`、`hygiene/suspicious`、`api/search-path`、`views/conflicts`、`capture/extract`
+  改为 re-export，删掉三族重复实现。单测 +23。
+- **W4 会话库 LLM**：`session/transcript.js`（DSH `session.v4.jsonl.zstd` 与 Codex rollout 读取、
+  toTurns、compactTranscript）+ `session/checkpoint-llm.js`（LLM 抽 8 段，失败回落确定性规则）；
+  `memo session checkpoint --auto [--llm] [--transcript]`；I45 用例 5 条。
+- **LLM 可配置**：端口层按 `policy.apiKey → MEMO_LLM_API_KEY → apiKeyFile` 三路取 key；
+  `MEMO_LLM_*` 可整体覆盖 policy（MCP 子进程同样生效）；新增 `memo llm status|test`。
+  **仓库里不放任何密钥**，默认 `provider: none` 时全链路行为与 1.0.0 一致。
+- **记忆中心配色对齐宿主**：`ui/palette.js` 增加 HOST_LIGHT / HOST_DARK（取自 DSH 客户端品牌色
+  `#4d6bfe` 与背景 `#fff`/`#151517`）与 `applyHostVars()`；`style.css` 全量改吃 `--sd-*`；
+  新增侧边栏 + 顶栏骨架；`?theme=light|dark` 便于截图回归。
+- **图谱可用性**：缩放 / 适应视图 / 重新布局、kind 图例筛选、节点搜索、点击聚焦邻居（其余淡化）、
+  悬停高亮、拖拽固定、键盘 `+ - 0 f r Esc`、标签避让与状态持久化；删除自研 3D 布局
+  `ui/layout.js`（241 行），常量并入 `ui/graph-ui.js`。
+- **门禁**：Q2 源码总量 15000 → 16000、Q9 UI 总量 3500 → 3700（均附理由；单文件硬线不变）。
+
+验证：645 tests、eval I1–I50 全 PASS、quality 14/14、security 9/9、docs-drift 0。
+
 ## [1.0.0] — 2026-11-14
 
 - **W6 UI 骨架**：vendor Tabler 1.7.5（CSS）/uPlot 1.6.31/force-graph 1.52.0 到 `ui/vendor/`（VENDOR.md + LICENSE + sha256，Q13 门禁）；
