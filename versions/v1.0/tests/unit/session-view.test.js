@@ -80,3 +80,23 @@ test('源码安全：session-view.js 只用 textContent，禁止 innerHTML / eva
   assert.ok(!SRC.includes('eval('));
   assert.ok(SRC.includes('textContent'));
 });
+
+test('formatCheckpoint：/api/records 不带 checkpoint 字段时，从 value 的 JSON 还原八段', () => {
+  // 真相层只存 value 字符串，投影里没有 checkpoint 对象 —— 任务页必须自己解析，否则只剩一行「checkpoint @ 时间」
+  const rec = { kind: 'state', text: 'checkpoint @ 2026-11-14T14:22:30.041Z', value: JSON.stringify(CHECKPOINT) };
+  const out = formatCheckpoint(rec);
+  assert.match(out, /## intent/);
+  assert.match(out, /## nextSteps/);
+  assert.match(out, /只读/);
+});
+
+test('formatCheckpoint：session meta 也是 JSON，但不得被当成 checkpoint 渲染', () => {
+  const meta = { id: '20261114-2221-6a5b', title: '任务标题', status: 'open', parentScope: 'repo:sedimem' };
+  const rec = { kind: 'state', text: 'session 20261114-2221-6a5b: 任务标题 开始', value: JSON.stringify(meta) };
+  assert.equal(formatCheckpoint(rec), 'session 20261114-2221-6a5b: 任务标题 开始');
+});
+
+test('formatCheckpoint：value 不是合法 JSON 时退回 text', () => {
+  const rec = { kind: 'state', text: '纯文本 checkpoint', value: '{坏 JSON' };
+  assert.equal(formatCheckpoint(rec), '纯文本 checkpoint');
+});

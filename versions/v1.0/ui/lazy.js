@@ -10,12 +10,23 @@ const LAZY_VIEWS = {
   settings: { file: 'settings-view.js', mount: 'mountSettingsView' },
 };
 
+// 串行化：初次渲染与 hashchange 可能同时触发同一个页面；两次 mount 交错 await，
+// 各自 replaceChildren 后分别 append，就会把同一份内容画两遍（v1.0.5 修）。
+const CHAINS = new Map();
+
 /**
- * 懒加载并挂载一个只读页。
+ * 懒加载并挂载一个只读页（同一页面重复调用按先后顺序串行，最后一次生效）。
  * @param {string} name session|handoff|settings
  * @param {{api: Function, el: Function}} deps
  */
-export async function loadLazyView(name, { api, el }) {
+export function loadLazyView(name, deps) {
+  const prev = CHAINS.get(name) ?? Promise.resolve();
+  const next = prev.then(() => mountOnce(name, deps)).catch(() => {});
+  CHAINS.set(name, next);
+  return next;
+}
+
+async function mountOnce(name, { api, el }) {
   const spec = LAZY_VIEWS[name];
   const box = document.getElementById(`${name}-container`);
   if (!spec) { box.replaceChildren(el('p', 'dim', `未知页面 ${name}`)); return; }
