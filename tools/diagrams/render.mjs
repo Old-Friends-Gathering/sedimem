@@ -8,8 +8,9 @@
 // 用法：node tools/diagrams/render.mjs [--only arch]
 // 输出：docs/shots/diagrams/<name>.png
 
-import { writeFileSync, mkdirSync } from 'node:fs';
+import { writeFileSync, mkdirSync, mkdtempSync, rmSync } from 'node:fs';
 import path from 'node:path';
+import { tmpdir } from 'node:os';
 import { fileURLToPath } from 'node:url';
 import { execFileSync } from 'node:child_process';
 
@@ -282,11 +283,14 @@ const DIAGRAMS = {
 };
 
 mkdirSync(OUT, { recursive: true });
+// 临时目录用 mkdtemp（随机名 + 0700）：固定路径写 /tmp 会被 CodeQL 判成 js/insecure-temporary-file，
+// 而且同名文件有被预先放置软链的风险。
+const TMP = mkdtempSync(path.join(tmpdir(), 'sedimem-diagrams-'));
 const only = process.argv.includes('--only') ? process.argv[process.argv.indexOf('--only') + 1] : null;
 let n = 0;
 for (const [name, build] of Object.entries(DIAGRAMS)) {
   if (only && only !== name) continue;
-  const htmlPath = `/tmp/sedimem-diagram-${name}.html`;
+  const htmlPath = path.join(TMP, `${name}.html`);
   writeFileSync(htmlPath, build(), 'utf8');
   const png = path.join(OUT, `${name}.png`);
   execFileSync(CHROME, [
@@ -296,4 +300,5 @@ for (const [name, build] of Object.entries(DIAGRAMS)) {
   n += 1;
   process.stdout.write(`✓ ${path.relative(REPO, png)}\n`);
 }
+rmSync(TMP, { recursive: true, force: true });
 process.stdout.write(`done ${n} 张\n`);
