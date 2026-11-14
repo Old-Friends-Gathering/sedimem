@@ -144,7 +144,7 @@ memo session sweep      # 扫 14 天僵尸库
         serverName: memo
         transport: stdio
         command: node
-        args: ['/ABS/PATH/versions/v1.0/src/mcp/server.js']
+        args: ['/ABS/PATH/versions/v1.1/src/mcp/server.js']
         env: { MEMO_HOME: '$HOME/.memo' }
 ```
 
@@ -152,7 +152,7 @@ memo session sweep      # 扫 14 天僵尸库
 # Codex CLI：~/.codex/config.toml
 [mcp_servers.memo]
 command = "node"
-args = ["/ABS/PATH/versions/v1.0/src/mcp/server.js"]
+args = ["/ABS/PATH/versions/v1.1/src/mcp/server.js"]
 enabled = true
 [mcp_servers.memo.env]
 MEMO_HOME = "$HOME/.memo"
@@ -161,10 +161,10 @@ MEMO_HOME = "$HOME/.memo"
 ```bash
 # Claude Code
 claude mcp add --scope user memo -e MEMO_HOME=$HOME/.memo -- \
-  node /ABS/PATH/versions/v1.0/src/mcp/server.js
+  node /ABS/PATH/versions/v1.1/src/mcp/server.js
 ```
 
-自检：`bash versions/v1.0/configs/verify-three-clients.sh`（期望 `PASS`）。
+自检：`bash versions/v1.1/configs/verify-three-clients.sh`（期望 `PASS`）。
 
 工具面：10 个 `memory_*` + 5 个 `memory_session_*`，三端完全一致。
 
@@ -197,7 +197,7 @@ claude mcp add --scope user memo -e MEMO_HOME=$HOME/.memo -- \
 
 ![五层门禁：质量 → 安全 → 覆盖率 → docs-drift → pages-verify](docs/shots/diagrams/gates.png)
 
-本地脚本 = CI 脚本：质量 14 项 + 安全 9 项 + 覆盖率（lines ≥ 89 / functions ≥ 90 / branches ≥ 77）+ docs-drift + pages-verify，另含 656 tests 与 eval I1–I51。
+本地脚本 = CI 脚本：质量 14 项 + 安全 9 项 + 覆盖率（lines ≥ 89 / functions ≥ 90 / branches ≥ 77）+ docs-drift + pages-verify，另含 665 tests 与 eval I1–I52。
 
 ```bash
 node tools/quality-check.mjs && node tools/security-check.mjs && node tools/coverage-gate.mjs
@@ -220,7 +220,8 @@ node tools/quality-check.mjs && node tools/security-check.mjs && node tools/cove
 | 版本 | 主题 | 状态 |
 |---|---|---|
 | v1.0.2 | 三处真 fix（思考链/重建/懒加载）+ 文档改图为主 | ✅ 已发布 |
-| **v1.0.5** | 任务页/交接页可用性：两栏布局、checkpoint 八段、重复渲染与浅色主题修复 | ✅ 当前 |
+| **v1.1.0** | 记忆中心整体 UI 重做 + 任务库按任务命名/可删除（`/api/tasks`） | ✅ 当前 |
+| v1.0.5 | 任务页/交接页可用性：两栏布局、checkpoint 八段、重复渲染与浅色主题修复 | 已发布 |
 | v1.0.4 | 任务库（`session:*`）在观测台可浏览：`SCOPE_PATTERN` 补上 `session` 前缀 | 已发布 |
 | v1.0.3 | 分库归属硬门（跨库写入 fail-loud）+ CI 门禁不再被 tee 吞 | 已发布 |
 | v1.0.1 | 图谱可用性 + 配色对齐 DSH | ✅ 已交付 |

@@ -368,7 +368,7 @@ async function q9WebUiBoundary() {
     //    3700（v1.0.1）：新增侧边栏+顶栏布局与图谱工具栏样式约 130 行 CSS；
     //    同时删掉自研 3D 布局 layout.js（241 行）——净增是「换库后的一次性样式成本」。
     const UI_MAX_FILE_LINES = 600;
-    const UI_MAX_TOTAL_LINES = 3700;
+    const UI_MAX_TOTAL_LINES = 4400; // v1.1：九页 + 设计系统 + today/hygiene/session/handoff/search 五个视图模块
     let uiTotalLines = 0;
     for (const f of uiSrcs) {
       const n = (await fsp.readFile(f, 'utf8')).split('\n').length;

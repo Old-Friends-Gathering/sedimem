@@ -893,7 +893,7 @@ v0.4 的取舍依据是竞品调研（`docs/research/competitive-dsh-plugins-202
 ## 附录 A · SQLite FTS5 后端（history）
 
 > doc-kind: history
-> doc-version: 1.0
+> doc-version: 1.1
 > verified-at: 2026-11-14
 > verified-against: versions/CURRENT（v1.0 / 1.0.0）
 
@@ -966,7 +966,7 @@ v1.0 是重构版本，**行为不改，只改结构与文档**。以下五条�
    `E_SCOPE_MISMATCH`（跨库写入 fail-loud，不允许静默写歪）。
 2. `forgetRecord` / `supersedeRecord` 打快照时显式把 `scope` 归一到 `svc.scope`
    —— 这是对遗留行的自愈，不改变记录的语义与 id。
-3. 由 `versions/v1.0/tests/unit/legacy-scope.test.js` 的 I1/I2/I3 守住；
+3. 由 `versions/v1.1/tests/unit/legacy-scope.test.js` 的 I1/I2/I3 守住；
    修数据用 `items/<scope>.jsonl` 的显式迁移，不允许靠「再 forget 一次」蒙混。
 
 ## §3.19 v1.0 LLM 派生层契约（裁决 83–88）与导出登记
@@ -1048,3 +1048,27 @@ v1.0 是重构版本，**行为不改，只改结构与文档**。以下五条�
 | `ui/edit-view.js` | `mountEditView` `buildSupersedePayload` `buildWritePayload` `canSubmit` `formIsDirty` `readOnlyFromSummary` `renderEditForm` `renderRecordList` |
 | `ui/import-view.js` | `mountImportView` `renderImportPreview` `renderImportApplied` `importQuery` `SOURCES` |
 
+
+## §3.22 v1.1 内部导出登记（第十二轮）
+Q5 契约覆盖按「导出名必须出现在 docs/」判定，这里逐模块登记 v1.1 新增与历史遗漏的导出；语义以各模块顶部注释为准。
+
+**会话（`src/session/`）**：`listSessions`、`renameSession`、`removeSession`、`readSessionRegistry`、`writeSessionRegistry`、`updateSessionRegistry`、`sessionRegistryPath`、`resolveParentScope`、`assertSessionOpen`、`SCRATCH_FORBIDDEN_KINDS`、`autoCheckpoint`、`readDshTranscript`、`readCodexRollout`、`toTurns`、`parseJsonl`、`compactTranscript`。
+
+**写入/生命周期（`src/api/`）**：`init`、`reload`、`_policy`。
+
+**Web 写端点（`src/web/api/write.js`）**：`apiTasks`、`apiTaskRename`、`apiTaskRemove`、`apiRecordTombstone`、`handleWriteApi`、`readJsonBody`、`assertSameOrigin`、`assertWritable`。
+
+**文本与时间（`src/core/`）**：`containsCjk`、`parseAsOf`、`nowIso`、`DAY_MS`。
+
+**CLI 杂项**：`llmCli`、`resolveMemoHome`、`splitSections`、`fileSha256`、`parseSource`、`countByKind`。
+
+**其它**：`CHECKPOINT_SECTION_MAX_CHARS`、`CHECKPOINT_TOTAL_MAX_CHARS`、`V0_1_ROOT`。
+
+**裁决 113（任务库不是分库）**：`session:<id>` 是「一个任务的临时记忆」，与长期记忆分库是两种东西。
+`GET /api/scopes` **不得**返回 `session:*`（混进分库下拉会让用户以为可以跨任务共用记忆）；
+任务库的唯一入口是 `GET /api/tasks`（带 `title`/`records`/`status`）与任务页；
+`GET /api/records?scope=session:<id>` 仍允许（任务详情要用），但不出现在分库选择器里。
+
+**裁决 114（删除是可审计的删除）**：单条记录走 `forget` → 墓碑（`status=tombstoned`，真相层不减行）；
+任务库走 `removeSession` → 整库文件移入 `$MEMO_HOME/trash/<yyyymmdd-HHMMSS>/` 并向 `events.jsonl` 追加
+`op:'session_remove'`。UI 的删除按钮只在 `--write` 下可用，且必须二次确认；没有静默删除。

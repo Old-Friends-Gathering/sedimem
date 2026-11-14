@@ -10,6 +10,8 @@ paths-ignore:
   # 新增大版本时（v1.0 之后），把上一个已冻结的目录加到下面。
   - versions/v0.*/**
   - versions/v0.1/**
+  # v1.0 已冻结（FROZEN.md，1.0.5）：只读快照、不随 CI 跑、不再发版。
+  - versions/v1.0/**
   # 审核留证脚本（reviews/probes/）是一次性证据，不随版本发布、不进运行时：
   # 它们的未用变量/风格问题没有修复价值，却会淹掉当前代码的真实告警。
   - versions/*/reviews/probes/**

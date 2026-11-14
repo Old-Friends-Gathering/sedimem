@@ -1,7 +1,7 @@
 # 06 · 使用与运维（memo）
 
 > doc-kind: manual
-> doc-version: 1.0
+> doc-version: 1.1
 > verified-at: 2026-11-14
 > verified-against: versions/CURRENT（v1.0 / 1.0.0）
 
@@ -665,7 +665,7 @@ memo derive --json                  # 机读
 ### 20.1 开启写模式
 
 ```bash
-MEMO_HOME=$HOME/.memo node versions/v1.0/src/cli/memo.js serve --port 7788 --write
+MEMO_HOME=$HOME/.memo node versions/v1.1/src/cli/memo.js serve --port 7788 --write
 # 或：MEMO_WRITE=1 ... memo serve --port 7788
 ```
 
@@ -682,14 +682,14 @@ MEMO_HOME=$HOME/.memo node versions/v1.0/src/cli/memo.js serve --port 7788 --wri
 
 ```bash
 # 预览（默认 dry-run，不写盘）
-node versions/v1.0/src/cli/memo.js import agents ~/.codex/AGENTS.md
-node versions/v1.0/src/cli/memo.js import basic-memory ~/notes
-node versions/v1.0/src/cli/memo.js import obsidian ~/vault/some-folder
-node versions/v1.0/src/cli/memo.js import mem0 ~/mem0-export.json
-node versions/v1.0/src/cli/memo.js import cline ~/myproject/memory-bank
+node versions/v1.1/src/cli/memo.js import agents ~/.codex/AGENTS.md
+node versions/v1.1/src/cli/memo.js import basic-memory ~/notes
+node versions/v1.1/src/cli/memo.js import obsidian ~/vault/some-folder
+node versions/v1.1/src/cli/memo.js import mem0 ~/mem0-export.json
+node versions/v1.1/src/cli/memo.js import cline ~/myproject/memory-bank
 
 # 真写
-node versions/v1.0/src/cli/memo.js import agents ~/.codex/AGENTS.md --apply
+node versions/v1.1/src/cli/memo.js import agents ~/.codex/AGENTS.md --apply
 ```
 
 导入页（`#/import`）做的是同一件事，只是走 HTTP：先预览再写入。
@@ -707,3 +707,14 @@ node versions/v1.0/src/cli/memo.js import agents ~/.codex/AGENTS.md --apply
 | `#/session` | 会话临时库列表与 checkpoint | 只读（关闭会话用 CLI） |
 | `#/handoff` | 交接文档 | 只读 |
 | `#/settings` | 版本/契约/阈值/kinds/健康 | 只读 |
+
+### 17.4 任务库的日常管理（v1.1）
+
+```bash
+memo session list                                  # 标题 / 记录数 / 状态 / 更新时间 / scope
+memo session rename --scope session:<id> --title "新名字"
+memo session remove --scope session:<id>           # 只预览要移动的文件，退出码 2
+memo session remove --scope session:<id> --yes     # 移到 $MEMO_HOME/trash/<ts>/ 并写 events 审计
+```
+
+观测台「任务」页做同样的事：点任务看细节、重命名、删除任务库、删单条记录（需 `memo serve --write`）。

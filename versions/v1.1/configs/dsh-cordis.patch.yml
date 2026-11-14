@@ -1,0 +1,37 @@
+# DSH 接入：memo MCP server
+#
+# 真实机制：DSH 用 @deepseek-ai/dsh-mcp-client，每个 server 一条 Cordis entry。
+# 工具名会变成 mcp__memo__memory_write / mcp__memo__memory_search / ...（与 Claude Code/Codex 同规则）。
+#
+# 两种启用方式（任选其一）：
+#   A) 临时试跑：dsh web --patch <本文件绝对路径>
+#   B) 常驻：把下面的 insert 条目合并进
+#        $DSH_HOME/profiles/<profile>/cordis.patch.yml   （推荐，profile 级）
+#      或 $DSH_HOME/cordis.patch.yml                     （全局）
+#      然后**完全退出并重启 DSH**。
+#
+# 启用前只需改一处：
+#   - args 里那条路径 → 本仓库 versions/vX.Y/src/mcp/server.js 的绝对路径
+#     （YAML 不做变量展开，必须写字面绝对路径）
+# 其余已用 !!js 求值，开箱可用：
+#   - command = 当前 DSH 进程的 node 可执行文件（DSH 内置 runtime，≥22）
+#   - MEMO_HOME = $HOME/.memo（stdio 子进程不继承 shell 的 ~ 展开，所以显式给绝对路径）
+#   - dsh-mcp-client 会 scrub 名字含 KEY/PASSWORD/SECRET/TOKEN 及 DSH_* 的环境变量，
+#     MEMO_HOME / MEMO_SCOPE 不受影响。
+#
+# 启用后自检：新会话里应出现 memory_* 工具；先调 memory_scope({action:"get"}) 看分库。
+- insert:
+    - id: memory-memo
+      name: '@deepseek-ai/dsh-mcp-client'
+      config:
+        serverName: memo
+        transport: stdio
+        command: !!js process.execPath
+        args:
+          - /abs/path/to/memo/versions/v0.3/src/mcp/server.js
+        env:
+          MEMO_HOME: !!js process.env.HOME + '/.memo'
+        cwd: !!js process.cwd()
+        toolCallTimeoutMs: 15000
+        reconnect:
+          enabled: true

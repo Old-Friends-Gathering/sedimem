@@ -1,7 +1,7 @@
 # 08 · Web UI（记忆观察台）—— v0.6 现状
 
 > doc-kind: contract
-> doc-version: 1.0
+> doc-version: 1.1
 > verified-at: 2026-11-14
 > verified-against: versions/CURRENT（v1.0 / 1.0.0）
 
@@ -359,3 +359,10 @@ v1.0 把观察台从「只读三页 + 搜索」扩展为九页信息架构（`do
 
 - 密集簇里标签会互相压（force-graph 默认无标签避让）——后续可用 `nodeCanvasObject` 做简单网格避让，或按缩放级别只画高度数节点。
 - 力导向布局每次刷新位置不同（无种子随机），不追求"同一个库每次一样"；要稳定布局需引入固定种子（未做）。
+
+### 13.3 任务库与分库分开（v1.1）
+
+- 顶栏分库下拉只列长期记忆库（`repo:` / `dir:` / `user:` / `global:`）；任务库不再混进去。
+- 任务库有独立入口：左栏「任务」页 → `GET /api/tasks` → 按**任务标题**列出（不是 session id）。
+- 任务详情：按 kind 分组，checkpoint 记录渲染成八段表格；每条记录可单独删除（墓碑）。
+- 任务库整体可重命名 / 删除（移到 `trash/`，可在文件系统里找回）；写操作需要 `memo serve --write`。

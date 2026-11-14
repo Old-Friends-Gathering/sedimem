@@ -1,0 +1,9 @@
+{
+  "id": "I40",
+  "name": "UI 分库粘性",
+  "expects": [
+    "hash/stored/default/首个 四级回退",
+    "hrefFor 带并编码 scope",
+    "app.js 无裸 hash 拼接"
+  ]
+}

@@ -1,0 +1,11 @@
+{
+  "id": "I51",
+  "title": "任务库可浏览：session:* 分库出现在 /api/scopes，且 ?scope= 能读到它的记录",
+  "why": "任务库是真实分库，但 SCOPE_PATTERN 曾漏掉 session 前缀：listScopes 把它过滤掉、?scope= 被判非法，导致 UI 任务页永远空白——用户以为记忆没写进去。放开前缀的同时必须仍拒绝路径穿越。",
+  "pass": [
+    "SCOPE_PATTERN 接受 session:20261114-2221-6a5b 与 session:1，拒绝 session: / session:../etc/passwd / session:a/b / session:UPPER",
+    "/api/scopes 同时列出主库与 session:* 任务库",
+    "/api/records?scope=session:<id> 返回 200，且只含该任务库记录（不串主库）",
+    "非法 session 路径仍返回 400"
+  ]
+}

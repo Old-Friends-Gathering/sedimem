@@ -1,0 +1,138 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>sedimem · 记忆观察台</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data:; style-src 'self' 'unsafe-inline'; script-src 'self'">
+<link rel="stylesheet" href="./vendor/tabler.min.css">
+<link rel="stylesheet" href="./vendor/uPlot.min.css">
+<link rel="stylesheet" href="./style.css">
+</head>
+<body>
+<aside class="side">
+  <div class="brand">
+    <i class="dot"></i>
+    <div class="bt"><b>sedimem</b><span>记忆观测台</span></div>
+  </div>
+  <nav aria-label="主导航">
+    <button id="tab-today" data-route="today">今日</button>
+    <button id="tab-graph" data-route="graph">图谱</button>
+    <button id="tab-search" data-route="search">搜索</button>
+    <button id="tab-hygiene" data-route="hygiene">卫生</button>
+    <button id="tab-edit" data-route="edit">编辑</button>
+    <button id="tab-import" data-route="import">导入</button>
+    <button id="tab-session" data-route="session">任务</button>
+    <button id="tab-handoff" data-route="handoff">交接</button>
+    <button id="tab-settings" data-route="settings">设置</button>
+  </nav>
+  <div class="foot">只读优先 · 编辑需 <code>--write</code><br>本地 127.0.0.1:<span id="side-port">7788</span></div>
+</aside>
+
+<header>
+  <div class="crumb" id="crumb">今日</div>
+  <div class="scope">
+    <span class="scope-pick" id="scope-pick"><span class="badge">scope …</span></span>
+    <span class="badge" id="chip-version">…</span>
+    <span class="badge b-warn" id="chip-readonly">只读</span>
+  </div>
+</header>
+
+<main>
+  <!-- ============ 今日（内容委托 today-view.js） ============ -->
+  <section id="today"></section>
+
+  <!-- ============ 图谱（内容委托 graph.js） ============ -->
+  <section id="graph">
+    <div class="page-head">
+      <div>
+        <h2>记忆图谱</h2>
+        <p class="sub">节点 = 记录，边 = 同实体 / 版本链 / 近重复候选 / 冲突；颜色按 kind，透明度按状态。</p>
+      </div>
+    </div>
+    <div class="toolbar" id="graph-toolbar"></div>
+    <div class="graph-stage">
+      <div id="graph-canvas" role="img" aria-label="记忆关系图"></div>
+      <aside id="graph-detail"><p class="dim" id="graph-hint">点击节点查看详情。</p></aside>
+    </div>
+    <p class="graph-hint" id="graph-mode-note">力导向布局：滚轮缩放、拖拽平移、拖节点固定、单击看详情、双击聚焦。</p>
+  </section>
+
+  <!-- ============ 搜索（内容委托 search-view.js） ============ -->
+  <section id="search">
+    <div class="page-head">
+      <div>
+        <h2>搜索记忆</h2>
+        <p class="sub">词法检索（语义道启用时自动融合）；结果按相关度排序，跟随顶栏分库。</p>
+      </div>
+    </div>
+    <div class="search-box">
+      <input type="search" id="search-input" placeholder="输入关键词，回车搜索" aria-label="搜索记忆">
+    </div>
+    <div id="search-results"></div>
+  </section>
+
+  <!-- ============ 卫生（内容委托 hygiene-view.js） ============ -->
+  <section id="hygiene"></section>
+
+  <!-- ============ 编辑（内容委托 edit-view.js） ============ -->
+  <section id="edit">
+    <div class="page-head">
+      <div>
+        <h2>编辑记忆</h2>
+        <p class="sub">左侧选记录、右侧改字段；保存走 supersede（不原地改真相层），新增走 write。</p>
+      </div>
+    </div>
+    <div id="edit-container"></div>
+  </section>
+
+  <!-- ============ 导入（内容委托 import-view.js） ============ -->
+  <section id="import">
+    <div class="page-head">
+      <div>
+        <h2>导入记忆</h2>
+        <p class="sub">选来源、填路径，先预览（dryRun）确认解析结果，再写入（apply）。</p>
+      </div>
+    </div>
+    <div id="import-container"></div>
+  </section>
+
+  <!-- ============ 任务（内容委托 session-view.js） ============ -->
+  <section id="session">
+    <div class="page-head">
+      <div>
+        <h2>任务</h2>
+        <p class="sub">按任务组织的临时记忆库：一个任务可跨多个 agent 接力；关闭走 CLI，这里负责浏览与清理。</p>
+      </div>
+    </div>
+    <div id="session-container"></div>
+  </section>
+
+  <!-- ============ 交接（内容委托 handoff-view.js） ============ -->
+  <section id="handoff">
+    <div class="page-head">
+      <div>
+        <h2>交接</h2>
+        <p class="sub">任务关闭时自动生成的交接文档：目标、做到哪、卡在哪、下一步。</p>
+      </div>
+    </div>
+    <div id="handoff-container"></div>
+  </section>
+
+  <!-- ============ 设置（内容委托 settings-view.js） ============ -->
+  <section id="settings">
+    <div class="page-head">
+      <div>
+        <h2>设置</h2>
+        <p class="sub">这个库现在是怎么配的：版本、写侧契约、检索阈值、kind 注册表与健康数字。</p>
+      </div>
+    </div>
+    <div id="settings-container"></div>
+  </section>
+</main>
+
+<script src="./vendor/uPlot.iife.min.js"></script>
+<script src="./vendor/force-graph.min.js"></script>
+<script type="module" src="./app.js"></script>
+</body>
+</html>

@@ -1,0 +1,30 @@
+{
+  "name": "@old-friends-gathering/sedimem",
+  "version": "1.1.0",
+  "private": true,
+  "type": "module",
+  "description": "sedimem v0.2：本地跨会话、跨客户端（DSH/Codex/Claude）自我迭代记忆层（零运行时依赖）",
+  "bin": {
+    "memo": "./src/cli/memo.js",
+    "memo-mcp": "./src/mcp/server.js"
+  },
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "test": "node --test 'tests/**/*.test.js'",
+    "eval": "node eval/run.js",
+    "doctor": "node src/cli/memo.js doctor",
+    "test:coverage": "node --test --experimental-test-coverage --test-coverage-exclude='**/src/cli/memo.js' 'tests/**/*.test.js'"
+  },
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Old-Friends-Gathering/sedimem.git",
+    "directory": "versions/v1.1"
+  },
+  "homepage": "https://old-friends-gathering.github.io/sedimem/",
+  "bugs": {
+    "url": "https://github.com/Old-Friends-Gathering/sedimem/issues"
+  }
+}
