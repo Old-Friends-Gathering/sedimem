@@ -21,7 +21,10 @@ export async function deriveCli(service, opts = {}, io = {}) {
   if (opts.rebuild === true) {
     const result = await service.rebuildDerived();
     if (asJson) out(JSON.stringify({ action: 'rebuild', ...result }, null, 2));
-    else out(`已重建派生层：${result.written} 条（${result.scope}）`);
+    else {
+      out(`已重建派生层：active ${result.active} · 入队 ${result.enqueued} · 成功 ${result.ok}`
+        + ` · 失败 ${result.failed} · 跳过 ${result.skipped}（${result.scope}，${result.rounds} 轮）`);
+    }
     return 0;
   }
 

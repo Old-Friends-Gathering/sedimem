@@ -10,7 +10,7 @@ import { renderBrief } from '../render/brief.js';
 import { defaultPolicy as POLICY, kindMeta } from '../config/policy.js';
 import { maskSuspiciousRecord } from './mask.js';
 // 错误工厂从 service.js 反向引用（错误文本被测试断言，必须单一来源）。
-import { invalid, invalidArg } from '../core/errors.js';
+import { invalid } from '../core/errors.js';
 import { parseAsOf, nowIso } from '../core/time.js';
 
 /**
