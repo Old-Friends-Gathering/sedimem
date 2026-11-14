@@ -133,6 +133,10 @@ export function createLlmPort({ policy, memoHome, clock = () => Date.now(), fetc
       const url = `${baseUrl}/chat/completions`; // openai-compatible 端点拼接
       const body = JSON.stringify({
         model: llm.model || '',
+        // GLM-4.5+ 默认开启「思考」：reasoning 会吃掉 max_tokens，导致 content 为空
+        // （实测 derive 三条全 unparseable-output，outTokens 打满 300 但 text 是空串）。
+        // 记忆派生是抽取/复述任务，不需要推理链，默认关掉；要开就把 policy.llm.thinking 设为 'auto'。
+        ...(llm.thinking === 'auto' ? {} : { thinking: { type: 'disabled' } }),
         messages: [
           { role: 'system', content: system || '' },
           { role: 'user', content: user || '' },

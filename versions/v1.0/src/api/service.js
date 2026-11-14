@@ -200,14 +200,32 @@ export class MemoryService {
     return this._derived;
   }
   /** 重建派生 sidecar：只做去重/原子重写（不调 LLM、不改真相层） */
-  async rebuildDerived() {
+  /**
+   * 全量重建派生层：把所有 active 记录重新入队并排空。
+   *
+   * 注意：这不是「压缩 sidecar 文件」——那只是 compaction。真重建必须重新调 LLM，
+   * 否则改了 prompt 版本或换了模型之后，旧标题会一直留在库里（v1.0.1 修的就是这个：
+   * 旧实现把 existing derived 当入参，等于什么都没重建）。
+   */
+  async rebuildDerived({ maxRounds = 200, batch = 10 } = {}) {
     await this._loadDerived();
-    const written = await rebuildDerived({
-      memoHome: this.memoHome, scope: this.scope, records: [...this._derived.values()],
-    });
+    const active = [...this._records.values()].filter((r) => r.status === 'active');
+    let enqueued = 0;
+    for (const r of active) {
+      const res = await enqueueDerive({ memoHome: this.memoHome, scope: this.scope, id: r.id, validFrom: r.validFrom });
+      if (res?.enqueued) enqueued += 1;
+    }
+    let ok = 0; let failed = 0; let skipped = 0; let rounds = 0;
+    for (;;) {
+      if (rounds >= maxRounds) break;
+      const drained = await this.drainDerive({ limit: batch });
+      ok += drained.ok ?? 0; failed += drained.failed ?? 0; skipped += drained.skipped ?? 0;
+      rounds += 1;
+      if ((drained.claimed ?? 0) === 0) break;
+    }
     this._derivedLoaded = false;
     await this._loadDerived();
-    return { written, scope: this.scope };
+    return { scope: this.scope, active: active.length, enqueued, ok, failed, skipped, rounds };
   }
   /** 写成功后入队（只 append outbox，不做 LLM —— 裁决 84） */
   async enqueueDeriveFor(record) {

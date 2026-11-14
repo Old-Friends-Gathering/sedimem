@@ -156,8 +156,8 @@
     "apiKey": "",
     "model": "glm-5.3-flash",
     "egress": "local-only",
-    "timeoutMs": 8000,
-    "maxRetries": 1,
+    "timeoutMs": 20000,
+    "maxRetries": 2,
     "dailyLimitCny": 5,
     "price": {
       "inPerM": 0.8,
@@ -165,7 +165,7 @@
     },
     "purposes": {
       "derive": {
-        "maxOutputTokens": 300
+        "maxOutputTokens": 400
       },
       "curate": {
         "maxOutputTokens": 300
@@ -178,7 +178,8 @@
       }
     },
     "apiKeyEnv": "MEMO_LLM_API_KEY",
-    "apiKeyFile": ""
+    "apiKeyFile": "",
+    "thinking": "disabled"
   },
   "derive": {
     "promptVersion": "d1-v1",

@@ -1,5 +1,20 @@
 # CHANGELOG · v1.0
 
+## [1.0.2] — 2026-11-14
+
+### Fixed（三处真实故障，都是实测撞出来的）
+- **LLM 输出恒为空**：GLM-4.5+ 默认开启「思考」，`max_tokens` 全被 `reasoning_content` 吃掉，`content` 返回空串 → `derive` 全部 `unparseable-output`。请求体现在显式带 `thinking:{type:'disabled'}`，`policy.llm.thinking='auto'` 可恢复。派生超时 8s → 20s、重试 1 → 2、`derive.maxOutputTokens` 300 → 400。
+- **`memo derive --rebuild` 什么都没重建**：旧实现把「已有 derived」当入参，等于压缩一遍旧结果。现在先对全部 active 记录入队、再循环 drain 到队列空，返回 `{active,enqueued,ok,failed,skipped,rounds}`。
+- **会话 / 交接 / 设置三页永远显示「未加载」**：懒加载器按固定 `mount` 猜导出名，而三页导出的是 `mountXxxView`、设置页参数名是 `api`。改为显式映射表，并拆到 `ui/lazy.js`（app.js 614 → 592 行，守住 Q9 单文件 600 行）。
+
+### Changed（文档按「图为主」重做）
+- `README.md` 182 行、13 张图；`docs/index.html` 251 行、9 张图：每节 = 标题 + 一张图 + ≤2 句图注。
+- 新增 `tools/diagrams/render.mjs`：HTML+CSS 排版 → 无头 Chrome 截图，产出 6 张示意图（arch / write / llm / session / read / gates），配色与产品 UI 同源。
+
+### Added
+- `tests/unit/llm-thinking-and-rebuild.test.js`（3 例）。
+- `docs/shots/diagrams/*.png`、`docs/shots/ui-{today,graph,hygiene,session}.png`。
+
 ## [1.0.1] — 2026-11-14
 
 补齐 v1.0 延后的两个批次，并把 LLM 变成「可配置但默认关闭」：
