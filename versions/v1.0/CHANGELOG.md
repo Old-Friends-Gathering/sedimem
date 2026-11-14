@@ -1,5 +1,23 @@
 # CHANGELOG · v1.0
 
+## [1.0.5] — 2026-11-14
+
+### Fixed
+
+- **任务页/交接页没有样式**：`session-view.js` 与 `handoff-view.js` 用了 `.session-*` / `.handoff-*` 一套类名，
+  但 `ui/style.css` 里从来没有这些规则 → 列表被拉成一整行、两栏降级成上下堆叠。
+  现在补上两栏栅格（左列表 300px + 右详情）、列表项 hover/选中态、`kind` 分组标题、checkpoint 代码块。
+- **同一页面被渲染两遍**：初次渲染与 `hashchange` 可能同时调用 `loadLazyView`，两次 mount 各自
+  `replaceChildren()` 后分别 append，内容就叠了两份。改为按页面名串行（最后一次生效）。
+- **checkpoint 显示不出八段**：`/api/records` 的投影不带 `checkpoint` 字段（真相层只存 `value` 字符串），
+  页面只渲染出一行 `checkpoint @ 时间`。现在从 `value` 解析 JSON 还原（并排除 session meta 这种"也是 JSON 但不是 checkpoint"的记录）。
+- **浅色主题下 checkpoint 文字几乎不可见**：`pre` 继承到样式库的浅色 token，显式改成 `var(--sd-text)`。
+
+### Added
+
+- `tests/unit/session-view.test.js` 增 3 例（从 value 还原 / meta 不当 checkpoint / 非法 JSON 退回 text）。
+  测试数 653 → **656**。
+
 ## [1.0.4] — 2026-11-14
 
 ### Fixed

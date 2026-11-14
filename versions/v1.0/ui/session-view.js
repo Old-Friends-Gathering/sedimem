@@ -46,7 +46,17 @@ function sectionText(v) {
  * @returns {string}
  */
 export function formatCheckpoint(record) {
-  const cp = record?.checkpoint;
+  // /api/records 的投影不带 checkpoint 字段（真相层只存 value 字符串），
+  // 所以先看 record.checkpoint，再尝试把 value 当 JSON 解析；解析不出就退回 text。
+  let cp = record?.checkpoint;
+  if ((!cp || typeof cp !== 'object') && typeof record?.value === 'string' && record.value.trim().startsWith('{')) {
+    try {
+      const parsed = JSON.parse(record.value);
+      // 只有真含 checkpoint 段的 JSON 才算（session meta 也是 JSON，不能当 checkpoint 渲染）
+      if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)
+          && CHECKPOINT_SECTIONS.some((k) => parsed[k] !== undefined)) cp = parsed;
+    } catch { /* 不是 checkpoint JSON，走 text 兜底 */ }
+  }
   if (!cp || typeof cp !== 'object' || Array.isArray(cp)) return String(record?.text ?? '');
   const lines = [];
   for (const key of CHECKPOINT_SECTIONS) {
