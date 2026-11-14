@@ -42,7 +42,7 @@ test('compactCli --dry-run：报告可删条数但一行不写', async () => {
 });
 
 test('compactCli 真跑：只删 purge 墓碑，active 记录与事件流都在', async () => {
-  const { memoHome, service, keep } = await setup();
+  const { service, keep } = await setup();
   try {
     // grace=0 时判定是 validTo < now（严格小于）：墓碑与压实常在同一毫秒，先让时钟走一格
     await new Promise((r) => setTimeout(r, 5));

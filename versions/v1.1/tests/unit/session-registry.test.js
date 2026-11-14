@@ -5,7 +5,6 @@ import { mkdtempSync, rmSync, writeFileSync, mkdirSync, readFileSync, existsSync
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
-import { createMemoryService } from '../../src/api/service.js';
 import { createClock } from '../../src/core/clock.js';
 import { writeSessionRegistry } from '../../src/session/lifecycle.js';
 import { listSessions, renameSession, removeSession } from '../../src/session/lifecycle.js';
