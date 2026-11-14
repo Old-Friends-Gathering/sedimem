@@ -1,4 +1,4 @@
-// ⚠️ 自动生成：由 versions/v1.0/src/render/inject.js 复制而来，勿手改（改权威实现后重跑 scripts/sync-plugin.sh）。
+// ⚠️ 自动生成：由 versions/v1.1/src/render/inject.js 复制而来，勿手改（改权威实现后重跑 scripts/sync-plugin.sh）。
 // render/inject.js —— 每步注入的内容组装（v0.4 D2）
 //
 // 这一份是**权威实现**：不依赖宿主、不依赖 plugin，只读 $MEMO_HOME 的两个产物
