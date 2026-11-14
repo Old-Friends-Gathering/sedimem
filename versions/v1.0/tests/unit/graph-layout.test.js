@@ -1,175 +1,49 @@
 /**
- * graph-layout.test.js —— `ui/graph.js` 布局纯函数的单元测试（D 路 / W5）。
+ * graph-layout.test.js —— 图谱「视觉常量」的单元测试。
  *
- * 覆盖 docs/plans/v0.2-web-ui-plan.md §7 单元层要求：
- * 斥力/弹簧/向心推进后坐标为有限数、能量单调下降、同输入可复现、节点两两距离 > 0。
+ * 历史：v0.2 时这里测的是自研 3D 力导向（layoutTick 的推进/能量/可复现）。
+ * v1.0 W6 起图谱换成 vendor 的 force-graph，那套实现连同本文件的 layoutTick 用例一起删除；
+ * v1.0.1 起这些常量并进 ui/graph-ui.js（layout.js 已删除），本文件继续守着「常量别被改坏」。
  */
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { layoutTick, KIND_COLORS, kindColorsFromPolicy, EDGE_PREF_KEY, DEFAULT_EDGE_TYPES, OPTIONAL_EDGE_TYPES } from '../../ui/layout.js';
+import { KIND_COLORS, kindColorsFromPolicy, EDGE_PREF_KEY, DEFAULT_EDGE_TYPES, OPTIONAL_EDGE_TYPES } from '../../ui/graph-ui.js';
 import { nodeRadius } from '../../ui/graph-style.js';
 
-/** 构造一个小图：5 个节点环 + 两条弹簧边 */
-function makeNodes(count = 5) {
-  const nodes = [];
-  for (let i = 0; i < count; i++) {
-    const a = (i / count) * Math.PI * 2;
-    nodes.push({
-      id: `n${i}`,
-      kind: 'fact',
-      status: 'active',
-      hits: i,
-      x: 300 + 30 * Math.cos(a),
-      y: 300 + 30 * Math.sin(a),
-      vx: 0,
-      vy: 0,
-    });
-  }
-  return nodes;
-}
-function makeEdges(nodes) {
-  return [
-    { from: nodes[0].id, to: nodes[1].id, type: 'same-entity', weight: 1 },
-    { from: nodes[1].id, to: nodes[2].id, type: 'supersedes', weight: 1 },
-  ];
-}
-
-test('tick 后所有节点坐标与速度均为有限数', () => {
-  const nodes = makeNodes();
-  const edges = makeEdges(nodes);
-  let alpha = 1;
-  for (let i = 0; i < 10; i++) {
-    const out = layoutTick(nodes, edges, { alpha, width: 600, height: 600 });
-    alpha = out.alpha;
-    assert.ok(Number.isFinite(out.alpha), 'alpha 必须是有限数');
-    assert.ok(Number.isFinite(out.energy), 'energy 必须是有限数');
-  }
-  for (const nd of nodes) {
-    assert.ok(Number.isFinite(nd.x), `${nd.id}.x 有限`);
-    assert.ok(Number.isFinite(nd.y), `${nd.id}.y 有限`);
-    assert.ok(Number.isFinite(nd.vx), `${nd.id}.vx 有限`);
-    assert.ok(Number.isFinite(nd.vy), `${nd.id}.vy 有限`);
+test('KIND_COLORS：五种 kind 齐全且都是 #rrggbb', () => {
+  for (const kind of ['fact', 'pref', 'decision', 'gotcha', 'state']) {
+    assert.match(KIND_COLORS[kind], /^#[0-9a-f]{6}$/i, `${kind} 颜色非法`);
   }
 });
 
-test('衰减阶段 50 帧内能量单调不增（容忍 1e-9）', () => {
-  const nodes = makeNodes();
-  const edges = makeEdges(nodes);
-  // 先预热 80 帧让系统进入阻尼主导的衰减段（斥力已把节点推开、弹簧接近自然长度）
-  let alpha = 1;
-  for (let i = 0; i < 80; i++) {
-    alpha = layoutTick(nodes, edges, { alpha, width: 600, height: 600 }).alpha;
-  }
-  let prev = layoutTick(nodes, edges, { alpha, width: 600, height: 600 }).energy;
-  for (let i = 0; i < 50; i++) {
-    const { energy } = layoutTick(nodes, edges, { alpha, width: 600, height: 600 });
-    assert.ok(
-      energy <= prev + 1e-9,
-      `第 ${i} 帧能量应不增：prev=${prev} now=${energy}`,
-    );
-    prev = energy;
-  }
+test('KIND_COLORS 与宿主色板同源：policy.kinds 的颜色优先', () => {
+  const policy = { kinds: { fact: { color: '#123456' }, custom: { color: '#abcdef' } } };
+  const merged = kindColorsFromPolicy(policy);
+  assert.equal(merged.fact, '#123456');
+  assert.equal(merged.custom, '#abcdef');
+  // 未在 policy 里出现的 kind 仍回落到内置色
+  assert.equal(merged.decision, KIND_COLORS.decision);
 });
 
-test('同输入两次独立模拟结果完全可复现（无随机源）', () => {
-  const run = () => {
-    const nodes = makeNodes(4);
-    const edges = makeEdges(nodes);
-    let alpha = 1;
-    const trace = [];
-    for (let i = 0; i < 30; i++) {
-      const out = layoutTick(nodes, edges, { alpha, width: 600, height: 600 });
-      alpha = out.alpha;
-      trace.push(nodes.map((nd) => [nd.x, nd.y, nd.vx, nd.vy]));
-    }
-    return trace;
-  };
-  assert.deepStrictEqual(run(), run());
+test('kindColorsFromPolicy：policy 缺 kinds 时不抛、返回内置色', () => {
+  assert.deepEqual(kindColorsFromPolicy({}), KIND_COLORS);
+  assert.deepEqual(kindColorsFromPolicy(null), KIND_COLORS);
 });
 
-test('任意帧后节点两两距离 > 0（重合输入也会被推开）', () => {
-  // 极端输入：全部节点完全重合在同一点
-  const nodes = Array.from({ length: 3 }, (_, i) => ({
-    id: `z${i}`, x: 300, y: 300, vx: 0, vy: 0,
-  }));
-  const edges = [];
-  let alpha = 1;
-  for (let i = 0; i < 20; i++) {
-    alpha = layoutTick(nodes, edges, { alpha, width: 600, height: 600 }).alpha;
-    for (let a = 0; a < nodes.length; a++) {
-      for (let b = a + 1; b < nodes.length; b++) {
-        const d = Math.hypot(nodes[a].x - nodes[b].x, nodes[a].y - nodes[b].y);
-        assert.ok(d > 0, `第 ${i} 帧 ${nodes[a].id}-${nodes[b].id} 距离必须 > 0，实际 ${d}`);
-      }
-    }
-  }
-  // 常规输入同样成立
-  const nodes2 = makeNodes();
-  alpha = 1;
-  for (let i = 0; i < 20; i++) {
-    alpha = layoutTick(nodes2, makeEdges(nodes2), { alpha, width: 600, height: 600 }).alpha;
-  }
-  for (let a = 0; a < nodes2.length; a++) {
-    for (let b = a + 1; b < nodes2.length; b++) {
-      assert.ok(Math.hypot(nodes2[a].x - nodes2[b].x, nodes2[a].y - nodes2[b].y) > 0);
-    }
-  }
+test('边类型：默认集与可选集不重叠，且都非空', () => {
+  assert.ok(DEFAULT_EDGE_TYPES.length > 0);
+  assert.ok(OPTIONAL_EDGE_TYPES.length > 0);
+  for (const t of DEFAULT_EDGE_TYPES) assert.ok(!OPTIONAL_EDGE_TYPES.includes(t), `${t} 同时出现在两个集合`);
 });
 
-test('固定节点（fx/fy）位置不动、速度清零，alpha 持续衰减', () => {
-  const nodes = makeNodes(3);
-  nodes[0].fx = 111;
-  nodes[0].fy = 222;
-  const edges = [];
-  let alpha = 1;
-  for (let i = 0; i < 15; i++) {
-    const out = layoutTick(nodes, edges, { alpha, width: 600, height: 600 });
-    assert.ok(out.alpha < alpha, 'alpha 每帧衰减');
-    alpha = out.alpha;
-  }
-  assert.equal(nodes[0].x, 111);
-  assert.equal(nodes[0].y, 222);
-  assert.equal(nodes[0].vx, 0);
-  assert.equal(nodes[0].vy, 0);
-});
-
-test('空图：不抛错，energy 为 0，alpha 仍衰减', () => {
-  const out = layoutTick([], [], { alpha: 1 });
-  assert.equal(out.energy, 0);
-  assert.ok(out.alpha < 1);
-});
-
-/* ===== W6：force-graph 改造后仍保留的纯函数契约（graph.js 直接复用，覆盖不减） ===== */
-
-test('KIND_COLORS 兜底色表齐全且为 hex', () => {
-  for (const k of ['fact', 'pref', 'decision', 'gotcha', 'state']) {
-    assert.match(KIND_COLORS[k], /^#[0-9a-f]{6}$/i, `KIND_COLORS.${k} 应为 6 位 hex`);
-  }
-});
-
-test('kindColorsFromPolicy：policy 覆盖兜底，缺失时回落', () => {
-  // policy 只给差异项也能得到完整色表
-  const colors = kindColorsFromPolicy({ kinds: { fact: { color: '#123456' } } });
-  assert.equal(colors.fact, '#123456');
-  assert.equal(colors.gotcha, KIND_COLORS.gotcha);
-  // 新增 kind 也要带出来
-  const ext = kindColorsFromPolicy({ kinds: { newkind: { color: '#abcdef' } } });
-  assert.equal(ext.newkind, '#abcdef');
-  // policy 缺失 / 空 → 与兜底表一致
-  assert.deepStrictEqual(kindColorsFromPolicy(undefined), { ...KIND_COLORS });
-  assert.deepStrictEqual(kindColorsFromPolicy({}), { ...KIND_COLORS });
-});
-
-test('边偏好常量：默认开启与可选类型、localStorage 键名不变', () => {
-  assert.deepStrictEqual(DEFAULT_EDGE_TYPES, ['supersedes', 'same-entity']);
-  assert.deepStrictEqual(OPTIONAL_EDGE_TYPES, ['duplicate-of', 'disputed-with']);
+test('EDGE_PREF_KEY 是稳定的 localStorage 键（改它会静默丢用户偏好）', () => {
   assert.equal(EDGE_PREF_KEY, 'sedimem.graph.edges');
 });
 
-test('nodeRadius：半径随 hits 开方 + 基数，异常输入不炸', () => {
-  assert.equal(nodeRadius({ hits: 0 }), 3);
-  assert.equal(nodeRadius({ hits: 9 }), 6);
-  assert.equal(nodeRadius({}), 3);
-  assert.equal(nodeRadius(null), 3);
-  assert.equal(nodeRadius({ hits: -5 }), 3);
+test('nodeRadius：随 hits 单调增，且有下限（单条记录也要点得中）', () => {
+  const r1 = nodeRadius({ hits: 1 });
+  const r5 = nodeRadius({ hits: 25 });
+  assert.ok(r1 >= 3, '半径下限不足');
+  assert.ok(r5 > r1, '半径未随权重增长');
+  assert.ok(Number.isFinite(nodeRadius({})), '缺 hits 时必须返回有限数');
 });

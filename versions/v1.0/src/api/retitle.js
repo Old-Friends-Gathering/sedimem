@@ -6,6 +6,7 @@
 import { withPatch, validateRecord, normalizeTitle } from '../core/record.js';
 import { invalidArg } from '../core/errors.js';
 import { withLock } from '../storage/lock.js';
+import { nowIso } from '../core/time.js';
 
 /** 回填标题的显示上限（含末尾 `…`）。core/record.js 的 MAX_TITLE(40) 是「合法性上限」，这里是「显示长度」。 */
 export const TITLE_MAX = 24;
@@ -154,7 +155,7 @@ export async function retitleRecords(svc, { dryRun = false, limit = 0 } = {}) {
         try {
           await svc.store.appendImmediate(patched);
           await svc.store.appendEventImmediate({
-            ts: svc._nowIso(),
+            ts: nowIso(svc.clock),
             op: 'retitle',
             scope: svc.scope,
             id: patched.id,
@@ -248,7 +249,7 @@ export async function applyTitles(svc, list, { dryRun = false } = {}) {
         try {
           await svc.store.appendImmediate(patched);
           await svc.store.appendEventImmediate({
-            ts: svc._nowIso(),
+            ts: nowIso(svc.clock),
             op: 'retitle_apply',
             scope: svc.scope,
             id: patched.id,

@@ -129,6 +129,15 @@ async function main() {
         await service.close();
       }
     }
+    case 'llm': {
+      const { llmCli } = await import('./commands/ops.js');
+      const service = await loadService(serviceOpts());
+      try {
+        return await llmCli(service, { action: positional[0] ?? 'status', json: asJson });
+      } finally {
+        await service.close();
+      }
+    }
     case 'retitle':
       return await cmdRetitle(opts, asJson);
     case 'backfill-vectors':

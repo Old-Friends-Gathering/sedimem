@@ -10,26 +10,29 @@
 <link rel="stylesheet" href="./style.css">
 </head>
 <body>
+<aside class="side">
+  <div class="brand"><span class="dot"></span><span>sedimem<small>记忆观察台</small></span></div>
+  <nav>
+    <button id="tab-today" data-route="today">今日</button>
+    <button id="tab-graph" data-route="graph">图谱</button>
+    <button id="tab-search" data-route="search">搜索</button>
+    <button id="tab-hygiene" data-route="hygiene">卫生</button>
+    <button id="tab-edit" data-route="edit">编辑</button>
+    <button id="tab-import" data-route="import">导入</button>
+    <button id="tab-session" data-route="session">会话</button>
+    <button id="tab-handoff" data-route="handoff">交接</button>
+    <button id="tab-settings" data-route="settings">设置</button>
+  </nav>
+  <div class="side-foot">只读优先 · 编辑需 --write<br>本地 <span id="side-port">7788</span></div>
+</aside>
+
 <header>
-  <div class="brand">sedimem<small>记忆观察台 · 只读</small></div>
   <div class="scope">
     <span class="scope-pick" id="scope-pick"><span class="chip">scope …</span></span>
     <span class="chip" id="chip-version"><b>…</b></span>
     <span class="chip" id="chip-readonly"><b>只读</b></span>
   </div>
 </header>
-
-<nav>
-  <button id="tab-today">今日</button>
-  <button id="tab-graph">图谱</button>
-  <button id="tab-search">搜索</button>
-  <button id="tab-hygiene">卫生</button>
-  <button id="tab-edit">编辑</button>
-  <button id="tab-import">导入</button>
-  <button id="tab-session">会话</button>
-  <button id="tab-handoff">交接</button>
-  <button id="tab-settings">设置</button>
-</nav>
 
 <main>
   <!-- ============ 今日 ============ -->
