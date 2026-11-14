@@ -7,7 +7,8 @@
 // 用法：node tools/diagrams/master.mjs [--only arch|hero]
 // 输出：docs/shots/diagrams/master-arch.png、docs/shots/hero.png
 
-import { writeFileSync, mkdirSync } from 'node:fs';
+import { writeFileSync, mkdirSync, mkdtempSync } from 'node:fs';
+import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { execFileSync } from 'node:child_process';
@@ -243,6 +244,7 @@ const hero = () => `<!doctype html><meta charset="utf-8"><style>${BASE}
 </body>`;
 
 mkdirSync(path.join(OUT, 'diagrams'), { recursive: true });
+const TMP = mkdtempSync(path.join(tmpdir(), 'sedimem-master-'));
 const only = process.argv.includes('--only') ? process.argv[process.argv.indexOf('--only') + 1] : null;
 const jobs = [
   ['master-arch', arch, path.join(OUT, 'diagrams/master-arch.png'), ARCH_W, ARCH_H],
@@ -250,7 +252,8 @@ const jobs = [
 ];
 for (const [name, build, png, w, h] of jobs) {
   if (only && only !== name) continue;
-  const html = `/tmp/sedimem-master-${name}.html`;
+    // 临时目录用 mkdtemp（随机名 + 0700）：固定 /tmp 路径会被 CodeQL 判成 js/insecure-temporary-file。
+  const html = path.join(TMP, `${name}.html`);
   writeFileSync(html, build(), 'utf8');
   execFileSync(CHROME, [
     '--headless=new', '--disable-gpu', '--hide-scrollbars', '--force-device-scale-factor=2',
