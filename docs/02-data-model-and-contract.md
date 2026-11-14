@@ -931,6 +931,24 @@ v1.0 是重构版本，**行为不改，只改结构与文档**。以下五条�
 
 **为什么 session 生命周期不自己 new service**：`api/write-path → session/lifecycle → api/service` 会成环。`startSession()` 改为接收 `serviceFactory`（CLI / MCP 各自注入），`src/session/**` 对 `api/service.js` 零依赖——这条由裁决 81 的第四条守住。
 
+## §3.20 v1.0.3 分库归属（裁决 111）
+
+**裁决 111：记录的 scope 唯一归属它被读写的那个分库，快照必须写在当前分库。**
+
+背景（真实事故 2026-11-14）：项目改名 `strata → sedimem` 后，历史行的 `scope`
+字段仍是 `repo:strata`，而文件已迁移到 `repo:sedimem`。`forget` / `supersede`
+用 `withPatch(旧记录, …)` 生成的新快照默认沿用旧 scope → 快照落到**旧分库文件**，
+当前分库 fold 不到 → 表现成「删除/取代静默不生效」，且没有任何报错。
+
+三条硬约束：
+
+1. `commit(svc, record, …)` 校验 `record.scope === svc.scope`，不一致抛
+   `E_SCOPE_MISMATCH`（跨库写入 fail-loud，不允许静默写歪）。
+2. `forgetRecord` / `supersedeRecord` 打快照时显式把 `scope` 归一到 `svc.scope`
+   —— 这是对遗留行的自愈，不改变记录的语义与 id。
+3. 由 `versions/v1.0/tests/unit/legacy-scope.test.js` 的 I1/I2/I3 守住；
+   修数据用 `items/<scope>.jsonl` 的显式迁移，不允许靠「再 forget 一次」蒙混。
+
 ## §3.19 v1.0 LLM 派生层契约（裁决 83–88）与导出登记
 
 ### 裁决

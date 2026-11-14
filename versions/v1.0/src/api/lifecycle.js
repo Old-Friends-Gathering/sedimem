@@ -119,6 +119,14 @@ export async function event(svc, op, id, detail) {
 export async function commit(svc, record, op = 'write', detail = {}) {
   const v = validateRecord(record);
   if (!v.ok) throw invalid(`commit: ${v.errors.join('; ')}`);
+  // 裁决 111（v1.0.3）：快照的 scope 必须与服务实例一致。历史库里有改名前的遗留行
+  // （repo:strata 时代写入、文件却被迁移到 repo:sedimem），若沿用旧 scope 落盘，
+  // forget/supersede 会把状态写回旧文件 → 表现成「删除/取代没生效」，而且不报错。
+  if (record.scope !== svc.scope) {
+    const err = new Error(`commit: record ${record.id} 的 scope=${record.scope} 与实例 ${svc.scope} 不一致（拒绝跨库写入）`);
+    err.code = 'E_SCOPE_MISMATCH';
+    throw err;
+  }
   if (svc._inScopeLock) await svc.store.appendImmediate(record);
   else await svc.store.append(record);
   svc._records.set(record.id, record);
