@@ -8,7 +8,7 @@
  *   node docs/marketing/cards/render.mjs            # 全部
  *   node docs/marketing/cards/render.mjs cover data # 指定
  */
-import { mkdirSync, mkdtempSync, writeFileSync, rmSync } from 'node:fs';
+import { mkdtempSync, writeFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
