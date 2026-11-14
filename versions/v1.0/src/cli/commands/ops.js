@@ -109,3 +109,77 @@ export async function cmdBackfillVectors(opts, asJson) {
     json: asJson,
   });
 }
+
+/**
+ * memo llm status|test —— LLM 层自检。
+ *
+ * 为什么需要它：LLM 是「默认关闭 + 需要凭据」的能力，出问题时的第一个问题永远是
+ * 「到底有没有拿到 key、端点通不通、预算还剩多少」。这条命令把三件事一次说清，
+ * 避免去看哪一层吞了错。
+ *
+ *   status  → { provider, model, ready, reason, keySource, budget }
+ *   test    → 真发一次极短补全（purpose=derive 的最小输入），返回耗时与 token 估算
+ */
+export async function llmCli(service, { action = 'status', json = false } = {}) {
+  const port = service?.llmPort ?? null;
+  const budget = service?.llmBudget ?? null;
+  const status = {
+    provider: port?.provider ?? 'none',
+    model: port?.model ?? '',
+    baseUrl: port?.baseUrl ?? null,
+    ready: Boolean(port?.ready),
+    reason: port?.ready ? 'ok' : (port?.reason ?? 'no-port'),
+    keySource: port?.keySource ?? 'missing',
+    dailyLimitCny: port?.dailyLimitCny ?? null,
+    budget: budget && typeof budget === 'object' ? budget : null,
+  };
+
+  if (action === 'status') {
+    if (json) { process.stdout.write(`${JSON.stringify({ ok: true, ...status })}\n`); return { ok: true, ...status }; }
+    const lines = [
+      `provider : ${status.provider}`,
+      `model    : ${status.model || '–'}`,
+      `baseUrl  : ${status.baseUrl || '–'}`,
+      `ready    : ${status.ready ? 'yes' : 'no'}（${status.reason}）`,
+      `keySource: ${status.keySource}`,
+      `dailyCap : ${status.dailyLimitCny == null ? '–' : `¥${status.dailyLimitCny}`}`,
+    ];
+    if (status.budget) {
+      lines.push(`spent    : ¥${status.budget.spentCny ?? 0}（今日 ${status.budget.calls ?? 0} 次）`);
+    }
+    process.stdout.write(`${lines.join('\n')}\n`);
+    return { ok: true, ...status };
+  }
+
+  if (action !== 'test') {
+    const err = new Error(`memo llm: 未知子命令 ${action}（支持 status / test）`);
+    err.code = 'E_USAGE';
+    throw err;
+  }
+
+  if (!port?.ready) {
+    const msg = `LLM 未就绪：${status.reason}。把 key 写入 ~/.config/sedimem/llm-key（0600）`
+      + '或设 MEMO_LLM_API_KEY，再把 policy.llm.provider 改成 openai-compatible、egress 改成 egress-allowed。';
+    if (json) { process.stdout.write(`${JSON.stringify({ ok: false, code: 'E_LLM_UNAVAILABLE', message: msg, ...status })}\n`); return { ok: false, ...status }; }
+    process.stdout.write(`${msg}\n`);
+    return { ok: false, code: 'E_LLM_UNAVAILABLE', ...status };
+  }
+
+  const startedAt = Date.now();
+  const res = await port.complete({
+    purpose: 'derive',
+    system: '你是一个严格的事实摘要器，只输出 JSON：{"title":"<=40字","summary":"<=80字"}',
+    user: '记录：sedimem 的真相层是 append-only 的 JSONL，索引与摘要都是可重建的派生物。',
+  });
+  const ms = Date.now() - startedAt;
+  if (!res.ok) {
+    const msg = `LLM 调用失败：${res.error?.code ?? 'E_LLM_FAILED'} ${res.error?.message ?? ''}`;
+    if (json) { process.stdout.write(`${JSON.stringify({ ok: false, code: res.error?.code ?? 'E_LLM_FAILED', message: msg, ms, ...status })}\n`); return { ok: false, ms, ...status }; }
+    process.stdout.write(`${msg}\n`);
+    return { ok: false, code: res.error?.code ?? 'E_LLM_FAILED', ms, ...status };
+  }
+  const out = { ok: true, ms, sample: String(res.text ?? '').slice(0, 200), usage: res.usage ?? null, ...status };
+  if (json) { process.stdout.write(`${JSON.stringify(out)}\n`); return out; }
+  process.stdout.write(`LLM 可用（${ms}ms）：${out.sample}\n`);
+  return out;
+}

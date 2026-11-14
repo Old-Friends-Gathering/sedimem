@@ -11,6 +11,7 @@ import { defaultPolicy as POLICY, kindMeta } from '../config/policy.js';
 import { maskSuspiciousRecord } from './mask.js';
 // 错误工厂从 service.js 反向引用（错误文本被测试断言，必须单一来源）。
 import { invalid, invalidArg } from '../core/errors.js';
+import { parseAsOf, nowIso } from '../core/time.js';
 
 /**
  * 检索：bm25 × kindWeight × recencyDecay × confidence（系数全部来自 policy）。
@@ -33,10 +34,7 @@ export async function searchRecords(svc, query, {
   let asOfMs = null;
   let asOfIso = null;
   if (asOf !== undefined && asOf !== null) {
-    asOfMs = Date.parse(asOf);
-    if (typeof asOf !== 'string' || Number.isNaN(asOfMs)) {
-      throw invalidArg(`search: asOf must be an ISO-8601 string, got ${JSON.stringify(asOf)}`);
-    }
+    asOfMs = parseAsOf(asOf, 'search: asOf');
     asOfIso = new Date(asOfMs).toISOString(); // 归一化到 UTC（支持 +08:00 等偏移量）
   }
 
@@ -117,7 +115,7 @@ export async function searchRecords(svc, query, {
   const out = {
     items: top.map((it) => ({ ...it, record: withExtraHits(svc, maskSuspicious(svc, it.record, includeSuspicious)) })),
     total: items.length,
-    asOf: asOfIso ?? svc._nowIso(),
+    asOf: asOfIso ?? nowIso(svc.clock),
   };
   // 语义道状态要显式可见（D1）：调用方（/api/search、CLI、MCP）据此提示「这次是纯词法」。
   // 两种情形都算降级，但原因不同：

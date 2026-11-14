@@ -15,13 +15,14 @@ import {
   resolveParentScope, updateSessionRegistry,
 } from '../session/lifecycle.js';
 import { normalizeCheckpoint, parseDshSummary, writeCheckpoint } from '../session/checkpoint.js';
+import { autoCheckpoint } from '../session/checkpoint-llm.js';
 import { renderHandoff, writeHandoff } from '../session/handoff.js';
 
 const USAGE = `memo session —— 会话临时记忆库（可丢弃、可晋升）
 
 用法:
   memo session start --title <t> [--repo <path>] [--json]        建临时库，返回 scope 与提示
-  memo session checkpoint --scope session:<id> (--file <json> | --from-summary <dsh.json>) [--json]
+  memo session checkpoint --scope session:<id> (--file <json> | --from-summary <dsh.json> | --auto [--transcript <path>] [--llm]) [--json]
   memo session status --scope session:<id> [--json]
   memo session close --scope session:<id> [--json]               晋升 decision/gotcha → 主库 + 写交接 + 其余 tombstone
   memo session sweep [--older-than 14d] [--json]                 只报告僵尸 session 候选，不删
@@ -146,6 +147,38 @@ export async function sessionCli(args, { service, memoHome, clock = systemClock,
 
     case 'checkpoint': {
       const scope = requireScope(opts);
+      // --auto 分支（W4）：自动 checkpoint。--llm 才构造 LLM 端口；没给 --llm 时
+      // llmPort 缺省 → autoCheckpoint 走确定性 fallback（与既有行为一致，不破坏）。
+      if (opts.auto === true) {
+        const { loadPolicy } = await import('../config/policy.js');
+        const policy = loadPolicy();
+        let llmPort;
+        if (opts.llm === true) {
+          const { createLlmPort } = await import('../llm/port.js');
+          // 测试 / 上层可经 __memoLlmPort 注入假端口；否则按 policy 构造真实端口
+          llmPort = globalThis.__memoLlmPort ?? createLlmPort({ policy });
+        }
+        if (opts.transcript === undefined || opts.transcript === true || opts.transcript === '') {
+          throw new UsageError(`--auto 需要 --transcript <path>（或经上层注入 turns）；没有转录无法生成 checkpoint\n${USAGE}`);
+        }
+        const svc = await openScoped(scope);
+        let result;
+        try {
+          result = await autoCheckpoint({
+            service: svc,
+            transcriptPath: typeof opts.transcript === 'string' ? String(opts.transcript) : undefined,
+            llmPort,
+            price: policy.llm?.price,
+            clock,
+          });
+        } finally {
+          await svc.close();
+        }
+        return emit(
+          `checkpoint（${result.mode}${result.reason ? `: ${result.reason}` : ''}）已追加\n`,
+          result,
+        );
+      }
       let checkpoint;
       let compactionId;
       if (opts.file !== undefined && opts.file !== true) {

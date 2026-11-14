@@ -15,10 +15,10 @@ const DARK = {
   light: false,
   nodeFg: '#cfd6e4',   // 活跃节点
   nodeDim: '#8b93a3',  // superseded 节点
-  label: '#475569',    // 节点标签
-  grid: '#262b36',     // 参考线/坐标
+  label: '#acb5cf',    // 节点标签
+  grid: '#253047',     // 参考线/坐标
   badge: '#e7e9ee',    // ×N 徽标
-  bg: '#11141b',
+  bg: '#151517',
 };
 
 const LIGHT = {
@@ -26,9 +26,9 @@ const LIGHT = {
   nodeFg: '#1f2430',
   nodeDim: '#6b7280',  // 浅色下比深色的 #8b93a3 更深，否则被 superseded 的 0.4 alpha 抹平
   label: '#334155',    // 浅底上标签再压深一档
-  grid: '#dce0e7',
+  grid: '#e6eaf2',
   badge: '#1f2430',
-  bg: '#f5f6f8',
+  bg: '#ffffff',
 };
 
 /** 浅色下各类元素的压暗比例（0=不压暗，1=纯黑）。边比节点更需要压暗。 */
@@ -81,6 +81,11 @@ export function nodeStroke(pal) {
  *          当前系统外观对应的画布配色。
  */
 export function uiPalette() {
+  // 与宿主色板同源：?theme=light|dark 或系统偏好，画布与 CSS 一起切换
+  const forced = typeof window !== 'undefined'
+    ? new URLSearchParams(window.location?.search ?? '').get('theme') : null;
+  if (forced === 'light') return LIGHT;
+  if (forced === 'dark') return DARK;
   const dark = typeof matchMedia === 'function'
     ? matchMedia('(prefers-color-scheme: dark)').matches
     : true;
@@ -89,3 +94,46 @@ export function uiPalette() {
 
 /** 供测试与其它模块复用的常量（避免测试里手抄魔法值）。 */
 export const PALETTES = Object.freeze({ DARK, LIGHT, DARKEN });
+
+/* 宿主（DSH）配色对齐：观察台要嵌进 DSH 插件面板，颜色必须像同一个软件。
+ * 取值为 DSH 客户端包内出现频次最高的品牌/背景色（grep 字面量所得，非公开令牌）；
+ * 换主题只改这里，style.css 只消费 --sd-*。 */
+export const HOST_LIGHT = Object.freeze({
+  light: true, bg: '#ffffff', surface: '#f5f6fc', panel: '#ffffff', panel2: '#f0f2f9',
+  border: '#e6eaf2', text: '#1f2a44', muted: '#7a859e', faint: '#acb5cf',
+  accent: '#4d6bfe', accentSoft: '#e8edff', danger: '#fc5c5c', ok: '#97b552',
+  info: '#0188fb', warn: '#ffb980',
+});
+export const HOST_DARK = Object.freeze({
+  light: false, bg: '#151517', surface: '#0f1115', panel: '#1f2433', panel2: '#253047',
+  border: '#253047', text: '#e8edff', muted: '#acb5cf', faint: '#7a859e',
+  accent: '#4d6bfe', accentSoft: '#1f2a44', danger: '#fc5c5c', ok: '#97b552',
+  info: '#5ab1ef', warn: '#ffb980',
+});
+
+/** 当前宿主色板：?theme=light|dark 可强制（截图/回归用），否则跟随系统。 */
+export function hostPalette() {
+  if (typeof window === 'undefined') return HOST_LIGHT;
+  const forced = new URLSearchParams(window.location?.search ?? '').get('theme');
+  if (forced === 'light') return HOST_LIGHT;
+  if (forced === 'dark') return HOST_DARK;
+  const dark = typeof window.matchMedia === 'function'
+    && window.matchMedia('(prefers-color-scheme: dark)').matches;
+  return dark ? HOST_DARK : HOST_LIGHT;
+}
+
+/** 把宿主色板写进 --sd-* 变量。 */
+export function applyHostVars(root) {
+  const el = root ?? (typeof document !== 'undefined' ? document.documentElement : null);
+  if (!el || !el.style) return null;
+  const p = hostPalette();
+  const map = {
+    '--sd-bg': p.bg, '--sd-surface': p.surface, '--sd-panel': p.panel, '--sd-panel2': p.panel2,
+    '--sd-border': p.border, '--sd-text': p.text, '--sd-muted': p.muted, '--sd-faint': p.faint,
+    '--sd-accent': p.accent, '--sd-accent-soft': p.accentSoft,
+    '--sd-danger': p.danger, '--sd-ok': p.ok, '--sd-info': p.info, '--sd-warn': p.warn,
+  };
+  for (const [k, v] of Object.entries(map)) el.style.setProperty(k, v);
+  el.style.setProperty('color-scheme', p.light ? 'light' : 'dark');
+  return p;
+}
