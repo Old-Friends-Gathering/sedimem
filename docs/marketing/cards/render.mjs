@@ -153,7 +153,6 @@ const top = (kicker = 'LOCAL-FIRST MEMORY') => `
   <div class="top"><span class="dot"></span><b>sedimem</b><span>· 记忆观测台</span></div>
   <div class="kicker">${kicker}</div>`;
 
-const CARDS_KEYS = [];
 const CARDS = {
   /* 1 封面：只讲一个钩子 */
   cover: () =>
