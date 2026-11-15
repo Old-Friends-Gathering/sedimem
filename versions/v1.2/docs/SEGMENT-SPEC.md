@@ -70,7 +70,7 @@ export function captureTask({memoHome, taskId, cwd, mode='rules', llmPort, dryRu
 ## 5. brief（`src/session/ledger-brief.js`）
 
 ```js
-export function briefJson({memoHome, taskId, asOf, maxChars=2200, clock}): {
+export function briefJson({memoHome, taskId, asOf, maxChars=4000, clock}): {
   task: {id, title, state},
   summary: string,
   decisions: [{text, segmentId, fromSeq}],

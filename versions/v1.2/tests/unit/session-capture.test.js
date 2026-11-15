@@ -385,3 +385,22 @@ describe('capture: LLM 模式', () => {
     assert.equal(disk.summary, 'LLM 任务摘要');
   });
 });
+
+describe('capture: 决策精度（v1.2 起收紧）', () => {
+  test('句首下结论的才算决策；假设/对比/描述语气不算', () => {
+    const seg = extractSegment({
+      turns: [
+        { role: 'assistant', text: '决定改为先写 ledger.js 再写 capture.js。' },
+        { role: 'assistant', text: '更糟的是：平移会把 userAdjusted 置真，于是 fitView 也不再自动贴合。' },
+        { role: 'assistant', text: '如果改成两段式，可能就够了。' },
+        { role: 'assistant', text: '这里统一为 JSONL，其余派生层都可重建。' },
+      ],
+      fromSeq: 1, toSeq: 4, anchor: anchor(),
+    });
+    const joined = seg.decisions.join(' | ');
+    assert.ok(joined.includes('决定改为先写 ledger.js'), `应保留句首决策，实际 ${joined}`);
+    assert.ok(joined.includes('统一为 JSONL'), `应保留「这里…统一为」，实际 ${joined}`);
+    assert.ok(!joined.includes('更糟的是'), `不应把描述当决策，实际 ${joined}`);
+    assert.ok(!joined.includes('如果改成两段式'), `不应把假设当决策，实际 ${joined}`);
+  });
+});

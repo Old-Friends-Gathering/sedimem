@@ -63,10 +63,24 @@ function isNoiseTurn(turn) {
 
 /** 关键词：决定/改为/采用/不再 → decisions；坑/注意/踩了/原来/必须 → gotchas；
  *  TODO/待/还没 → pendingJobs；下一步/接着/然后 → nextSteps（SPEC §4） */
-const DECISION_RE = /(决定|改为|采用|不再)/;
+const DECISION_RE = /(决定|改为|改成|采用|不再|确定用|统一为|统一用)/;
+// 决策的判据必须更强：句首（可带「所以/因此/这里/我们/我」等引导）直接给结论，
+// 或者句中出现「决定/改为/…」且**没有**假设语气/反问。否则「更糟的是：平移会把…」这类描述会被误收。
+const DECISION_HEAD_RE = /^(?:所以|因此|那么|最后|这边|这里|我们|我|这块)?[，,]?\s*(决定|改为|改成|采用|不再|确定用|统一为|统一用)/;
+const HEDGE_RE = /(如果|假如|也许|可能|似乎|要不要|是不是|？|\?|更糟|反而|否则会|可以考虑)/;
 const GOTCHA_RE = /(坑|注意|踩了|原来|必须)/;
 const PENDING_RE = /(TODO|待|还没)/i;
 const NEXT_STEP_RE = /(下一步|接着|然后)/;
+
+const DECISION_CUE_RE = /(决定|改为|改成|采用|不再|确定用|统一为|统一用)/;
+
+/** 决策句判据：句首下结论，或 cue 出现在句首 12 字内（主语很短）且整句 ≤80、无假设/反问语气 */
+function isDecisionSentence(s) {
+  if (HEDGE_RE.test(s)) return false;
+  if (DECISION_HEAD_RE.test(s)) return true;
+  const idx = s.search(DECISION_CUE_RE);
+  return idx >= 0 && idx <= 12 && s.length <= 80;
+}
 
 /** 文件路径：只收 src/ tests/ docs/ 下的仓库相对路径（SPEC §4） */
 const FILE_RE = /(?:src|tests|docs)\/[A-Za-z0-9_.@%+\-/]+/g;
@@ -153,12 +167,13 @@ function sentencesOf(texts) {
   return out;
 }
 
-/** 命中关键词的句子，最多 cap 条 */
-function pickBy(sentences, re, cap) {
+/** 命中关键词的句子，最多 cap 条。可选 accept 做更强的语义过滤 */
+function pickBy(sentences, re, cap, accept) {
   const out = [];
   const seenPrefix = new Set();
   for (const s of sentences) {
     if (!re.test(s)) continue;
+    if (accept && !accept(s)) continue;
     if (s.length > 120) continue;                      // 长句多半是叙述，不是结论
     if (s.includes('**') || s.includes('|') || s.includes('](')) continue; // markdown 残留
     if ((s.match(/[\u4e00-\u9fa5]/g) ?? []).length < 6) continue;         // 中文太少
@@ -252,7 +267,7 @@ function extractRules({ turns, fromSeq, toSeq, policy, anchor, source }) {
   return finalizeSegment({
     summary: buildSummary(turns, fromSeq, toSeq),
     facts: [],
-    decisions: pickBy(sentences, DECISION_RE, SEGMENT_LIMITS.decisions),
+    decisions: pickBy(sentences, DECISION_RE, SEGMENT_LIMITS.decisions, isDecisionSentence),
     gotchas: pickBy(sentences, GOTCHA_RE, SEGMENT_LIMITS.gotchas),
     pendingJobs: pickBy(allSentences, PENDING_RE, SEGMENT_LIMITS.pendingJobs),
     nextSteps: pickBy(allSentences, NEXT_STEP_RE, SEGMENT_LIMITS.nextSteps),

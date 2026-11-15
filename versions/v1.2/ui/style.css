@@ -236,7 +236,7 @@ tbody tr:hover{background:var(--sd-panel2)}
 /* 导入 / 编辑 */
 .drop{border:1.5px dashed var(--sd-border); border-radius:var(--r-md); padding:26px; text-align:center; color:var(--sd-muted)}
 .drop.over{border-color:var(--sd-accent); background:var(--sd-accent-soft)}
-.md{font-size:var(--fs-md); line-height:1.7}
+.md{font-size:var(--fs-md); line-height:1.7; color:var(--sd-text)}
 .md h1,.md h2,.md h3{margin:14px 0 6px} .md h1{font-size:var(--fs-xl)} .md h2{font-size:var(--fs-lg)} .md h3{font-size:var(--fs-md)}
 .md ul{margin:6px 0 6px 18px} .md pre{background:var(--sd-panel2); padding:10px; border-radius:var(--r-sm); overflow:auto}
 
@@ -284,7 +284,7 @@ tbody tr:hover{background:var(--sd-panel2)}
 .ledger-brief-b{padding:12px 14px; border-top:1px solid var(--sd-border)}
 .ledger-brief-b[hidden]{display:none}
 .ledger-brief-hint{font-size:var(--fs-xs); min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap}
-.ledger-brief-text{margin:0; padding:10px 12px; background:var(--sd-panel); border:1px solid var(--sd-border);
+.ledger-brief-text{margin:0; padding:10px 12px; color:var(--sd-text); background:var(--sd-panel); border:1px solid var(--sd-border);
   border-radius:var(--r-sm); font-family:var(--mono); font-size:var(--fs-xs); line-height:1.65;
   white-space:pre-wrap; word-break:break-word; max-height:340px; overflow:auto}
 
