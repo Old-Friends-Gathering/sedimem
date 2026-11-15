@@ -21,7 +21,7 @@ import path from 'node:path';
 import { readSegments, readIndex } from './ledger.js';
 
 /** SPEC §5 默认预算（字符） */
-export const DEFAULT_MAX_CHARS = 2200;
+export const DEFAULT_MAX_CHARS = 4000;
 
 /**
  * summary 取「最近 N 段」的段摘要拼接（调研结论：简报默认给最近 3 段，每段 ≤400 字）。

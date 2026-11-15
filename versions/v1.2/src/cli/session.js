@@ -8,6 +8,7 @@ import { existsSync } from 'node:fs';
 import path from 'node:path';
 import { itemsFileName } from '../config/paths.js';
 import { systemClock } from '../core/clock.js';
+import { defaultPolicy } from '../config/policy.js';
 import { PROMOTE_KINDS } from '../session/cli-support.js';
 
 // 兼容旧导出路径：常量本体已迁到 session/cli-support.js（arch 边界：mcp 不依赖 cli）。
@@ -359,8 +360,12 @@ export async function sessionCli(args, { service, memoHome, clock = systemClock,
       const scope = requireScope(opts);
       const taskId = scope.slice(SESSION_PREFIX.length);
       const { captureTask } = await import('../session/capture.js');
-      const mode = opts.llm === true ? 'llm' : 'rules';
-      // --llm 时才构造 LlmPort（规则模式零 token、也不需要 key）
+      // 默认按 policy.session.ledger.llmMode（v1.2 起为 llm：模型优先、失败回落规则）；
+      // --rules 强制规则模式（零 token、离线可用），--llm 强制模型模式。
+      const mode = opts.rules === true ? 'rules'
+        : opts.llm === true ? 'llm'
+          : defaultPolicy?.session?.ledger?.llmMode === 'llm' ? 'llm' : 'rules';
+      // llm 模式才构造 LlmPort（规则模式零 token、也不需要 key）
       let llmPort;
       if (mode === 'llm') {
         // service 构造时已套用 MEMO_LLM_* 环境覆盖，直接借它的 port

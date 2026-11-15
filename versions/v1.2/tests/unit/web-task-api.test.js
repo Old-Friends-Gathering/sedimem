@@ -137,7 +137,7 @@ describe('web 任务账本 API（A1 只读 + A2 写）', () => {
     assert.equal(full.status, 200, JSON.stringify(full.body));
     assert.equal(full.body.ok, true);
     assert.deepEqual(full.body.task, { id: TASK, title: '联调任务', state: 'open' });
-    assert.equal(full.body.budget.maxChars, 2200);
+    assert.equal(full.body.budget.maxChars, 4000);
     assert.equal(full.body.segments.total, 2);
     assert.equal(full.body.segments.used, 2);
     assert.ok(full.body.summary.includes('第二段'));

@@ -142,10 +142,10 @@
       "enabled": true,
       "maxTurnsPerSegment": 120,
       "maxSegmentsPerTask": 200,
-      "briefMaxChars": 2200,
+      "briefMaxChars": 4000,
       "captureOnClose": true,
       "requireCapture": false,
-      "llmMode": "rules"
+      "llmMode": "llm"
     }
   },
   "math": {

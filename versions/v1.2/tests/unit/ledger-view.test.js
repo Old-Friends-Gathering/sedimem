@@ -60,7 +60,7 @@ test('摘要徽标：段数 / 覆盖 / 简报字符 / 上次捕获（本地 HH:M
     task: '20261114-2221-6a5b',
     segments: 3,
     covered: [[1, 122], [122, 471]],
-    briefChars: 2200,
+    briefChars: 4000,
     lastCapturedAt: '2026-11-15T09:53:00',
   });
   assert.equal(ctx.segments, 3);
@@ -68,7 +68,7 @@ test('摘要徽标：段数 / 覆盖 / 简报字符 / 上次捕获（本地 HH:M
   assert.deepEqual(badges.map((b) => b.key), ['segments', 'covered', 'brief', 'captured']);
   assert.equal(badges[0].label, '3 段');
   assert.equal(badges[1].label, '覆盖 1–470');
-  assert.equal(badges[2].label, '简报 2.2K');
+  assert.equal(badges[2].label, '简报 4K');
   assert.equal(badges[3].label, '上次捕获 09:53');
 });
 
@@ -154,7 +154,7 @@ const BRIEF_WIRE = {
   references: [{ file: 'ui/ledger-view.js', segmentId: 'seg-a1' }],
   nextSteps: [{ text: '联调 capture 后刷新', segmentId: 'seg-a1', fromSeq: 1 }],
   excluded: [{ kind: 'quarantined', reason: 'quarantined', count: 1 }],
-  budget: { maxChars: 2200, usedChars: 2189, truncated: true },
+  budget: { maxChars: 4000, usedChars: 3989, truncated: true },
   segments: { total: 3, used: 2, quarantined: 1 },
   generatedAt: '2026-11-15T02:00:00.000Z',
 };
@@ -174,7 +174,7 @@ test('brief 文本块渲染：pre.md 常量 + 与 renderBriefText 同版式', ()
   assert.ok(text.includes('— 卡点 —') && text.includes('- task-context.segments 是数字'));
   assert.ok(text.includes('— 下一步 —') && text.includes('- 联调 capture 后刷新'));
   assert.ok(text.includes('— 关键文件 —') && text.includes('- ui/ledger-view.js'));
-  assert.ok(text.includes('（预算 2200 字已截断，已用 2189 字；展开全部请用 expand）'));
+  assert.ok(text.includes('（预算 4000 字已截断，已用 3989 字；展开全部请用 expand）'));
 });
 
 test('brief 归一化：缺 task 视为非 briefJson，可疑输入不抛异常', () => {

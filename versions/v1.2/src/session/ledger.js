@@ -225,14 +225,22 @@ export function readIndex({ memoHome, taskId } = {}) {
  * @returns {Array<[number, number]>}
  */
 export function coveredSeqs({ memoHome, taskId } = {}) {
+  // 真相是 segments.jsonl：index.json 只是派生缓存。若两者不一致（例如手动删了段文件、
+  // 或上次写入中途崩溃），以段文件为准 —— 否则会「以为覆盖了」而静默漏捕获。
+  const { segments, badLines } = readSegments({ memoHome, taskId });
+  const fromSegments = mergeCovered(segments);
   const idx = readIndex({ memoHome, taskId });
-  if (idx && Array.isArray(idx.coveredSeqs)) {
+  const idxCovered = idx && Array.isArray(idx.coveredSeqs) ? idx.coveredSeqs.length : 0;
+  if (segments.length === 0 && badLines === 0 && idxCovered > 0) {
+    // 段文件空了但索引还在 → 索引不可信，按「未覆盖」处理，让 capture 重新折
+    return [];
+  }
+  if (idx && Array.isArray(idx.coveredSeqs) && idxCovered === fromSegments.length) {
     return idx.coveredSeqs
       .filter((r) => Array.isArray(r) && Number.isFinite(r[0]) && Number.isFinite(r[1]) && r[0] < r[1])
       .map((r) => [r[0], r[1]]);
   }
-  const { segments } = readSegments({ memoHome, taskId });
-  return mergeCovered(segments);
+  return fromSegments;
 }
 
 /**

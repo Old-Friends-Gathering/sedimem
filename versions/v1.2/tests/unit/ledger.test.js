@@ -267,3 +267,13 @@ describe('ledger: archiveTask', () => {
     assert.equal(existsSync(join(res.movedTo, 'meta.json')), true);
   });
 });
+
+describe('ledger: 段文件是覆盖区间的唯一真相', () => {
+  test('段文件被删但 index 还在 → coveredSeqs 归零（不得静默跳过重新捕获）', async () => {
+    await append(1, 10);
+    assert.deepEqual(coveredSeqs({ memoHome: home, taskId: 'task-1' }), [[1, 10]]);
+    // 手动删掉段文件（保留 index.json）
+    rmSync(segmentsFile(home, 'task-1'));
+    assert.deepEqual(coveredSeqs({ memoHome: home, taskId: 'task-1' }), [], '段文件没了就必须回到「未覆盖」');
+  });
+});
