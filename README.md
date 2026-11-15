@@ -220,7 +220,8 @@ node tools/quality-check.mjs && node tools/security-check.mjs && node tools/cove
 | 版本 | 主题 | 状态 |
 |---|---|---|
 | v1.0.2 | 三处真 fix（思考链/重建/懒加载）+ 文档改图为主 | ✅ 已发布 |
-| **v1.2.0** | 任务账本：会话转录折成可还原的段、简报、隔离与归档（`memo session capture/brief/expand`） | ✅ 当前 |
+| **v1.2.1** | 任务账本补丁：简报可读性与预算、决策抽取精度、默认走 LLM | ✅ 当前 |
+| v1.2.0 | 任务账本：会话转录折成可还原的段、简报、隔离与归档（`memo session capture/brief/expand`） | ✅ 已发布 |
 | v1.1.0 | 记忆中心整体 UI 重做 + 任务库按任务命名/可删除（`/api/tasks`） | ✅ 已发布 |
 | v1.0.5 | 任务页/交接页可用性：两栏布局、checkpoint 八段、重复渲染与浅色主题修复 | 已发布 |
 | v1.0.4 | 任务库（`session:*`）在观测台可浏览：`SCOPE_PATTERN` 补上 `session` 前缀 | 已发布 |
