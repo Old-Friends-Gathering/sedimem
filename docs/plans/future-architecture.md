@@ -131,6 +131,7 @@
 | I-12 | 逻辑删除是默认语义；审计脱敏只追加「脱敏事件」，**不改历史行**（否则 prevHash 链断） | 删除后 `get` 为空但链仍可验；脱敏后旧行 hash 不变 |
 | I-13 | 协议版本由写入端盖章；旧 kernel 遇未知大版本拒收，不 fail-open | 用 v2 信封打 v1 kernel → `E_PROTOCOL_UNSUPPORTED` |
 | I-14 | Q 门禁冻结为 14 项（Q1–Q11、Q13、Q14、Q15）；新增不变量走 G 系列，不挤 Q | `quality-check` 断言 Q 集合 = 冻结集合 |
+| I-15 | 任务账本段永不进入 pack 的 `facts`；账本为空时 pack 输出与引入账本前逐字节一致（可加性扩展） | 关账本后 pack `diff` 为空；构造含段的 pack 断言 `facts` 里无段 id |
 
 ### 3.2 边界规则（可检查，不是口号）
 
@@ -224,7 +225,7 @@
 
 ### 5.3 context pack（P1）
 
-输入：`{ task, asOf, budgetTokens, profile, kinds?, includeT2? }`
+输入：`{ task, asOf, budgetTokens, profile, kinds?, includeT2?, includeLedger? }`
 输出：
 
 ```json
@@ -249,10 +250,13 @@
 - 超预算先裁 `references`，再裁低分 facts；被裁项进 `excluded` 并给原因。
 - T2 默认只进 `references`，且只给片段；`includeT2: true` 才进 `facts`（仍需人工提升）。
 - 不读写真相层计数（hits 移出真相层，见 §6.2-11、§18-3）。
+- `includeLedger:true` 时，任务账本（`~/.memo/sessions/<taskId>/segments.jsonl`）作为一个数据源参与装配；**段只贡献 `references` 与 `summary`，永不进 `facts`**（见 v1.2 计划与 I-15）。
 
-### 5.4 任务与审批（P3）
+### 5.4 审批队列（P3）
 
-任务库 `~/.memo/tasks/*.jsonl`，append-only，状态机 `pending → approved | rejected | expired`。审批通过才允许 adapter 执行外写；审批记录进 `events.jsonl`。
+审批队列 `~/.memo/tasks/*.jsonl`，append-only，状态机 `pending → approved | rejected | expired`。审批通过才允许 adapter 执行外写；审批记录进 `events.jsonl`。
+
+> 与「任务账本」区分：账本是任务的过程上下文（`~/.memo/sessions/<taskId>/`，v1.2），审批队列是外写动作的前置门（本目录）。两者不共用目录、不共用状态机。
 
 ### 5.5 CLI / MCP 表面
 

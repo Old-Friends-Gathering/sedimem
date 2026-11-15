@@ -1,0 +1,10 @@
+{
+  "id": "I49",
+  "title": "五源导入器：dry-run 不写盘 / apply 落库并留 import 事件 / 重复 apply 幂等",
+  "why": "导入是「把别处已有的记忆搬进来」的唯一入口，一旦默认就写，用户第一次试用就会污染真相层；一旦不幂等，同一次导入跑两遍就会让 dupRatio 爆表。",
+  "pass": [
+    "dry-run 解析出条目但 stats.total 仍为 0",
+    "apply 后活跃记录 ≥2 且事件流出现 op=import",
+    "同一个源再 apply 一次 written=0、skipped≥2（不新增记录）"
+  ]
+}

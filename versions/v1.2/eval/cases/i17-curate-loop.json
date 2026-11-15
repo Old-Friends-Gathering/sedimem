@@ -1,0 +1,11 @@
+{
+  "id": "I17",
+  "name": "curate-loop",
+  "desc": "curate 裁决任务包闭环（docs/10 §8）：3 组中文同义改写（6 条）→ curatePrompt 生成任务包（batchId + curate/<batchId>.json 落盘）→ 读包为每对填 merge decisions 写回 → curateApplyFile 落盘；断言 applied>0、active 收敛 ≤3、真相层行数 ≥6（原行全留，非破坏）、同文件重放 applied=0 且 skipped>0（幂等）、再 dedupeScan 无候选簇。证明扫描→任务包→裁决→收敛→幂等整条链闭合。",
+  "groups": [
+    ["部署脚本在 scripts/deploy.sh", "上线脚本位于 scripts/deploy.sh"],
+    ["缓存命中率低于 60% 要报警", "缓存命中率不足 60% 时触发告警"],
+    ["发布窗口限定工作日晚上", "发版只能在工作日夜间进行"]
+  ],
+  "decision": "merge"
+}

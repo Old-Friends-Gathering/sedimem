@@ -1,0 +1,78 @@
+{
+  "version": "0.1.0",
+  "ts": "2026-11-02T05:00:26.268Z",
+  "cases": [
+    {
+      "id": "I1",
+      "pass": true,
+      "ms": 67,
+      "detail": "ok"
+    },
+    {
+      "id": "I2",
+      "pass": true,
+      "ms": 67,
+      "detail": "ok"
+    },
+    {
+      "id": "I3",
+      "pass": true,
+      "ms": 63,
+      "detail": "ok"
+    },
+    {
+      "id": "I4",
+      "pass": true,
+      "ms": 60,
+      "detail": "ok"
+    },
+    {
+      "id": "I5",
+      "pass": true,
+      "ms": 65,
+      "detail": "ok"
+    },
+    {
+      "id": "I6",
+      "pass": false,
+      "ms": 110,
+      "detail": "✖ I6 容量：maxActive=20 写 40 条 → 只产生墓碑，doctor 报 quota_exceeded 非 error (56.5155ms) |   AssertionError [ERR_ASSERTION]: doctor 应报 quota_exceeded，实际 [] |       at TestContext.<anonymous> (file://<repo>/versions/v0.1/tests/injection/i6-quota.test.js:60:12) |       at async Test.run (node:internal/test_runner/test:1409:7) |       at async startSubtestAfterBootstrap (node:internal/test_runner/harness:387:3) { |     generatedMessage: false, |     code: 'ERR_ASSER"
+    }
+  ],
+  "metrics": {
+    "active": 2,
+    "dupRatio": 0,
+    "conflictRate": 0,
+    "unitCost": 4.5,
+    "gate": {
+      "dupRatio": true,
+      "conflictRate": true
+    }
+  },
+  "bench": {
+    "n1000": {
+      "write": {
+        "p50": 0.9615000000000009,
+        "p95": 1.4358330000000024,
+        "n": 1000
+      },
+      "search": {
+        "p50": 6.219833000000108,
+        "p95": 8.304916000000048,
+        "n": 200
+      }
+    },
+    "n5000": {
+      "write": {
+        "p50": 2.6449579999998605,
+        "p95": 4.415457999999489,
+        "n": 5000
+      },
+      "search": {
+        "p50": 41.537749999999505,
+        "p95": 43.40583300000071,
+        "n": 200
+      }
+    }
+  }
+}
