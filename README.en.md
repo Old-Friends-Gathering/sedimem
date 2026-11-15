@@ -135,6 +135,28 @@ memo session close      # Promote + write handoff doc
 memo session sweep      # Find zombie stores older than 14 days
 ```
 
+## Task ledger (v1.2)
+
+The task store keeps *conclusions*; the ledger keeps the *process*. Host compaction folds hundreds of thousands of tokens
+into a few summaries — detail, your corrections, and dead ends are gone for good. The ledger folds the session transcript
+into **replayable segments**, so nothing is lost when the session closes and you can expand the original text later.
+
+![Task ledger: segments / brief / capture](docs/shots/ui-ledger.png)
+
+| Capability | What it does | Command |
+|---|---|---|
+| Capture | Transcript → segments (range + anchor + summary + decisions/gotchas/files), idempotent ranges | `memo session capture` |
+| Segments | List segments: range / rules or LLM / quarantined | `memo session segments` |
+| Brief | A "context handoff" for the next agent (pack schema subset, ≤4000 chars) | `memo session brief` |
+| Expand | Re-read the transcript via the anchor and restore the original text | `memo session expand --segment <id>` |
+| Archive | Move the whole task to `archive/` (never a hard delete) | `memo session archive --yes` |
+
+**Boundary**: segments live in `sessions/<taskId>/segments.jsonl` and **never** enter the memory truth layer — no quota,
+no write gates, no facts, no main-store search. Text is redacted before it hits disk; segments that look like prompt
+injection are quarantined and never reach the brief. If the LLM fails, capture falls back to rule extraction and
+**never blocks** `close`.
+
+
 <details>
 <summary><strong>Connect three clients</strong></summary>
 
@@ -195,6 +217,54 @@ Tool surface: 10 `memory_*` + 5 `memory_session_*`, identical across all three c
 | `memory_dedupe_scan` / `memory_curate` | Dedupe scan / adjudicate |
 | `memory_scope` | View or switch store scope |
 | `memory_session_*` (5 tools) | Scratch store start / checkpoint / status / close / sweep |
+
+</details>
+
+
+<details>
+<summary>CLI cheatsheet (all subcommands)</summary>
+
+| Command | What it does |
+|---|---|
+| `memo write --text "..." [--title "一句话标题"] [--kind fact] [--subject s] [--predicate p] [--agent dsh] [--value v] [--confidence 0.8] [--tags a,b] [--privacy private|shared] [--json]` | — |
+| `memo search "..." [--limit 10] [--kind fact] [--as-of ISO] [--json]` | — |
+| `memo brief [--lines 80] [--tier0]` | --tier0：一条一行的目录（≤800 字符，v0.3） |
+| `memo view build|rebuild` | 重建 L2 场景块视图（纯派生，可删可重建） |
+| `memo view show L2 [--limit 50] [--json]` | — |
+| `memo view trace <recordId> [--json]` | 这条记录属哪个 L2 块 / 它是哪几条的派生（L3 溯源） |
+| `memo view l3 plan [--json]` | L3 候选（预算上限来自 policy.l3） |
+| `memo view l3 apply --file drafts.json` | 写入 L3（必须带 sourceRefs，一次 ≤ batchSize） |
+| `memo get <id>` | — |
+| `memo supersede <id> --value "..." [--text "..."] [--agent dsh] [--json]` | — |
+| `memo forget <id> [--purge] [--reason "..."] [--json]` | — |
+| `memo stats [--json]` | — |
+| `memo scope [--json]` | 看本目录解析出的分库（以及 MCP 侧覆盖文件） |
+| `memo doctor [--json]` | — |
+| `memo reindex` | — |
+| `memo curate export [--limit 20]` | — |
+| `memo curate prompt  [--limit N] [--json]` | 生成裁决任务包（docs/02 附录 B） |
+| `memo curate auto    [--limit N] [--dry-run] [--json]` | 自动裁决（JudgePort，确定性无 LLM；裁决 50） |
+| `memo compact        [--dry-run] [--grace 7d] [--json]` | 物理清理：只删 purge+过期的墓碑（裁决 51） |
+| `memo curate status` | 列出批次与进度 |
+| `memo curate apply   --file <任务包.json>` | 应用裁决（严格校验） |
+| `memo curate apply <batchId> --decisions <file|->` | — |
+| `memo dedupe scan [--threshold 0.45] [--dice 0.15] [--limit 50] [--json]` | 只读：近重复候选簇（裁决 22/23/26） |
+| `memo dedupe apply --file decisions.json` | decisions.json: {batchId?, decisions:[{ids:[...]|pairIndex, decision, note}]} |
+| `memo session start --title "..." [--repo <path>]` | 建临时会话库 session:<id>（v0.6） |
+| `memo session checkpoint [--scope s] [--file ck.json] [--from-summary sum.json]` | — |
+| `memo session status [--scope s] [--json]` | — |
+| `memo session close [--scope s]` | 晋升 decision/gotcha + 交接文档 + 其余墓碑 |
+| `memo session sweep [--older-than 14d] [--json]` | 只报告僵尸会话，不删 |
+| `memo session list [--json]` | 任务库清单（标题/记录数/状态/时间/scope） |
+| `memo session rename --scope session:<id> --title <t> [--json]` | 任务库改名（1..80 字符） |
+| `memo session remove --scope session:<id> [--yes] [--json]` | 删任务库→trash/（无 --yes 仅预览，退出码 2） |
+| `memo session capture --scope session:<id> [--llm] [--dry-run]` | 把该任务的对话折叠成段（规则模式零 token） |
+| `memo session segments --scope session:<id> [--json]` | 列出段（区间/模式/可疑标记） |
+| `memo session brief --scope session:<id> [--json] [--as-of ISO]` | 生成任务简报（pack schema 子集） |
+| `memo session expand --scope session:<id> --segment <segId> [--to-file]` | 按锚点还原原文（仅本地） |
+| `memo session archive --scope session:<id> [--yes]` | 归档整个任务目录 → archive/ |
+| `memo migrate dsh-memory [--db path]` | — |
+| `memo serve [--port N] [--no-ui]` | 只读 Web UI/API（默认 127.0.0.1:7788；--no-ui 只提供 API） |
 
 </details>
 

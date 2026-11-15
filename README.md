@@ -130,6 +130,25 @@ memo session close      # 晋升 + 生成交接文档
 memo session sweep      # 扫 14 天僵尸库
 ```
 
+## 任务账本（v1.2）
+
+任务库记「结论」，账本记「过程」：宿主压缩会把几十万 token 的对话折成几段摘要，**细节、你的纠正、走过的弯路都会丢**。
+账本把会话转录折成**可还原的段**，关掉会话也不丢，需要时能按原文展开。
+
+![任务账本：段 / 简报 / 捕获](docs/shots/ui-ledger.png)
+
+| 能力 | 说明 | 命令 |
+|---|---|---|
+| 折段 | 转录 → 段（区间 + 锚点 + 摘要 + 决策/卡点/文件），区间幂等 | `memo session capture` |
+| 看段 | 段列表：区间 / 规则或 LLM / 是否隔离 | `memo session segments` |
+| 简报 | 给下一个 agent 的「上下文接力」（pack schema 子集，≤4000 字） | `memo session brief` |
+| 还原 | 按锚点重读转录，还原该段原文 | `memo session expand --segment <id>` |
+| 归档 | 整任务移到 `archive/`（不物理删除） | `memo session archive --yes` |
+
+**边界**：段存在 `sessions/<taskId>/segments.jsonl`，**不进**记忆库真相层 —— 不占配额、不过四道门、不进 facts、不进主库检索。
+写段前强制脱敏；命中提示注入的段会被隔离（`quarantined`），不进简报。LLM 失败自动回落规则抽取，**不阻塞** `close`。
+
+
 <details>
 <summary><strong>接入三个客户端</strong></summary>
 
@@ -193,11 +212,59 @@ claude mcp add --scope user memo -e MEMO_HOME=$HOME/.memo -- \
 
 </details>
 
+
+<details>
+<summary>CLI 速查（全部子命令）</summary>
+
+| 命令 | 作用 |
+|---|---|
+| `memo write --text "..." [--title "一句话标题"] [--kind fact] [--subject s] [--predicate p] [--agent dsh] [--value v] [--confidence 0.8] [--tags a,b] [--privacy private|shared] [--json]` | — |
+| `memo search "..." [--limit 10] [--kind fact] [--as-of ISO] [--json]` | — |
+| `memo brief [--lines 80] [--tier0]` | — |
+| `memo view build|rebuild` | — |
+| `memo view show L2 [--limit 50] [--json]` | — |
+| `memo view trace <recordId> [--json]` | — |
+| `memo view l3 plan [--json]` | — |
+| `memo view l3 apply --file drafts.json` | — |
+| `memo get <id>` | — |
+| `memo supersede <id> --value "..." [--text "..."] [--agent dsh] [--json]` | — |
+| `memo forget <id> [--purge] [--reason "..."] [--json]` | — |
+| `memo stats [--json]` | — |
+| `memo scope [--json]` | — |
+| `memo doctor [--json]` | — |
+| `memo reindex` | — |
+| `memo curate export [--limit 20]` | — |
+| `memo curate prompt  [--limit N] [--json]` | — |
+| `memo curate auto    [--limit N] [--dry-run] [--json]` | — |
+| `memo compact        [--dry-run] [--grace 7d] [--json]` | — |
+| `memo curate status` | — |
+| `memo curate apply   --file <任务包.json>` | — |
+| `memo curate apply <batchId> --decisions <file|->` | — |
+| `memo dedupe scan [--threshold 0.45] [--dice 0.15] [--limit 50] [--json]` | — |
+| `memo dedupe apply --file decisions.json` | — |
+| `memo session start --title "..." [--repo <path>]` | — |
+| `memo session checkpoint [--scope s] [--file ck.json] [--from-summary sum.json]` | — |
+| `memo session status [--scope s] [--json]` | — |
+| `memo session close [--scope s]` | — |
+| `memo session sweep [--older-than 14d] [--json]` | — |
+| `memo session list [--json]` | — |
+| `memo session rename --scope session:<id> --title <t> [--json]` | — |
+| `memo session remove --scope session:<id> [--yes] [--json]` | — |
+| `memo session capture --scope session:<id> [--llm] [--dry-run]` | — |
+| `memo session segments --scope session:<id> [--json]` | — |
+| `memo session brief --scope session:<id> [--json] [--as-of ISO]` | — |
+| `memo session expand --scope session:<id> --segment <segId> [--to-file]` | — |
+| `memo session archive --scope session:<id> [--yes]` | — |
+| `memo migrate dsh-memory [--db path]` | — |
+| `memo serve [--port N] [--no-ui]` | — |
+
+</details>
+
 ## 门禁
 
 ![五层门禁：质量 → 安全 → 覆盖率 → docs-drift → pages-verify](docs/shots/diagrams/gates.png)
 
-本地脚本 = CI 脚本：质量 14 项 + 安全 9 项 + 覆盖率（lines ≥ 89 / functions ≥ 90 / branches ≥ 77）+ docs-drift + pages-verify，另含 747 tests 与 eval I1–I56。
+本地脚本 = CI 脚本：质量 15 项 + 安全 9 项 + 覆盖率（lines ≥ 89 / functions ≥ 90 / branches ≥ 77）+ docs-drift + pages-verify，另含 747 tests 与 eval I1–I56。
 
 ```bash
 node tools/quality-check.mjs && node tools/security-check.mjs && node tools/coverage-gate.mjs
@@ -220,7 +287,8 @@ node tools/quality-check.mjs && node tools/security-check.mjs && node tools/cove
 | 版本 | 主题 | 状态 |
 |---|---|---|
 | v1.0.2 | 三处真 fix（思考链/重建/懒加载）+ 文档改图为主 | ✅ 已发布 |
-| **v1.2.1** | 任务账本补丁：简报可读性与预算、决策抽取精度、默认走 LLM | ✅ 当前 |
+| **v1.2.2** | 文档同步门禁 Q16 + README/项目站补「任务账本」章节与 CLI 速查 | ✅ 当前 |
+| v1.2.1 | 任务账本补丁：简报可读性与预算、决策抽取精度、默认走 LLM | ✅ 已发布 |
 | v1.2.0 | 任务账本：会话转录折成可还原的段、简报、隔离与归档（`memo session capture/brief/expand`） | ✅ 已发布 |
 | v1.1.0 | 记忆中心整体 UI 重做 + 任务库按任务命名/可删除（`/api/tasks`） | ✅ 已发布 |
 | v1.0.5 | 任务页/交接页可用性：两栏布局、checkpoint 八段、重复渲染与浅色主题修复 | 已发布 |
