@@ -1,0 +1,10 @@
+{
+  "id": "I30",
+  "name": "/api/search 契约",
+  "expects": [
+    "score+basis",
+    "degraded+reason",
+    "空 q 400",
+    "跨分库不串"
+  ]
+}

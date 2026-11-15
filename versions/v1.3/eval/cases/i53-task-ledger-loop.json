@@ -1,0 +1,12 @@
+{
+  "id": "I53",
+  "title": "账本闭环：假转录 → captureTask 段落盘 → index/brief/expand 全链路一致，且不写真相层",
+  "why": "v1.2 引入段级账本（sessions/<taskId>/segments.jsonl），但闭环此前没有端到端用例：转录能不能被切成段、index 是否只是派生视图、brief 的结论是否真来自段、expand 能否从 anchor 还原原 turn、以及 capture 会不会越界去写 record 真相层。这条用例用自造的两帧 zstd 转录把五者钉在一起。",
+  "pass": [
+    "自造 <sessionsRoot>/--tmp-demo--/<uuid>/session.v4.jsonl.zstd（两帧 zstd，user/message + assistant/message + turn/start），captureTask({memoHome,taskId,cwd:'/tmp/demo',sessionsRoot}) 返回 created:1",
+    "segments.jsonl 行数 === index.json 的 segments.length；段区间为 [1,5)（4 条 turn）",
+    "briefJson 的 decisions/gotchas 非空，每条都带已知 segmentId、fromSeq 与该段同名字段逐字一致；segments.total===1、quarantined===0",
+    "expandSegment 重读 anchor 指向的转录，输出含首条/第二条 user 原文与 assistant 原文",
+    "账本不写真相层：items/<scope>.jsonl 不存在，items/ 下无任何 .jsonl 行"
+  ]
+}

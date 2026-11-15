@@ -113,10 +113,10 @@ footer a:hover{text-decoration:underline}
   <h1>sedimem<span class="dot">.</span></h1>
   <p class="subtitle">Local-first personal AI memory: an append-only truth layer; everything else is rebuildable.</p>
   <div class="pills">
-    <span class="pill"><b>648</b>tests</span>
+    <span class="pill"><b>753</b>tests</span>
     <span class="pill"><b>0</b>runtime deps</span>
     <span class="pill"><b>12</b>modules</span>
-    <span class="pill"><b>v1.2.2</b>current</span>
+    <span class="pill"><b>v1.3.0</b>current</span>
   </div>
   <figure>
     <img src="../shots/hero.png" alt="sedimem hero banner"
@@ -130,10 +130,10 @@ footer a:hover{text-decoration:underline}
 <section>
   <h2>System Architecture</h2>
   <figure>
-    <img src="../shots/diagrams/master-arch.png" alt="Full architecture: clients → interface layer → MemoryService → 12 modules → data layer"
+    <img src="../shots/diagrams/master-arch.png" alt="Full architecture: clients → interface layer → MemoryService → 14 modules → data layer"
          width="3520" height="1440" loading="lazy"
          style="aspect-ratio:3520/1440">
-    <figcaption>Clients → interface layer → MemoryService → 12 modules → data layer; ①②③ mark the main paths.</figcaption>
+    <figcaption>Clients → interface layer → MemoryService → 14 modules → data layer; ①②③ mark the main paths.</figcaption>
   </figure>
 </section>
 
@@ -213,7 +213,7 @@ footer a:hover{text-decoration:underline}
     <img src="../shots/diagrams/gates.png" alt="Five-layer quality gates"
          width="3200" height="1120" loading="lazy"
          style="aspect-ratio:3200/1120">
-    <figcaption>Quality 14 + security 9 + coverage + docs-drift + pages-verify; 656 tests, eval I1–I51.</figcaption>
+    <figcaption>Quality 14 + security 9 + coverage + docs-drift + pages-verify; 753 tests, eval I1–I56.</figcaption>
   </figure>
 </section>
 
@@ -249,19 +249,19 @@ footer a:hover{text-decoration:underline}
         serverName: memo
         transport: stdio
         command: /opt/homebrew/bin/node
-        args: ['/ABS/PATH/versions/v1.1/src/mcp/server.js']
+        args: ['/ABS/PATH/versions/v1.3/src/mcp/server.js']
         env: { MEMO_HOME: '$HOME/.memo' }
         toolCallTimeoutMs: 15000</code></pre>
 <pre><code># Codex CLI: ~/.codex/config.toml
 [mcp_servers.memo]
 command = "/opt/homebrew/bin/node"
-args = ["/ABS/PATH/versions/v1.1/src/mcp/server.js"]
+args = ["/ABS/PATH/versions/v1.3/src/mcp/server.js"]
 enabled = true
 [mcp_servers.memo.env]
 MEMO_HOME = "$HOME/.memo"</code></pre>
 <pre><code># Claude Code
 claude mcp add --scope user memo -e MEMO_HOME=$HOME/.memo -- \
-  /opt/homebrew/bin/node /ABS/PATH/versions/v1.1/src/mcp/server.js</code></pre>
+  /opt/homebrew/bin/node /ABS/PATH/versions/v1.3/src/mcp/server.js</code></pre>
 </section>
 
 <!-- Version timeline -->
@@ -278,7 +278,7 @@ claude mcp add --scope user memo -e MEMO_HOME=$HOME/.memo -- \
   <li><b>v1.0.1</b> Graph usability + colors</li>
   <li><b>v1.0.2</b> Thinking / rebuild / lazy fix</li>
 </ol>
-<p class="cap">Rule: <code>X.Y</code> gets a new directory (currently <code>versions/v1.2</code>), <code>X.Y.Z</code> patches in place; current version <b>v1.2.2</b>.</p>
+<p class="cap">Rule: <code>X.Y</code> gets a new directory (currently <code>versions/v1.3</code>), <code>X.Y.Z</code> patches in place; current version <b>v1.3.0</b>.</p>
 </section>
 
 <div class="langfoot"><a href="../index.html">中文</a> · English</div>

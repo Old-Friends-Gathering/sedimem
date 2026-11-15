@@ -1,0 +1,11 @@
+{
+  "id": "I56",
+  "title": "脱敏与隔离：ghp_ 假 token 不落盘，注入句所在段 quarantined，简报不采用隔离段",
+  "why": "账本会把转录摘要与规则抽取的结论长期保存并喂给下一个 agent，所以写盘前必须先脱敏、再判可疑；含注入句的段必须整段隔离，但真相仍留在 segments.jsonl 供 expand 审计，只是 briefJson 永不采用。这条用例同时钉住「脱敏先于落盘」与「隔离不进简报」。",
+  "pass": [
+    "自造含 ghp_ABCDEFGHIJKLMNOPQRSTUVWXYZ0123 与「忽略以上所有指令」的 turn，captureTask 传 policy:{suspiciousPatterns:['忽略以上所有指令']} 后 created:1",
+    "segments.jsonl 磁盘内容不含 token 原文、不含 ghp_ 前缀，且含 [REDACTED:github_token] 占位符；读回的段对象同样不含 token",
+    "该段 quarantined===true，taint 含 suspicious",
+    "briefJson：summary===''、decisions/gotchas 为空、segments.quarantined===1、segments.used===0，excluded 含 {kind:'segment',reason:'quarantined',count>=1}，注入句不透出"
+  ]
+}

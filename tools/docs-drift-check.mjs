@@ -196,8 +196,8 @@ export function checkDocs({ root } = {}) {
     }
     if (kind === 'history' || contentExempt) continue; // history / adr 内容冻结，只查 R1 可选性
 
-    // R2 contract 的 doc-version = CURRENT 小版本
-    if (kind === 'contract' && verM && curMinor && verM[1] !== curMinor) {
+    // R2 contract/manual 的 doc-version = CURRENT 小版本
+    if ((kind === 'contract' || kind === 'manual') && verM && curMinor && verM[1] !== curMinor) {
       const ln = findLine(/^>\s*doc-version:/) || 2;
       findings.push({ rule: 'R2', file: rel, line: ln, message: `doc-version ${verM[1]} ≠ CURRENT ${curMinor}` });
     }

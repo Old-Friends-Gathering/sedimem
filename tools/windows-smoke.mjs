@@ -9,28 +9,30 @@
 //   3. 压得动 —— `memo compact` 退出码 0（曾因 copyFile 落 ADS 报 EINVAL）
 //   4. 跑得成 —— `nightly` 能写出 brief 快照与 metrics 快照
 //
-// 零依赖：只用 node 内置模块 + `versions/v0.3/src` 的公开模块。
+// 零依赖：只用 node 内置模块 + `versions/CURRENT/src` 的公开模块。
 // POSIX 上同样必须全绿（文件名是 `repo:smoke.jsonl`），所以本地就能先跑一遍；
 // 断言一律经 `itemsFileName/briefFileName/metricsFileName` 取路径，绝不硬编码 `:`，
 // 这样同一份脚本在两种平台都成立。
 
 import { spawnSync } from 'node:child_process';
+import fs from 'node:fs';
 import fsp from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import process from 'node:process';
-import { fileURLToPath } from 'node:url';
-
-import { createMemoryService } from '../versions/v0.3/src/api/service.js';
-import { itemsFileName, briefFileName, metricsFileName } from '../versions/v0.3/src/config/paths.js';
-import { listScopes } from '../versions/v0.3/src/web/scopes.js';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
-const V03 = path.join(ROOT, 'versions', 'v0.3');
-const MEMO_CLI = path.join(V03, 'src', 'cli', 'memo.js');
+const CURRENT = fs.readFileSync(path.join(ROOT, 'versions', 'CURRENT'), 'utf8').trim();
+const VERSION_DIR = path.join(ROOT, 'versions', CURRENT);
+const MEMO_CLI = path.join(VERSION_DIR, 'src', 'cli', 'memo.js');
 // nightly 是独立入口（`node src/cli/nightly.js`，docs/06 的 crontab 就这么跑），
 // memo.js 没有 nightly 子命令——别在这里写成 `memo.js nightly`。
-const NIGHTLY_CLI = path.join(V03, 'src', 'cli', 'nightly.js');
+const NIGHTLY_CLI = path.join(VERSION_DIR, 'src', 'cli', 'nightly.js');
+
+const { createMemoryService } = await import(pathToFileURL(path.join(VERSION_DIR, 'src/api/service.js')));
+const { itemsFileName, briefFileName, metricsFileName } = await import(pathToFileURL(path.join(VERSION_DIR, 'src/config/paths.js')));
+const { listScopes } = await import(pathToFileURL(path.join(VERSION_DIR, 'src/web/scopes.js')));
 const SCOPE = 'repo:smoke';
 
 let failed = 0;

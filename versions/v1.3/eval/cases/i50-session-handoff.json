@@ -1,0 +1,11 @@
+{
+  "id": "I50",
+  "title": "会话临时库→主库交接闭环：白名单晋升 / 交接文档六段 / 临时库墓碑化",
+  "why": "临时库的全部价值在 close 那一刻兑现：晋升什么、文档写了什么、临时库有没有清干净。这三件事任一没做到，用户就会得到「记忆丢了」或「越用越乱」的体验。",
+  "pass": [
+    "session 库写入 fact 被拒（E_SCRATCH_KIND_FORBIDDEN）",
+    "close 后主库可搜到晋升的 decision，且存在 predicate=handoff 指针",
+    "$MEMO_HOME/handoffs/<id>.md 存在且含六个中文小节标题与 intent/nextSteps 内容",
+    "close 后临时库除 closed meta 外无 active 记录；会话登记文件状态为 closed"
+  ]
+}

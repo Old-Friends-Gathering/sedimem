@@ -91,7 +91,11 @@ const readLines = async (p) => (await fsp.readFile(p, 'utf8')).split('\n');
 // ── Q1 零运行时依赖 ────────────────────────────────────────────────
 async function q1ZeroDependencies() {
   const problems = [];
-  const pkgs = await walk(ROOT, (p) => p.endsWith('package.json') && !p.includes('node_modules'));
+  // 只约束「当前内核版本」与未来的 packages/*：冻结快照与 adapters 允许各自依赖模型
+  const cur = currentVersionDir();
+  const pkgRoots = [cur, path.join(ROOT, 'packages')];
+  const pkgs = (await walk(ROOT, (p) => p.endsWith('package.json') && !p.includes('node_modules')))
+    .filter((p) => pkgRoots.some((root) => p === path.join(root, 'package.json') || p.startsWith(root + path.sep)));
   if (pkgs.length === 0) problems.push('未找到任何 package.json');
   for (const p of pkgs) {
     const pkg = JSON.parse(await fsp.readFile(p, 'utf8'));
@@ -103,8 +107,9 @@ async function q1ZeroDependencies() {
     if (pkg.type !== 'module') problems.push(`${rel(p)}: type 必须为 "module"`);
     if (!pkg.engines?.node) problems.push(`${rel(p)}: 缺少 engines.node 声明`);
   }
-  // 源码不得 import 任何非 node:/相对路径的模块
-  const srcs = await walk(ROOT, (p) => /\/src\/.*\.js$/.test(p) && !p.includes('node_modules'));
+  // 源码不得 import 任何非 node:/相对路径的模块（只扫当前版本与 packages/*）
+  const srcs = (await walk(ROOT, (p) => /\/src\/.*\.js$/.test(p) && !p.includes('node_modules')))
+    .filter((p) => pkgRoots.some((root) => p.startsWith(root + path.sep)));
   for (const s of srcs) {
     const text = await fsp.readFile(s, 'utf8');
     const specs = [...text.matchAll(/(?:^|\n)\s*(?:import|export)[^;\n]*?from\s*['"]([^'"]+)['"]/g)].map((m) => m[1]);
