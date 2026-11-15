@@ -1,6 +1,17 @@
 # CHANGELOG · v1.2
 
-## [1.2.0] — 2026-11-15（当前）
+## [1.2.1] — 2026-11-15
+
+### Fixed
+- 任务页「生成简报」正文在浅色主题下不可读（vendor 对 `pre` 的着色把正文染成近白）→ 显式 `color:var(--sd-text)`。
+- 简报默认预算 2200 → **4000** 字（`policy.session.ledger.briefMaxChars`），避免稍长任务就截断。
+- `decisions` 把描述/假设当结论 → 判据收紧（句首下结论，或 cue 在前 12 字 + 整句 ≤80 + 无假设/反问语气）。
+- `coveredSeqs` 以 `segments.jsonl` 为唯一真相：段文件被删而 `index.json` 残留时不再静默跳过重新捕获。
+
+### Changed
+- `capture` 默认走 `llm`（`policy.session.ledger.llmMode`），失败自动回落规则；新增 `--rules` 强制规则模式。
+
+## [1.2.0] — 2026-11-15
 
 ### Added — 任务账本（task context ledger）
 - `session capture`：把 DSH/Codex 会话转录折叠成**段（segment）**，落到 `$MEMO_HOME/sessions/<taskId>/segments.jsonl`；规则抽取零 token，`--llm` 走 LlmPort（失败自动回落规则，不阻塞）。
