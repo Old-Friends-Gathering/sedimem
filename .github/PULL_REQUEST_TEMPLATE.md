@@ -22,6 +22,7 @@ Closes #
 - [ ] 未改对外契约（docs/02）
 - [ ] 改了对外契约：已先在 `docs/02-data-model-and-contract.md` 写清并附 ADR 段
 - [ ] 同步了 `CHANGELOG.md` 与本版本 `docs/DELTA.md`
+- [ ] **同步了 README（中英）与项目站（中英）**：新功能有章节、新命令进 CLI 速查、`Q16_SITE_MUST` 已登记（Q16 会拦）
 
 ## 验证证据
 

@@ -119,3 +119,25 @@ Issue（feature/bug/chore 模板，验收标准必须可机械检验）
    以及 `docs/index.html` 是否真的含新版本号；
 3. 它开了 issue 就**在同一条 issue 里**修完再关（同标题不会重复开，别手动造第二条）；
 4. 每天 03:17 UTC 还有一次巡检兜底，长时间不一致会一直有 open issue 提醒。
+
+
+## 8、每次开发都必须同步 README 与项目站（Q16 机械强制）
+
+**规则**：任何一次开发（新功能 / 行为变更 / 新命令）合并前，必须同时更新三处：
+
+1. `README.md` 与 `README.en.md` —— 功能表、命令块、CLI 速查（`<details>` 里那张全命令表）；
+2. `docs/index.html` 与 `docs/en/index.html` —— 新功能要在对应章节加一节（图 + chips + 一句 figcaption），
+   并在 `<details>` 版本时间线里加一行；
+3. 版本面 —— `package.json` / `CHANGELOG` / README 版本表 / 站点 pill（发版时一起动，见 §6）。
+
+**为什么要机械强制**：文档债不是「忘了写」，而是「没人会在绿灯面前停下来写」。所以把它变成报错：
+
+| 检查 | 判据 | 什么时候会红 |
+|---|---|---|
+| **Q16 R1** | 当前版本 CLI 的每个子命令都必须出现在 `README.md` 与 `README.en.md` | 新加了 `memo xxx` 却没进 README |
+| **Q16 R2** | 两个站点各覆盖 ≥10 个命令，且必须含 `Q16_SITE_MUST` 里登记的本版代表命令 | 新功能没在项目站露出 |
+
+新增版本时，**把本版的代表命令加进 `tools/quality-check.mjs` 的 `Q16_SITE_MUST`**（一行），
+这样下一个版本忘了更新页面时，门禁会直接指出来而不是发出去。
+
+**PR 自检**（`.github/PULL_REQUEST_TEMPLATE.md` 的「契约与文档」段）也有一条勾选框，两者互为兜底。

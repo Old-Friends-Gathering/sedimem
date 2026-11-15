@@ -11,7 +11,7 @@
 四个门禁全部**零依赖**、本地与 CI 跑同一份代码，避免"本地绿、CI 红"。
 
 ```bash
-node tools/quality-check.mjs      # 质量（Q1–Q11 + Q14 共 14 项）
+node tools/quality-check.mjs      # 质量（Q1–Q11 + Q13–Q16 共 15 项）
 node tools/security-check.mjs     # 安全（S1–S9 共 9 项）
 node tools/coverage-gate.mjs      # 覆盖率（3 项）
 cd "$(cat versions/CURRENT)" && node eval/run.js   # 行为（I1–I56）
@@ -61,7 +61,7 @@ cd "$(cat versions/CURRENT)" && node eval/run.js   # 行为（I1–I56）
 
 阈值贴着基线设置，意味着**新增未覆盖代码会直接卡住**——这是故意的：先写测试再实现（TDD）。
 
-## 三、质量门禁（quality-check.mjs，14 项：Q1–Q11 + Q13 + Q14 + Q15；Q12 已被 v0.6 计划占用）
+## 三、质量门禁（quality-check.mjs，15 项：Q1–Q11 + Q13 + Q14 + Q15 + Q16；Q12 已被 v0.6 计划占用）
 
 | ID | 检查 | 判定 | 为什么这条值得占一个门禁 |
 |---|---|---|---|
@@ -77,8 +77,9 @@ cd "$(cat versions/CURRENT)" && node eval/run.js   # 行为（I1–I56）
 | Q10 | 发布面同步 | README 版本表含当前 `vX.Y.Z`；`docs/index.html` 含当前 `X.Y.Z`；`ci.yml` 的 `eval (I1–IN)` 中 N 等于 `eval/run.js` 的用例数 | 发布面是对外唯一入口，落后等于对外撒谎；CI 检查名不同步会让 PR 永远等一个不存在的检查 |
 | Q14 | 文档治理（`tools/docs-drift-check.mjs`：头部元信息 / 版本一致 / 无旧版本路径 / 测试数与 I 区间 / 门禁项数 / 注释引用已删除文档） | 六条 R1–R6 全绿（递归扫 docs/；R6 禁注释引用 docs/09、docs/10，改指 docs/02 附录 A/B）；过期豁免报 `ALLOWLIST_EXPIRED` | 文档跟版本走是硬需求，靠人记必漏 |
 | Q11 | 写侧粒度与会话库契约 | `config/policy.json` 必须有 `write` 段且 `textHardMaxChars`/`valueRecommendChars`/`titleRequiredKinds` 合法；`src/core/record.js` 无 `MAX_TEXT` 静默截断；session 写路径有 kind 校验（`E_SCRATCH_KIND_FORBIDDEN` 禁 fact）；eval 在册 I37–I39 | 这两条契约最容易被后续改动悄悄退化（把硬上限改回静默截断、把 session 的 fact 禁令删掉），必须机械钉住 |
+| Q16 | 发版面覆盖 | 当前版本 CLI 的每个子命令都在 `README.md` / `README.en.md` 出现；`docs/index.html` 与 `docs/en/index.html` 各覆盖 ≥10 个命令且含本版代表命令（`Q16_SITE_MUST`） | 功能上线忘了写 README/项目站是最常见的「文档债」，人记必漏；这条把它变成红灯 |
 
-> 编号预留：Q12 已被 v0.6 计划占用；v1.0 计划新增 Q13（vendor 资产）、Q14（文档治理）、Q15（LLM 派生层），见 `docs/plans/v1.0.0-refactor.md`。
+> 编号预留：Q12 已被 v0.6 计划占用；v1.0 加 Q13（vendor 资产）、Q14（文档治理）、Q15（LLM 派生层）；v1.2 加 Q16（发版面覆盖）。
 
 ## 四、安全门禁（security-check.mjs，9 项）
 

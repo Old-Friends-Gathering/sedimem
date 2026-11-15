@@ -652,8 +652,56 @@ async function q14DocsGovernance() {
     problems.length === 0, problems);
 }
 
+// ── Q16 发版面覆盖（每次开发都必须同步 README 与项目站）────────────
+// 规则（docs/05-process.md §8）：
+//  R1  README（中英）必须列出当前版本 CLI 的**全部**子命令 —— 功能上线忘了写 README 会在这里红。
+//  R2  项目站（中英）必须覆盖到「主要命令」—— 页是视觉叙事，不要求逐条列出，但新功能那一节必须加 chip。
+// 豁免写在这里并注明理由。
+const Q16_README_IGNORE = new Set(['memo help', 'memo version']); // 自解释命令
+const Q16_SITE_MIN_CMDS = 10;   // 项目站至少覆盖的命令数（当前 10）
+const Q16_SITE_MUST = ['memo session capture', 'memo session brief']; // 每个版本的「新功能代表命令」在此登记
+async function q16SurfaceCoverage() {
+  const problems = [];
+  const cliPath = path.join(currentVersionDir(), 'src/cli/memo.js');
+  const usage = await fsp.readFile(cliPath, 'utf8');
+  const cmds = new Set();
+  for (const line of usage.split('\n')) {
+    const m = line.match(/\bmemo\s+([a-z][a-z0-9-]*)(?:\s+([a-z][a-z0-9-]*))?/);
+    if (!m) continue;
+    const sub = m[1];
+    if (sub.startsWith('-')) continue;
+    cmds.add(m[2] && !m[2].startsWith('-') ? `memo ${sub} ${m[2]}` : `memo ${sub}`);
+  }
+  const readmes = { 'README.md': await fsp.readFile(path.join(ROOT, 'README.md'), 'utf8') };
+  try { readmes['README.en.md'] = await fsp.readFile(path.join(ROOT, 'README.en.md'), 'utf8'); } catch { /* 单语仓可缺 */ }
+  const sites = {};
+  for (const f of ['docs/index.html', 'docs/en/index.html']) {
+    try { sites[f] = await fsp.readFile(path.join(ROOT, f), 'utf8'); } catch { /* 可缺 */ }
+  }
+
+  // R1：README 必须列全
+  for (const cmd of cmds) {
+    if (Q16_README_IGNORE.has(cmd)) continue;
+    for (const [name, text] of Object.entries(readmes)) {
+      if (!text.includes(cmd)) problems.push(`${name}: 缺 \`${cmd}\`（CLI 已提供，README 必须同步）`);
+    }
+  }
+  // R2：项目站覆盖主要命令 + 本版代表命令
+  for (const [name, text] of Object.entries(sites)) {
+    const mentioned = [...cmds].filter((c) => text.includes(c));
+    if (mentioned.length < Q16_SITE_MIN_CMDS) {
+      problems.push(`${name}: 只提到 ${mentioned.length} 个命令（下限 ${Q16_SITE_MIN_CMDS}）—— 新功能要在项目站加 chip`);
+    }
+    for (const must of Q16_SITE_MUST) {
+      if (!text.includes(must)) problems.push(`${name}: 缺本版代表命令 \`${must}\`（新功能必须在项目站露出）`);
+    }
+  }
+  record('Q16', `发版面覆盖（README 需列全 ${cmds.size} 个 CLI 命令；项目站 ≥${Q16_SITE_MIN_CMDS} 个 + 本版代表命令）`,
+    problems.length === 0, problems);
+}
+
 const CHECKS = [q1ZeroDependencies, q2SourceSize, q3TestInventory, q4EvalAlignment,
-  q5ContractCoverage, q6DocLinks, q7VersionIntegrity, q8Encoding, q9WebUiBoundary, q10ReleaseSurface, q11WriteAndSessionContract, q14DocsGovernance, q15LlmDeriveContract, q13VendorAssets];
+  q5ContractCoverage, q6DocLinks, q7VersionIntegrity, q8Encoding, q9WebUiBoundary, q10ReleaseSurface, q11WriteAndSessionContract, q14DocsGovernance, q15LlmDeriveContract, q13VendorAssets, q16SurfaceCoverage];
 
 for (const check of CHECKS) {
   try {
