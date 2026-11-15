@@ -1,0 +1,9 @@
+{
+  "id": "I25",
+  "name": "语义道 RRF 融合与降级",
+  "expects": [
+    "两路命中 basis 可解释",
+    "语义路抛错时退回词法且 degraded",
+    "embedder 未就绪构造即降级"
+  ]
+}

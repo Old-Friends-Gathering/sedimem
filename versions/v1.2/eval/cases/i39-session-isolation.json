@@ -1,0 +1,9 @@
+{
+  "id": "I39",
+  "name": "会话库隔离",
+  "expects": [
+    "session 库拒绝 fact",
+    "主库 brief/search 不含临时记录",
+    "临时库 brief 不含主库记录"
+  ]
+}

@@ -33,7 +33,7 @@ export const THRESHOLDS = {
   // v1.0.1 调到 16000：W2 去重把三份重复实现收成 core/text.js + core/time.js（≈190 行，
   // 换掉 8+4 处散落实现，净增但可测），W4 会话 LLM 新增 session/transcript.js +
   // checkpoint-llm.js（≈400 行，有 I45 守着）。单文件 400 硬线仍然不动。
-  maxTotalSrcLines: 16000,
+  maxTotalSrcLines: 19000, // v1.2：任务账本新增 session/{ledger,capture,ledger-brief,expand}.js + web/api/task-ledger.js + ui/ledger-view.js（≈+1850 行）
   /** 单元测试文件数下限 */
   minTestFiles: 8,
   /** 契约文档对 src 导出名的覆盖率（%）；内部工具函数在 contract-exempt.json 里登记豁免 */
@@ -368,7 +368,7 @@ async function q9WebUiBoundary() {
     //    3700（v1.0.1）：新增侧边栏+顶栏布局与图谱工具栏样式约 130 行 CSS；
     //    同时删掉自研 3D 布局 layout.js（241 行）——净增是「换库后的一次性样式成本」。
     const UI_MAX_FILE_LINES = 600;
-    const UI_MAX_TOTAL_LINES = 4400; // v1.1：九页 + 设计系统 + today/hygiene/session/handoff/search 五个视图模块
+    const UI_MAX_TOTAL_LINES = 5000; // v1.2：新增 ledger-view.js（≈500 行） // v1.1：九页 + 设计系统 + today/hygiene/session/handoff/search 五个视图模块
     let uiTotalLines = 0;
     for (const f of uiSrcs) {
       const n = (await fsp.readFile(f, 'utf8')).split('\n').length;

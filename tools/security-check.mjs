@@ -151,7 +151,9 @@ async function s7LargeOrBinary() {
     const buf = await fsp.readFile(f).catch(() => null);
     if (!buf) continue;
     if (buf.length > 1024 * 1024) problems.push(`${rel(f)}: ${(buf.length / 1048576).toFixed(2)} MB > 1 MB（大文件走 release/LFS）`);
-    if (!allowedBinary.test(f) && !TEXT_EXT.test(f)) {
+    // 测试夹具里的二进制（zstd/sqlite 等）是构造样例：仍受 1MB 上限约束，但不按「意外二进制」拦截
+    const isFixtureBinary = /\/tests\/fixtures\//.test(f);
+    if (!allowedBinary.test(f) && !TEXT_EXT.test(f) && !isFixtureBinary) {
       if (buf.subarray(0, 8000).includes(0x00)) problems.push(`${rel(f)}: 疑似二进制文件入库（未在白名单）`);
     }
   }

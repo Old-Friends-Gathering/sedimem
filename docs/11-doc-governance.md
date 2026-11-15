@@ -1,7 +1,7 @@
 # 11 · 文档治理契约
 
 > doc-kind: contract
-> doc-version: 1.1
+> doc-version: 1.2
 > verified-at: 2026-11-14
 > verified-against: versions/CURRENT（v1.0 / 1.0.0）
 

@@ -1,0 +1,833 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>v1.2 任务账本 × 未来架构 · 计划对照</title>
+<style>/*
+ * 共享浅色基座（最小起点）
+ *
+ * tokens.css 里的 atlas 皮肤只重写"颜色和字体"，不重写"版式骨架"——它假定
+ * 宿主页面已经有一层共享基座定义了 .page 的 grid、doc-outline 折叠逻辑、
+ * section/h2/表格/callout 这些结构性规则。多数已经用 HTML-first 写架构文档的仓库
+ * 会已经有这样一层（通常叫 site-css，可能是脚本生成的，不要去改它）。
+ *
+ * 如果所在仓库还没有这样一层，复制这份最小版本作为起点，和 tokens.css 一起内联
+ * 进同一个 <style> 块——两者变量命名不冲突（这份用 --ink/--bg/--line 等不加前缀
+ * 的名字，tokens.css 用 --atlas-* 前缀）。
+ *
+ * 这份文件只负责基础排版骨架，不含任何图语言（状态机图/组件图请看
+ * diagram-language.md 的 .plate 约定；如果仓库另有一套 .dm-* 图语言 SSOT，那是
+ * architect skill 的范畴，不在这里）。
+ */
+
+:root {
+  --ink: #172033;
+  --muted: #5d6678;
+  --bg: #f5f7fb;
+  --panel: #ffffff;
+  --line: #d9deea;
+  --accent: #2b5fd9;
+  --accent-soft: #e7eefc;
+  --green: #15803d;
+  --green-soft: #e3f3eb;
+  --amber: #b45309;
+  --amber-soft: #fdf2e3;
+  --red: #b91c1c;
+  --red-soft: #fbe9e7;
+  --code-bg: #eef2f8;
+  --font: system-ui, -apple-system, "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", "Noto Sans CJK SC", sans-serif;
+  --mono: ui-monospace, "SFMono-Regular", Menlo, Consolas, "Liberation Mono", monospace;
+}
+/* 这套浅色 token 只在不套 atlas 皮肤的"平实模式"页面里可见；一旦叠加 tokens.css，
+   atlas 的深色规则优先级更高，两套变量并存不冲突。 */
+
+* { box-sizing: border-box; }
+html { scroll-behavior: smooth; }
+@media (prefers-reduced-motion: reduce) { html { scroll-behavior: auto; } }
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--ink);
+  font-family: var(--font);
+  font-size: 15px;
+  line-height: 1.72;
+}
+
+.page {
+  max-width: 1180px;
+  margin: 0 auto;
+  padding: 24px 20px 72px;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 28px;
+}
+.page.single { max-width: 1000px; }
+@media (min-width: 1040px) {
+  .page:not(.single) { grid-template-columns: 220px minmax(0, 1fr); gap: 44px; }
+}
+
+/* 页内大纲：桌面侧栏 sticky，移动端折叠 */
+.doc-outline { font-size: 13.5px; align-self: start; }
+@media (min-width: 1040px) { .doc-outline { position: sticky; top: 20px; } }
+.doc-outline summary { cursor: pointer; font-weight: 700; color: var(--muted); letter-spacing: .06em; }
+.doc-outline nav ol { list-style: none; margin: 10px 0 0; padding: 0; border-left: 1px solid var(--line); display: grid; gap: 2px; }
+.doc-outline nav a { display: block; padding: 3px 0 3px 12px; margin-left: -1px; border-left: 2px solid transparent; color: var(--muted); text-decoration: none; }
+.doc-outline nav a:hover { color: var(--ink); border-left-color: var(--accent); }
+
+main { min-width: 0; display: grid; gap: 40px; align-content: start; }
+
+.crumbs { display: flex; flex-wrap: wrap; gap: 4px 10px; font-size: 13px; color: var(--muted); padding-bottom: 10px; border-bottom: 1px solid var(--line); }
+.crumbs a { color: var(--accent); text-decoration: none; font-weight: 600; }
+
+header.doc-head { display: grid; gap: 10px; }
+.eyebrow { margin: 0; font-size: 12px; letter-spacing: .14em; text-transform: uppercase; color: var(--muted); font-weight: 600; }
+h1 { margin: 0; font-size: 30px; line-height: 1.3; text-wrap: balance; }
+.lead { margin: 0; font-size: 16.5px; max-width: 72ch; }
+.meta { display: flex; flex-wrap: wrap; gap: 6px 18px; font-size: 13px; color: var(--muted); }
+.meta b { color: var(--ink); font-weight: 600; }
+
+.badge { display: inline-block; padding: 1px 9px; border-radius: 999px; font-size: 12px; font-weight: 700; white-space: nowrap; line-height: 1.6; }
+.badge.proposed { background: var(--amber-soft); color: var(--amber); }
+.badge.accepted { background: var(--green-soft); color: var(--green); }
+.badge.pending { background: var(--red-soft); color: var(--red); }
+.badge.info { background: var(--accent-soft); color: var(--accent); }
+
+section { display: grid; gap: 14px; scroll-margin-top: 16px; }
+h2 { margin: 0; font-size: 21px; line-height: 1.4; padding-bottom: 6px; border-bottom: 2px solid var(--line); text-wrap: balance; }
+h3 { margin: 6px 0 0; font-size: 16.5px; line-height: 1.5; }
+p { margin: 0; max-width: 74ch; }
+ul, ol { margin: 0; padding-left: 1.3em; display: grid; gap: 5px; max-width: 76ch; }
+a { color: var(--accent); text-underline-offset: 3px; }
+a:focus-visible, summary:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 3px; }
+code { font-family: var(--mono); font-size: .87em; background: var(--code-bg); padding: 1px 5px; border-radius: 4px; overflow-wrap: anywhere; }
+pre { margin: 0; background: var(--code-bg); padding: 12px 14px; border-radius: 8px; overflow-x: auto; font-family: var(--mono); font-size: 13px; line-height: 1.6; }
+pre code { background: none; padding: 0; }
+.muted { color: var(--muted); }
+
+.table-wrap { overflow-x: auto; border: 1px solid var(--line); border-radius: 8px; background: var(--panel); }
+table { border-collapse: collapse; width: 100%; font-size: 14px; line-height: 1.62; }
+th, td { text-align: left; vertical-align: top; padding: 9px 12px; border-bottom: 1px solid var(--line); }
+tr:last-child td { border-bottom: 0; }
+th { background: var(--bg); color: var(--muted); font-weight: 600; font-size: 12.5px; letter-spacing: .04em; white-space: nowrap; }
+
+.callout { border-radius: 8px; padding: 12px 16px; max-width: 82ch; font-size: 14.5px; line-height: 1.72; }
+.callout > p + p { margin-top: 6px; }
+.callout.warn { background: var(--amber-soft); }
+.callout.risk { background: var(--red-soft); }
+.callout.info { background: var(--accent-soft); }
+
+.cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); gap: 14px; }
+.card { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 14px 16px; display: grid; gap: 6px; align-content: start; }
+.card .k { font-size: 12px; color: var(--muted); letter-spacing: .06em; }
+.card .v { font-weight: 700; }
+.card p { font-size: 14px; color: var(--muted); }
+
+.steps { list-style: none; padding: 0; counter-reset: s; display: grid; gap: 8px; }
+.steps > li { counter-increment: s; display: grid; grid-template-columns: 28px minmax(0, 1fr); gap: 8px; }
+.steps > li::before { content: counter(s); width: 22px; height: 22px; margin-top: 3px; border-radius: 50%; border: 1px solid var(--line); display: grid; place-items: center; font: 12px var(--mono); color: var(--muted); }
+
+footer.doc-foot { font-size: 13px; color: var(--muted); border-top: 1px solid var(--line); padding-top: 14px; }
+
+/*
+ * "atlas" 技术方案 / UX PRD 视觉语言 —— design tokens + 页面级组件
+ * 来源：buzz-deploy 仓库 docs/architecture/feishu-bridge/group-sync.html 的
+ *       <style id="feature-css"> 块（12 个既有页面共用的"家族 A"命名方言，逐字忠实转抄）。
+ *
+ * 用法：整段复制进新文档 <head> 里的 <style> 块。这是第二层皮肤，叠加在第一层
+ * 共享浅色基座之上——如果所在仓库还没有这样一层共享基座，用
+ * [`base-skeleton.css`](base-skeleton.css) 作为最小起点。两层，加上需要的话再加
+ * [`mockup-components.css`](mockup-components.css)，全部内联在同一个 HTML 文件的
+ * <style> 里，不要拆成外部 .css 文件用 <link> 引入——本 Skill 的产物必须是单文件
+ * 自包含 HTML（VS Code 内置预览、沙箱、离线打开、GitLab Pages 都不一定能取到外链
+ * 资源）。完整可运行示例见 [`example.html`](../example.html)。
+ *
+ * 已知现状：本仓库同一批文档里，历史上出现过两种变量命名方言
+ * （前缀 --atlas-* 与不加前缀的 --mint/--night/--hair...），十六进制颜色值本身
+ * 从未漂移，只是命名各写各的。新文档一律使用本文件的 --atlas-* 命名，
+ * 不要再发明第三种命名或去改历史页面。
+ */
+
+:root {
+  /* 色板：语义色只有 5 个，不额外发明新颜色 */
+  --atlas-bg: #07110f;        /* 页面底色，深色杂志感 */
+  --atlas-panel: #0c1915;     /* 卡片 / plate 容器背景 */
+  --atlas-panel-2: #10211c;   /* 表头等更深一级的容器 */
+  --atlas-line: #29423a;      /* 所有描边、分隔线 */
+  --atlas-ink: #edf7f2;       /* 正文主文字色 */
+  --atlas-muted: #a8bdb5;     /* 次要文字、说明性文字 */
+  --atlas-mint: #66d7b2;      /* 语义色 1：主线索 / 正常 / 完成 / 强调 CTA */
+  --atlas-orange: #ff9b61;    /* 语义色 2：需要注意 / 警示 / 待验证（G-系列门禁常用） */
+  --atlas-blue: #79aefc;      /* 语义色 3：外部系统 / 消费方 / 只读依赖 */
+  --atlas-rose: #ff7f8f;      /* 语义色 4：破坏性 / 阻断 / 失败路径 */
+  --atlas-violet: #b99afb;    /* 语义色 5：留给「第三方 / 尚未决定」这类少数情形。只用于正文/表格
+                                  （.doc-chip.verify、.boundary 第三栏），没有 UI 状态或 SVG box/line
+                                  版本——"尚未决定"不是一种 UI 状态，也不是一种图上的连线/节点状态，
+                                  不要在 diagram-language.md 的 SVG 或 mockup-components 的 chip 里
+                                  强行造一个 violet 版本 */
+
+  --atlas-display: Georgia, "Songti SC", "STSong", serif;              /* 大标题、章节号、引言 */
+  --atlas-sans: "Trebuchet MS", "PingFang SC", "Microsoft YaHei", sans-serif; /* 正文 */
+  --atlas-mono: "SFMono-Regular", Consolas, "Liberation Mono", monospace;     /* 标签、代码、状态徽标 */
+}
+
+/* 颜色只表示语义角色，不表示视觉层级：
+   mint = 正常/主线, orange = 需要人处理, blue = 外部只读依赖, rose = 破坏性/阻断, violet = 待决。
+   同一份文档里，同一个颜色在文字、边框、SVG box、legend 里必须指向同一件事。 */
+
+html { background: var(--atlas-bg); }
+body {
+  color: var(--atlas-ink);
+  background-color: var(--atlas-bg);
+  background-image:
+    linear-gradient(rgba(102, 215, 178, .055) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(102, 215, 178, .055) 1px, transparent 1px);
+  background-size: 28px 28px;   /* 网格纹理，营造"图纸"感，别改成纯色背景 */
+  font-family: var(--atlas-sans);
+  font-size: 16px;
+}
+body::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  background: radial-gradient(circle at 72% 2%, rgba(102, 215, 178, .11), transparent 34rem);
+}
+a { color: var(--atlas-mint); }
+code { color: #d7efe7; background: #142720; }
+p, ul, ol { max-width: none; }
+pre { background: #142720; border: 1px solid var(--atlas-line); }
+pre code { color: #d7efe7; background: none; border: 0; }
+
+/* 顶部窄导航条：粘性、等宽字、全大写字距，只放面包屑级导航，不放操作按钮 */
+.topbar {
+  position: sticky; top: 0; z-index: 12;
+  min-height: 52px;
+  padding: 0 max(22px, calc((100vw - 1480px) / 2));
+  display: flex; align-items: center; justify-content: space-between; gap: 24px;
+  border-bottom: 1px solid var(--atlas-line);
+  background: rgba(7, 17, 15, .93);
+  backdrop-filter: blur(14px);
+  font: 700 11px/1.3 var(--atlas-mono);
+  letter-spacing: .09em; text-transform: uppercase;
+}
+.topbar .brand { color: var(--atlas-ink); text-decoration: none; white-space: nowrap; }
+.topbar .brand i { color: var(--atlas-orange); font-style: normal; }
+.topbar nav { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 8px 20px; }
+.topbar nav a { color: var(--atlas-muted); text-decoration: none; }
+.topbar nav a:hover { color: var(--atlas-mint); }
+
+/* 页面外壳：给共享基座的 .page 加一个修饰类，不要整个重写 .page */
+.page.atlas-page {
+  position: relative;
+  max-width: 1480px;
+  padding: 34px 28px 92px;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 34px;
+}
+@media (min-width: 1120px) {
+  .page.atlas-page { grid-template-columns: 220px minmax(0, 1fr); gap: 48px; }
+}
+.atlas-page .doc-outline { color: var(--atlas-muted); }
+.atlas-page .doc-outline summary { color: var(--atlas-orange); font: 700 11px/1.4 var(--atlas-mono); }
+.atlas-page .doc-outline nav ol { border-left-color: var(--atlas-line); }
+.atlas-page .doc-outline nav a { color: var(--atlas-muted); }
+.atlas-page .doc-outline nav a:hover { color: var(--atlas-mint); border-left-color: var(--atlas-mint); }
+.atlas-page main { gap: 0; grid-template-columns: minmax(0, 1fr); }
+.atlas-page main > *, .atlas-page section > * { min-width: 0; }
+.atlas-page section { grid-template-columns: minmax(0, 1fr); }
+.atlas-page .crumbs { border-color: var(--atlas-line); color: var(--atlas-muted); }
+.atlas-page .crumbs a { color: var(--atlas-mint); }
+
+/* Hero：文档开场，一句话论点 + 侧边 2-3 张「决策/依赖/未授权」速览卡 */
+.hero {
+  min-height: 440px; padding: 64px 0 54px;
+  display: grid; grid-template-columns: minmax(0, 1.25fr) minmax(300px, .75fr);
+  gap: 56px; align-items: end;
+  border-bottom: 1px solid var(--atlas-line);
+}
+.hero .eyebrow { color: var(--atlas-orange); font: 700 12px/1.3 var(--atlas-mono); letter-spacing: .16em; }
+.hero h1 {
+  margin-top: 14px; max-width: 900px; color: var(--atlas-ink);
+  font: 500 clamp(46px, 5.6vw, 82px)/.98 var(--atlas-display);
+  letter-spacing: -.035em;
+}
+.hero h1 em { color: var(--atlas-mint); font-style: italic; }
+.hero .dek { margin-top: 24px; max-width: 850px; color: #cbdcd6; font-size: clamp(17px, 1.7vw, 22px); line-height: 1.58; }
+.hero-side { display: grid; gap: 12px; }
+.hero-note { padding: 17px 18px; border: 1px solid var(--atlas-line); background: var(--atlas-panel-2); }
+.hero-note b { display: block; color: var(--atlas-mint); font: 700 11px/1.3 var(--atlas-mono); letter-spacing: .1em; text-transform: uppercase; }
+.hero-note span { display: block; margin-top: 8px; color: var(--atlas-ink); font-size: 15px; line-height: 1.65; }
+.hero-note.hot { border-top-color: var(--atlas-orange); }
+.hero-note.hot b { color: var(--atlas-orange); }
+
+/* 状态胶囊：一句话状态徽标，等宽字全大写 */
+.status-line { display: flex; flex-wrap: wrap; gap: 7px; }
+.status-line span, .doc-chip {
+  padding: 5px 9px; border: 1px solid var(--atlas-line); color: var(--atlas-muted);
+  font: 700 10px/1.25 var(--atlas-mono); letter-spacing: .06em; text-transform: uppercase; white-space: nowrap;
+}
+.status-line .live, .doc-chip.live { border-color: var(--atlas-mint); color: var(--atlas-bg); background: var(--atlas-mint); }
+.doc-chip.pending { border-color: var(--atlas-orange); color: var(--atlas-orange); }
+.doc-chip.verify { border-color: var(--atlas-violet); color: var(--atlas-violet); }
+
+/* 部件分隔：多部分长文档用罗马数字大字号分隔，不是必需组件，短文档不要用 */
+.part-divider {
+  margin: 0 -24px; padding: 38px 24px;
+  display: grid; grid-template-columns: 100px minmax(0, 1fr); gap: 24px; align-items: center;
+  border-block: 1px solid var(--atlas-line); background: rgba(12, 25, 21, .8);
+}
+.part-divider .part-index { color: var(--atlas-mint); font: italic 66px/1 var(--atlas-display); }
+.part-divider h2 { padding: 0; border: 0; color: var(--atlas-ink); font: 500 clamp(31px, 4vw, 52px)/1.08 var(--atlas-display); }
+.part-divider p { margin-top: 7px; color: var(--atlas-muted); font-size: 18px; }
+
+/* 章节头：斜体衬线大号章节号 + 标题，每个 section 必须有一句话副标题 */
+.atlas-page section { padding: 60px 0; gap: 22px; border-bottom: 1px solid var(--atlas-line); }
+.section-head { display: grid; grid-template-columns: 86px minmax(0, 1fr); gap: 24px; align-items: start; }
+.section-no { color: var(--atlas-orange); font: italic 48px/1 var(--atlas-display); }
+.atlas-page section h2 { padding: 0; border: 0; color: var(--atlas-ink); font: 500 clamp(30px, 3.4vw, 48px)/1.08 var(--atlas-display); }
+.atlas-page section h3 { color: var(--atlas-mint); font-size: 20px; }
+.section-copy { margin-top: 10px; max-width: 900px; color: var(--atlas-ink); font-size: 17px; }
+
+/* 论点框：一段话讲清楚这个 section 的核心结论，不是装饰，每个 section 最多一个 */
+.thesis { padding: 22px 25px; border: 1px solid var(--atlas-mint); background: rgba(102, 215, 178, .06); font: 500 clamp(19px, 2vw, 27px)/1.5 var(--atlas-display); }
+.thesis b { color: var(--atlas-mint); }
+
+/* 表格：深色描边表，表头等宽字全大写 mint 色 */
+.table-wrap { border-color: var(--atlas-line); border-radius: 0; background: var(--atlas-panel-2); }
+table { color: var(--atlas-ink); }
+th { color: var(--atlas-mint); background: var(--atlas-panel-2); border-color: var(--atlas-line); font: 700 11px/1.45 var(--atlas-mono); letter-spacing: .07em; text-transform: uppercase; }
+td { border-color: var(--atlas-line); }
+td small { color: var(--atlas-muted); }
+
+/* 三栏边界卡：常用于「范围内 / 范围外 / 待定」这类三分类对比 */
+.boundary-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; }
+.boundary { padding: 20px; border-top: 2px solid var(--atlas-mint); background: var(--atlas-panel-2); }
+.boundary:nth-child(2) { border-color: var(--atlas-orange); }
+.boundary:nth-child(3) { border-color: var(--atlas-violet); }
+.boundary b { color: var(--atlas-ink); }
+.boundary p { margin-top: 8px; color: var(--atlas-ink); font-size: 15px; }
+
+/* 侧栏提示条：默认蓝，warn 橙，risk 玫红——颜色语义与 SVG 图例一致 */
+.callout {
+  max-width: none; border-radius: 0; padding: 18px 20px; border: 1px solid var(--atlas-line);
+  border-left: 4px solid var(--atlas-blue); color: var(--atlas-ink); font-size: 15.5px;
+  background: linear-gradient(rgba(121, 174, 252, .14), rgba(121, 174, 252, .14)), var(--atlas-panel);
+}
+.callout.info { background: linear-gradient(rgba(121, 174, 252, .14), rgba(121, 174, 252, .14)), var(--atlas-panel); }
+.callout.warn { border-left-color: var(--atlas-orange); background: linear-gradient(rgba(255, 155, 97, .14), rgba(255, 155, 97, .14)), var(--atlas-panel); }
+.callout.risk { border-left-color: var(--atlas-rose); background: linear-gradient(rgba(255, 127, 143, .14), rgba(255, 127, 143, .14)), var(--atlas-panel); }
+.callout strong, .callout b { color: var(--atlas-ink); margin-right: .35em; }
+
+/* plate：SVG 组件图 / 状态机图的容器，详细用法见 diagram-language.md */
+.plate { margin: 0; border: 1px solid var(--atlas-line); background: #091411; }
+.plate-head { min-height: 48px; padding: 13px 16px; display: flex; align-items: center; justify-content: space-between; gap: 16px; border-bottom: 1px solid var(--atlas-line); color: var(--atlas-muted); font: 700 11px/1.4 var(--atlas-mono); letter-spacing: .08em; text-transform: uppercase; }
+.plate-head b { color: var(--atlas-ink); }
+.plate-body { overflow-x: auto; padding: 18px; }
+.plate svg { display: block; width: 100%; min-width: 1040px; height: auto; }
+.plate figcaption { padding: 14px 17px 17px; border-top: 1px solid var(--atlas-line); color: var(--atlas-ink); font-size: 14px; }
+.plate figcaption b { color: var(--atlas-ink); }
+
+/* 交互模式（可选）：点击 SVG 节点展开下方 .node-detail，详细用法与脚本见 diagram-language.md */
+.plate .node { cursor: pointer; }
+.plate .node:focus-visible { outline: 2px solid var(--atlas-mint); outline-offset: 2px; }
+.plate .node[aria-current="step"] .svg-box { stroke-width: 2.4; filter: drop-shadow(0 0 6px rgba(102, 215, 178, .55)); }
+.plate-detail-list { display: grid; gap: 10px; margin-top: 10px; }
+.node-detail { border: 1px solid var(--atlas-line); background: rgba(12, 25, 21, .72); padding: 2px 16px; }
+.node-detail summary { cursor: pointer; padding: 12px 0; color: var(--atlas-ink); font: 700 13px/1.4 var(--atlas-mono); letter-spacing: .04em; }
+.node-detail[open] summary { color: var(--atlas-mint); }
+.node-detail p { padding-bottom: 14px; color: var(--atlas-muted); font-size: 14.5px; }
+.svg-line.trace-active { stroke-width: 2.4; }
+@media (prefers-reduced-motion: no-preference) {
+  .svg-line.trace-active { stroke-dasharray: 6 4; animation: trace-flow 900ms linear infinite; }
+}
+@keyframes trace-flow { to { stroke-dashoffset: -20; } }
+@media print {
+  .plate-detail-list details > *:not(summary) { display: block !important; }
+}
+
+/* SVG 图内的颜色/文字语义类，颜色映射与正文的 5 个语义色一致 */
+.svg-zone { fill: rgba(102, 215, 178, .025); stroke: #29423a; stroke-width: 1.2; stroke-dasharray: 7 5; }
+.svg-box { fill: #0d1b17; stroke: #547268; stroke-width: 1.4; }
+.svg-box.mint { fill: #102720; stroke: #66d7b2; }
+.svg-box.orange { fill: #2a1c14; stroke: #ff9b61; }
+.svg-box.blue { fill: #101d2c; stroke: #79aefc; }
+.svg-box.rose { fill: #2b161b; stroke: #ff7f8f; }
+.svg-title { fill: #edf7f2; font: 700 15px var(--atlas-sans); }
+.svg-copy { fill: #a8bdb5; font: 13px var(--atlas-sans); }
+.svg-mono { fill: #93aaa1; font: 12px var(--atlas-mono); }
+.svg-mint { fill: #66d7b2; }
+.svg-orange { fill: #ff9b61; }
+.svg-blue { fill: #79aefc; }
+.svg-rose { fill: #ff7f8f; }
+.svg-line { fill: none; stroke: #6f8b81; stroke-width: 1.7; }
+.svg-line.mint { stroke: #66d7b2; }
+.svg-line.blue { stroke: #79aefc; }
+.svg-line.orange { stroke: #ff9b61; }
+.svg-line.rose { stroke: #ff7f8f; }
+.svg-dash { stroke-dasharray: 7 5; }
+
+footer.doc-foot { padding: 28px 0 0; border-color: var(--atlas-line); color: var(--atlas-muted); display: flex; flex-wrap: wrap; justify-content: space-between; gap: 14px; }
+
+@media (max-width: 900px) {
+  .topbar nav { display: none; }
+  .hero { min-height: auto; grid-template-columns: 1fr; gap: 28px; padding-top: 52px; }
+  .boundary-grid { grid-template-columns: 1fr; }
+  .section-head { grid-template-columns: 58px minmax(0, 1fr); gap: 16px; }
+  .part-divider { grid-template-columns: 62px minmax(0, 1fr); }
+  .part-divider .part-index { font-size: 49px; }
+}
+@media (max-width: 560px) {
+  .page.atlas-page { padding-inline: 16px; }
+  .topbar { padding-inline: 16px; }
+  .hero h1 { font-size: clamp(42px, 14vw, 62px); }
+  .part-divider { margin-inline: -10px; padding-inline: 16px; }
+  .section-head { grid-template-columns: 1fr; }
+  .section-no { font-size: 37px; }
+}
+
+/* 打印/PDF：一定要有这段，否则深色底打印出来全黑一片。
+   策略：先把 5 个语义色变量本身重定义成可读的深色版本——大多数正文选择器
+   （hero-note b、thesis、doc-chip、part-divider、table th……）都是引用
+   var(--atlas-*) 取色，变量一换它们全部自动变深，不用逐个选择器补写。
+   只有 SVG 的 .svg-box/.svg-title/.svg-line 这类是硬编码十六进制值（和
+   group-sync.html 原文一致，没有走变量），以及少数硬编码 rgba 背景
+   （.plate/.part-divider/.node-detail），需要单独补写。 */
+@media print {
+  :root {
+    --atlas-ink: #172033;
+    --atlas-muted: #5d6678;
+    --atlas-mint: #0f6b52;
+    --atlas-orange: #b45309;
+    --atlas-blue: #1d4ed8;
+    --atlas-rose: #b91c1c;
+    --atlas-violet: #6d28d9;
+  }
+  html, body { background: #fff; color: #172033; }
+  body::before, .topbar, .doc-outline { display: none; }
+  .page.atlas-page { display: block; max-width: none; }
+  .hero { min-height: auto; }
+  .hero-note, .table-wrap, .boundary, .part-divider, .plate, .node-detail { background: #fff; break-inside: avoid; }
+
+  /* 硬编码颜色值，不是 var(--atlas-*)，变量重定义覆盖不到，逐个手动补深色 */
+  .plate { border-color: #d9deea; }
+  .part-divider { border-block-color: #d9deea; }
+  .node-detail { border-color: #d9deea; }
+  .hero .dek { color: #5d6678; }
+  .callout, .callout.info, .callout.warn, .callout.risk { color: #172033; background: #fff; border-color: #d9deea; }
+
+  /* 宽 SVG 在屏幕上靠横向滚动条撑开，打印没有滚动条，必须让它按 viewBox 缩放到页宽 */
+  .plate-body { overflow-x: visible; }
+  .plate svg { min-width: 0; }
+
+  /* 交互态在纸上没有意义：去掉发光/动效，避免打印出奇怪的滤镜残留 */
+  .plate .node[aria-current="step"] .svg-box { filter: none; }
+  .svg-line.trace-active { animation: none; stroke-dasharray: none; }
+
+  /* SVG 内的硬编码颜色类，手动换成深色版，颜色映射与上面的变量重定义保持一致 */
+  .svg-zone { fill: rgba(15, 107, 82, .04); stroke: #c9d2c9; }
+  .svg-box { fill: #f3f5f4; stroke: #3f5850; }
+  .svg-box.mint { fill: #e3f3eb; stroke: #0f6b52; }
+  .svg-box.orange { fill: #fdf2e3; stroke: #b45309; }
+  .svg-box.blue { fill: #e7eefc; stroke: #1d4ed8; }
+  .svg-box.rose { fill: #fbe9e7; stroke: #b91c1c; }
+  .svg-title { fill: #172033; }
+  .svg-copy { fill: #3f4a5c; }
+  .svg-mono { fill: #5d6678; }
+  .svg-mint { fill: #0f6b52; }
+  .svg-orange { fill: #b45309; }
+  .svg-blue { fill: #1d4ed8; }
+  .svg-rose { fill: #b91c1c; }
+  .svg-line { stroke: #3f5850; }
+  .svg-line.mint { stroke: #0f6b52; }
+  .svg-line.blue { stroke: #1d4ed8; }
+  .svg-line.orange { stroke: #b45309; }
+  .svg-line.rose { stroke: #b91c1c; }
+}
+
+
+/* ---- 本页补充 ---- */
+.atlas-page .kv-table td:first-child{ white-space:nowrap; color:var(--atlas-muted); }
+.atlas-page .tag{ display:inline-block; padding:2px 8px; border:1px solid var(--atlas-line);
+  font:700 11px/1.6 var(--atlas-mono); letter-spacing:.06em; text-transform:uppercase; color:var(--atlas-muted); }
+.atlas-page .tag.mint{ color:var(--atlas-mint); border-color:rgba(102,215,178,.45); }
+.atlas-page .tag.orange{ color:var(--atlas-orange); border-color:rgba(255,155,97,.45); }
+.atlas-page .tag.rose{ color:var(--atlas-rose); border-color:rgba(255,107,129,.45); }
+.atlas-page .tag.blue{ color:var(--atlas-blue); border-color:rgba(107,168,255,.45); }
+.atlas-page .hero h1 em{ white-space:nowrap; }
+.atlas-page .hero h1 .l1,.atlas-page .hero h1 .l2{ display:block; white-space:nowrap; }
+.atlas-page .hero h1{ font-size:clamp(38px, 4.4vw, 64px); line-height:1.08; }
+.atlas-page code{ overflow-wrap:anywhere; }
+.atlas-page .table-wrap{ max-width:100%; overflow-x:auto; }
+.atlas-page .plate-detail-list{ display:grid; grid-template-columns:260px minmax(0,1fr); gap:18px; margin:14px 0 38px; }
+.atlas-page .plate-detail-list .toc{ border:1px solid var(--atlas-line); background:var(--atlas-panel); padding:8px; align-self:start; }
+.atlas-page .plate-detail-list .toc button{ display:block; width:100%; text-align:left; background:none; border:0;
+  color:var(--atlas-muted); padding:7px 9px; font:600 12.5px/1.4 var(--atlas-sans); cursor:pointer; border-left:2px solid transparent; }
+.atlas-page .plate-detail-list .toc button:hover{ color:var(--atlas-ink); }
+.atlas-page .plate-detail-list .toc button[aria-selected="true"]{ color:var(--atlas-mint); border-left-color:var(--atlas-mint); background:rgba(102,215,178,.07); }
+.atlas-page .plate-detail-list .body{ border:1px solid var(--atlas-line); background:var(--atlas-panel); padding:14px 16px; min-height:150px; }
+.atlas-page .plate-detail-list .body h4{ margin:0 0 8px; font:700 13px/1.5 var(--atlas-sans); color:var(--atlas-ink); }
+.atlas-page .plate-detail-list .body p{ margin:0 0 8px; font-size:13.5px; line-height:1.75; color:var(--atlas-ink); }
+.atlas-page .plate-detail-list .body ul{ margin:0; padding-left:18px; }
+.atlas-page .plate-detail-list .body li{ font-size:13px; line-height:1.7; color:var(--atlas-muted); }
+@media print{ .atlas-page .plate-detail-list .toc{ display:none; } .atlas-page .plate-detail-list{ grid-template-columns:1fr; } }
+</style>
+</head>
+<body>
+<div class="page atlas-page">
+
+<aside class="doc-outline">
+  <details open><summary>目录</summary>
+    <nav><ol>
+      <li><a href="#conclusion">01 一句话结论</a></li>
+      <li><a href="#ledger">02 现在的计划：任务账本</a></li>
+      <li><a href="#future">03 未来的大框架</a></li>
+      <li><a href="#position">04 小框架落在大框架的哪一格</a></li>
+      <li><a href="#dup">05 重复矩阵与合并</a></li>
+      <li><a href="#rules">06 边界规则</a></li>
+      <li><a href="#decisions">07 决策与驳回</a></li>
+      <li><a href="#next">08 未决与下一步</a></li>
+    </ol></nav>
+  </details>
+</aside>
+
+<main>
+
+<header class="hero">
+  <div class="crumbs"><a href="../index.html">sedimem</a> / 计划 / v1.2 与未来架构</div>
+  <p class="eyebrow">PLAN REVIEW · 2026-11-15</p>
+  <h1><span class="l1">任务账本</span><span class="l2"><em>不是</em>第二个内核</span></h1>
+  <p class="dek">v1.2 的「任务账本」和 future-architecture 的「大框架」不是重复建设：账本只是内核的一个<strong>内容源</strong>，装配逻辑仍然只有 pack 一份。这一页把两者的位置、边界和唯一那处真重复讲清楚。</p>
+  <div class="status-line">
+    <span class="live">v1.1 已上线</span>
+    <span>v1.2 计划 v2</span>
+    <span>5 路红队审核</span>
+    <span class="doc-chip pending">1 处真重复已合并</span>
+  </div>
+</header>
+
+
+<section id="conclusion">
+  <div class="section-head"><span class="section-no">01</span><div>
+    <h2>一句话结论</h2>
+    <p class="section-copy">账本负责「记住过程」，大框架负责「决定给谁看什么」。前者是数据，后者是装配器——所以它们相邻，但不重叠。</p>
+  </div></div>
+  <p class="thesis"><b>判断标准：</b>如果一样东西「能被 pack 消费」，它就是内容源；如果它「决定 pack 里放什么」，它就是装配器。账本属于前者，pack 属于后者。</p>
+  <div class="boundary-grid">
+    <div class="boundary"><b>在账本范围内</b><p>会话转录 → 段（segments）；段摘要与结构化抽取；可展开原文的锚点；任务级累计 token 与经济账。</p></div>
+    <div class="boundary"><b>明确不在范围内</b><p>不做预算裁剪与排序（pack 的活）；不做检索融合（search 的活）；不写 <code>facts</code>；不做外写审批（P3 的审批队列）。</p></div>
+    <div class="boundary"><b>待你拍板</b><p>brief 是否直接按 pack schema 出（推荐 A）；账本段是否允许 <code>includeT2</code> 场景下只给摘要不给引用。</p></div>
+  </div>
+</section>
+
+
+<section id="ledger">
+  <div class="section-head"><span class="section-no">02</span><div>
+    <h2>现在的计划：任务账本（v1.2）</h2>
+    <p class="section-copy">解决的问题很具体：一个开发任务跑下来，会话上下文是窗口的数倍（实测 63.9MB / 3 万 4 千事件 / 145 次宿主压缩），关掉会话就找不回来了。</p>
+  </div></div>
+
+  <figure class="plate">
+    <div class="plate-head"><b>Figure 1 · 账本数据流</b><span>实线 = 本地读写 · 虚线 = 可选 / 外部</span></div>
+    <div class="plate-body">
+      <svg viewBox="0 0 1120 400" role="img" aria-labelledby="f1t f1d">
+        <title id="f1t">转录经 capture 折叠成段，段经 briefJson 提供给 Agent 或 pack</title>
+        <desc id="f1d">本机宿主转录（mint）被 capture 读取并折叠为段，追加写入任务账本文件；
+        账本对外只暴露 briefJson（blue），Agent 通过会话工具读简报；虚线的 pack 与 expand 是可选路径。</desc>
+
+        <rect class="svg-box mint" x="20" y="120" width="180" height="88" rx="8"/>
+        <text class="svg-title" x="110" y="152" text-anchor="middle">宿主转录</text>
+        <text class="svg-copy" x="110" y="176" text-anchor="middle">session.v4.jsonl.zstd</text>
+        <text class="svg-mono" x="110" y="194" text-anchor="middle">多帧 zstd · 34k 事件</text>
+
+        <rect class="svg-box mint" x="248" y="120" width="170" height="88" rx="8"/>
+        <text class="svg-title" x="333" y="152" text-anchor="middle">capture</text>
+        <text class="svg-copy" x="333" y="176" text-anchor="middle">规则抽取 / --llm</text>
+        <text class="svg-mono" x="333" y="194" text-anchor="middle">区间幂等 · 脱敏</text>
+        <line class="svg-line mint" x1="200" y1="164" x2="244" y2="164"/>
+
+        <rect class="svg-box mint" x="466" y="104" width="210" height="120" rx="8"/>
+        <text class="svg-title" x="571" y="134" text-anchor="middle">任务账本</text>
+        <text class="svg-copy" x="571" y="157" text-anchor="middle">sessions/&lt;taskId&gt;/</text>
+        <text class="svg-mono" x="571" y="178" text-anchor="middle">segments.jsonl（追加）</text>
+        <text class="svg-mono" x="571" y="196" text-anchor="middle">index.json（派生）</text>
+        <text class="svg-mono" x="571" y="214" text-anchor="middle">anchor → 原文位置</text>
+        <line class="svg-line mint" x1="418" y1="164" x2="462" y2="164"/>
+
+        <rect class="svg-box blue" x="724" y="120" width="170" height="88" rx="8"/>
+        <text class="svg-title" x="809" y="150" text-anchor="middle">briefJson()</text>
+        <text class="svg-copy" x="809" y="173" text-anchor="middle">纯函数 · 确定性</text>
+        <text class="svg-mono" x="809" y="192" text-anchor="middle">pack schema 子集</text>
+        <line class="svg-line mint" x1="676" y1="164" x2="720" y2="164"/>
+
+        <rect class="svg-box mint" x="940" y="66" width="160" height="70" rx="8"/>
+        <text class="svg-title" x="1020" y="94" text-anchor="middle">Agent</text>
+        <text class="svg-copy" x="1020" y="115" text-anchor="middle">memory_session_brief</text>
+        <line class="svg-line mint" x1="894" y1="150" x2="938" y2="112"/>
+
+        <rect class="svg-box blue" x="940" y="196" width="160" height="70" rx="8"/>
+        <text class="svg-title" x="1020" y="224" text-anchor="middle">pack（P1）</text>
+        <text class="svg-copy" x="1020" y="245" text-anchor="middle">includeLedger: true</text>
+        <line class="svg-line blue" x1="894" y1="180" x2="938" y2="222"/>
+
+        <rect class="svg-box orange" x="466" y="252" width="210" height="62" rx="8"/>
+        <text class="svg-title" x="571" y="276" text-anchor="middle">expand（本地 CLI）</text>
+        <text class="svg-copy" x="571" y="298" text-anchor="middle">按 anchor 还原原文，--to-file</text>
+        <line class="svg-line orange" x1="571" y1="224" x2="571" y2="248"/>
+
+        <text class="svg-mono" x="20" y="360">边界：段只进 references / summary，永不进 facts（I-15）；briefJson 不做预算裁剪与排序</text>
+      </svg>
+    </div>
+    <figcaption><b>为什么这样切。</b>capture 只做「把过程压成可展开的段」，不做任何「决定给谁看什么」；预算裁剪、排序、excluded 原因都留在 pack 里，保证全站只有一份装配逻辑。</figcaption>
+  </figure>
+
+  <div class="plate-detail-list" data-nodes="f1">
+    <div class="toc" role="tablist"></div>
+    <div class="body"></div>
+  </div>
+
+  <div class="table-wrap"><table class="kv-table">
+    <thead><tr><th>约束</th><th>规则</th><th>为什么</th></tr></thead>
+    <tbody>
+      <tr><td>只追加</td><td><code>segments.jsonl</code> 只 append；<code>index.json</code> 是派生、可重建</td><td>回滚到 v1.1 时该目录被忽略，数据不丢</td></tr>
+      <tr><td>不新增 kind</td><td>段不进 memory record（<code>MAX_VALUE=2000</code> 装不下，kinds 要求 <code>halfLifeMs&gt;0</code>）</td><td>绕开四道门、衰减、配额、slot 判 disputed</td></tr>
+      <tr><td>区间幂等</td><td><code>[fromSeq,toSeq)</code> 与 <code>coveredSeqs</code> 不重叠，重复捕获报 <code>E_ALREADY_CAPTURED</code></td><td>fold-once：每段一生只压一次</td></tr>
+      <tr><td>可逆</td><td>段必须带 <code>anchor</code>，无锚点不写</td><td>不可逆的内容不允许进账本</td></tr>
+      <tr><td>信任与污点</td><td>段自带 <code>trust</code>（默认 T1）与 <code>taint[]</code>（粘贴内容→<code>untrusted-source</code>）</td><td>满足 I-11：T2 不注入原文</td></tr>
+      <tr><td>失败不阻塞</td><td><code>session close</code> 捕获失败只告警，<code>--require-capture</code> 才强制</td><td>红队结论：不能因为账本写失败让用户关不掉会话</td></tr>
+    </tbody>
+  </table></div>
+</section>
+
+
+<section id="future">
+  <div class="section-head"><span class="section-no">03</span><div>
+    <h2>未来的大框架（future-architecture）</h2>
+    <p class="section-copy">目标从「个人记忆库」升到「治理内核 + 个人端点」：内核只管治理与装配，采集交给 adapter，行动交给 daemon，均按需可选。</p>
+  </div></div>
+
+  <figure class="plate">
+    <div class="plate-head"><b>Figure 2 · 大框架分层</b><span>实线 = 必选 · 虚线 = 可选 / 按需起停</span></div>
+    <div class="plate-body">
+      <svg viewBox="0 0 1120 420" role="img" aria-labelledby="f2t f2d">
+        <title id="f2t">大框架：宿主与适配器投递到内核，内核经 pack 装配、经 daemon 执行</title>
+        <desc id="f2d">顶部是宿主客户端（DSH / Codex / Claude Code）与外部适配器（blue）；
+        中间是内核：真相层、派生层、pack 装配器（mint）；底部虚线是可选 daemon（orange）负责调度与审批；
+        P3 的审批队列与 v1.2 的任务账本分属两个不同目录。</desc>
+
+        <rect class="svg-zone" x="20" y="18" width="1080" height="92" rx="10"/>
+        <text class="svg-mono" x="36" y="42">HOSTS &amp; ADAPTERS</text>
+        <rect class="svg-box mint" x="36" y="56" width="150" height="44" rx="7"/>
+        <text class="svg-title" x="111" y="83" text-anchor="middle">DSH</text>
+        <rect class="svg-box mint" x="198" y="56" width="150" height="44" rx="7"/>
+        <text class="svg-title" x="273" y="83" text-anchor="middle">Codex CLI</text>
+        <rect class="svg-box mint" x="360" y="56" width="150" height="44" rx="7"/>
+        <text class="svg-title" x="435" y="83" text-anchor="middle">Claude Code</text>
+        <rect class="svg-box blue" x="560" y="56" width="250" height="44" rx="7"/>
+        <text class="svg-title" x="685" y="83" text-anchor="middle">adapter（gmail / calendar / git）</text>
+        <rect class="svg-box blue" x="830" y="56" width="250" height="44" rx="7"/>
+        <text class="svg-title" x="955" y="83" text-anchor="middle">Ed25519 信封 · trust ceiling</text>
+
+        <rect class="svg-zone" x="20" y="132" width="1080" height="176" rx="10"/>
+        <text class="svg-mono" x="36" y="156">KERNEL（零运行时依赖 · ≤1 进程）</text>
+        <rect class="svg-box mint" x="36" y="172" width="210" height="58" rx="7"/>
+        <text class="svg-title" x="141" y="197" text-anchor="middle">真相层 items/</text>
+        <text class="svg-copy" x="141" y="217" text-anchor="middle">append-only JSONL</text>
+        <rect class="svg-box mint" x="262" y="172" width="210" height="58" rx="7"/>
+        <text class="svg-title" x="367" y="197" text-anchor="middle">派生层</text>
+        <text class="svg-copy" x="367" y="217" text-anchor="middle">index / views / brief</text>
+        <rect class="svg-box mint" x="488" y="172" width="230" height="58" rx="7"/>
+        <text class="svg-title" x="603" y="197" text-anchor="middle">pack 装配器</text>
+        <text class="svg-copy" x="603" y="217" text-anchor="middle">预算 · 排序 · excluded</text>
+        <rect class="svg-box mint" x="734" y="172" width="210" height="58" rx="7"/>
+        <text class="svg-title" x="839" y="197" text-anchor="middle">任务账本</text>
+        <text class="svg-copy" x="839" y="217" text-anchor="middle">sessions/&lt;id&gt;/segments</text>
+        <rect class="svg-box blue" x="960" y="172" width="120" height="58" rx="7"/>
+        <text class="svg-title" x="1020" y="197" text-anchor="middle">MCP</text>
+        <text class="svg-copy" x="1020" y="217" text-anchor="middle">默认 4 工具</text>
+
+        <text class="svg-copy" x="36" y="258">装配顺序：真相层 → 派生层 →（可选）任务账本 → pack 出装配结果 → 宿主注入</text>
+        <text class="svg-mono" x="36" y="284">账本不是内核之外的第二套系统，它是 pack 的一个数据源（includeLedger）</text>
+
+        <rect class="svg-zone" x="20" y="332" width="1080" height="76" rx="10"/>
+        <text class="svg-mono" x="36" y="356">OPTIONAL DAEMON（单进程多职责 · 无 daemon 功能全集可用）</text>
+        <rect class="svg-box orange" x="36" y="364" width="230" height="34" rx="6"/>
+        <text class="svg-copy" x="151" y="386" text-anchor="middle">scheduler + supervisor</text>
+        <rect class="svg-box orange" x="282" y="364" width="230" height="34" rx="6"/>
+        <text class="svg-copy" x="397" y="386" text-anchor="middle">审批队列 ~/.memo/tasks/</text>
+        <rect class="svg-box blue" x="528" y="364" width="230" height="34" rx="6"/>
+        <text class="svg-copy" x="643" y="386" text-anchor="middle">gateway / 端点（P4 触发后才做）</text>
+        <text class="svg-mono" x="778" y="386">C6：内核 + ≤1 daemon，RSS &lt; 100MB</text>
+      </svg>
+    </div>
+    <figcaption><b>关键读法。</b>内核里已经有「任务账本」这一格（mint），它和真相层、派生层是并列的数据源；pack 才是把它们装进预算的那一个。审批队列（orange）在 daemon 层，与账本不同目录、不同状态机。</figcaption>
+  </figure>
+
+  <div class="plate-detail-list" data-nodes="f2">
+    <div class="toc" role="tablist"></div>
+    <div class="body"></div>
+  </div>
+
+  <div class="table-wrap"><table>
+    <thead><tr><th>阶段</th><th>做什么</th><th>与账本的关系</th></tr></thead>
+    <tbody>
+      <tr><td>P0a 地基</td><td>CI 指向 CURRENT、门禁防回退、workspace、engines ≥22.15</td><td>B0 的 transcript 修复依赖 22.15+ 的 zstd</td></tr>
+      <tr><td>P0b 语义与信任</td><td>EmbedderPort、trust/taint、policy 单一来源</td><td>账本段从第一天就带 <code>trust/taint</code>，避免回填</td></tr>
+      <tr><td>P1 装配</td><td>pack：预算裁剪、确定性排序、AGENTS/SKILL/MCP 三种输出</td><td><strong>唯一真重复点</strong>：brief 合并进 pack，见 §05</td></tr>
+      <tr><td>P2 导入</td><td>claude-mem / AGENTS.md / git / .ics 只读导入</td><td>与 capture 同管道不同来源</td></tr>
+      <tr><td>P3 行动</td><td>scheduler + supervisor + 审批队列</td><td>账本 = 记账容器，审批 = 外写门，互不替代</td></tr>
+      <tr><td>P4 / P5</td><td>个人端点（可选）、一致性套件</td><td>无直接依赖</td></tr>
+    </tbody>
+  </table></div>
+</section>
+
+
+<section id="position">
+  <div class="section-head"><span class="section-no">04</span><div>
+    <h2>小框架落在大框架的哪一格</h2>
+    <p class="section-copy">一句话：账本在 <strong>数据源层</strong>，pack 在 <strong>装配层</strong>，daemon 在 <strong>执行层</strong>。三层各管一件事，谁都不越界。</p>
+  </div></div>
+
+  <div class="table-wrap"><table>
+    <thead><tr><th>层</th><th>问题</th><th>谁负责</th><th>越界示例（禁止）</th></tr></thead>
+    <tbody>
+      <tr><td>数据源</td><td>「过程存在哪、怎么展开」</td><td>真相层 / 派生层 / <strong>任务账本</strong></td><td>账本自己算 token 预算、自己决定哪段优先</td></tr>
+      <tr><td>装配</td><td>「这次给 Agent 看什么」</td><td><strong>pack</strong>（含 brief 的渲染）</td><td>pack 直接写账本或改真相层</td></tr>
+      <tr><td>执行</td><td>「谁在什么时候动外部世界」</td><td>daemon：scheduler / supervisor / 审批队列</td><td>daemon 直接改账本内容</td></tr>
+      <tr><td>采集</td><td>「外部信息怎么进来」</td><td>adapter（Ed25519 + ingest）</td><td>adapter 直写 <code>~/.memo</code></td></tr>
+    </tbody>
+  </table></div>
+
+  <div class="callout info"><b>共用但不是同一件事。</b>账本和内核共用同一个 <code>MEMO_HOME</code>、同一把数据锁（<code>&lt;memoHome&gt;/.lock</code>）、同一套 <code>config/paths.js</code> 解析；但它不共用 record 契约（values 硬顶 2000 字、kind 注册、衰减、配额都不适用）。</div>
+</section>
+
+
+<section id="dup">
+  <div class="section-head"><span class="section-no">05</span><div>
+    <h2>重复矩阵与合并</h2>
+    <p class="section-copy">八条相邻关系逐条画线；只有一条是真重复（brief vs pack），已经合并到 pack 的 schema 上。</p>
+  </div></div>
+
+  <div class="table-wrap"><table>
+    <thead><tr><th>功能</th><th>未来计划位置</th><th>v1.2 计划</th><th>判定</th><th>决策</th></tr></thead>
+    <tbody>
+      <tr><td>按任务装配上下文</td><td>§5.3 pack（P1）</td><td>session brief</td><td><span class="tag rose">真重复</span></td><td>brief 产出 pack schema 子集；预算/排序只有 pack 一份</td></tr>
+      <tr><td>任务状态机</td><td>§5.4 审批队列（P3）</td><td>open → closed → archived</td><td><span class="tag orange">相邻</span></td><td>目录与状态机分离：<code>tasks/</code> vs <code>sessions/</code></td></tr>
+      <tr><td>过程摘要</td><td>v0.3 的 L2/L3（record 派生）</td><td>段（transcript 派生）</td><td><span class="tag orange">相邻</span></td><td>段永不进 facts；只进 references / summary</td></tr>
+      <tr><td>入站内容</td><td>P2 导入（adapter）</td><td>capture（本机转录）</td><td><span class="tag orange">相邻</span></td><td>统一管道、不同来源；不走 Ed25519 信封</td></tr>
+      <tr><td>上下文压缩</td><td>billion-context（宿主层）</td><td>capture（任务层）</td><td><span class="tag mint">不重复</span></td><td>宿主管「装得下」，账本管「找得回」</td></tr>
+      <tr><td>检索</td><td>search（BM25+向量+RRF）</td><td>session search</td><td><span class="tag mint">可复用</span></td><td>同一代码路径，命令分开</td></tr>
+      <tr><td>工具面</td><td>§5.5 默认 4 工具</td><td>memory_session_brief</td><td><span class="tag orange">相邻</span></td><td>归入 <code>--session-tools</code></td></tr>
+      <tr><td>信任/污点</td><td>§4.2 + I-11</td><td>段带 trust / taint</td><td><span class="tag mint">已对齐</span></td><td>第一天就写，不回填</td></tr>
+    </tbody>
+  </table></div>
+
+  <p class="thesis"><b>合并后只有一条装配路径：</b><code>briefJson()</code> 出 pack schema 子集 → P1 的 <code>memory_pack</code> 把 <code>[records, ledger]</code> 合起来装配 → 同一套预算与排序。UI 那个「生成简报」按钮调的也是 <code>briefJson</code>。</p>
+
+  <div class="callout warn"><b>为这次合并新增的验收（写进 P1）：</b>①同一 <code>asOf</code> 的 pack 两次输出逐字节相等（沿用 I-6）；②关掉账本时 pack 输出与引入账本前逐字节一致 —— 保证账本是可加性扩展，不是替换。</div>
+</section>
+
+
+<section id="rules">
+  <div class="section-head"><span class="section-no">06</span><div>
+    <h2>边界规则（可检查）</h2>
+    <p class="section-copy">下面每条都能用一个断言或一次 grep 验证，不靠"大家记得"。</p>
+  </div></div>
+  <div class="table-wrap"><table>
+    <thead><tr><th>规则</th><th>怎么验</th></tr></thead>
+    <tbody>
+      <tr><td>账本不进 <code>facts</code></td><td>构造含段的 pack，断言 <code>facts</code> 数组里没有段 id（I-15）</td></tr>
+      <tr><td>账本不改真相层</td><td>capture 前后 <code>items/*.jsonl</code> 行数与 hash 不变</td></tr>
+      <tr><td>只追加</td><td><code>segments.jsonl</code> 行数只增；<code>index.json</code> 删除后可从段重建且逐字节一致</td></tr>
+      <tr><td>区间不重叠</td><td>重复 capture 同一区间 → <code>E_ALREADY_CAPTURED</code>；<code>coveredSeqs</code> 无交集</td></tr>
+      <tr><td>目录不混用</td><td><code>grep</code> 断言 <code>sessions/</code> 与 <code>tasks/</code> 的写入方分别是账本与审批</td></tr>
+      <tr><td>工具面不膨胀</td><td>默认 MCP 工具集合 = {search, write, brief, pack}；会话工具需显式开启</td></tr>
+    </tbody>
+  </table></div>
+</section>
+
+
+<section id="decisions">
+  <div class="section-head"><span class="section-no">07</span><div>
+    <h2>决策与驳回</h2>
+    <p class="section-copy">红队五路 + 未来架构比对之后，这些是定下来的，也写清楚为什么否掉另外几条。</p>
+  </div></div>
+  <div class="table-wrap"><table>
+    <thead><tr><th>决策</th><th>理由</th></tr></thead>
+    <tbody>
+      <tr><td>段落独立文件，不进 memory record</td><td><code>MAX_VALUE=2000</code> 装不下 8 段；kind 注册要求 <code>halfLifeMs&gt;0</code>；还要绕开衰减/配额/slot disputed</td></tr>
+      <tr><td>close 不阻塞</td><td>捕获失败让用户关不掉会话，是最坏体验；改为告警 + <code>--require-capture</code> 才强制</td></tr>
+      <tr><td>brief 直接出 pack schema 子集（方案 A）</td><td>方案 B 快一周但 P1 必然返工，且中间存在两份"简报"定义</td></tr>
+      <tr><td>驳回：段存 SQLite / 双写索引</td><td>与零运行时依赖、真相层明文可读冲突；千段规模 JSONL 够用</td></tr>
+      <tr><td>驳回：自动每轮 capture</td><td>五路红队一致反对；宿主与竞品的数据丢失事故全在自动路径</td></tr>
+      <tr><td>驳回：晋升白名单加 <code>fact</code></td><td>future §5.2 明确 session 晋升只允许 <code>decision|gotcha</code></td></tr>
+      <tr><td>驳回：brief 放完整 8 段</td><td>与"30 秒接上"冲突；<code>--full</code> 才展开</td></tr>
+    </tbody>
+  </table></div>
+</section>
+
+
+<section id="next">
+  <div class="section-head"><span class="section-no">08</span><div>
+    <h2>未决与下一步</h2>
+    <p class="section-copy">只剩一个待拍板项和一份实施顺序。</p>
+  </div></div>
+  <div class="boundary-grid">
+    <div class="boundary"><b>待拍板</b><p>brief 是否按 pack schema 出（推荐 A）；若你选 B，我会在计划里标注"P1 迁移"的返工成本。</p></div>
+    <div class="boundary"><b>实施顺序</b><p>B0 修 transcript（slug / 多帧 zstd / 事件 schema）→ 真实解析报告 → B1 段存储与 capture → B2 brief/expand → B3 UI。</p></div>
+    <div class="boundary"><b>完成判据</b><p>新会话只读 brief 能答出 3 个决策 / 2 个卡点 / 3 个文件；关账本时 pack 输出逐字节不变。</p></div>
+  </div>
+  <div class="callout risk"><b>不能跳过 B0。</b>红队复现了三个叠加 bug：目录 slug 少两侧 <code>--</code>、多帧 zstd 只解首帧、事件 schema 不匹配 → 当前 capture 会"成功"返回空段。地基不修，上面全是空中楼阁。</div>
+</section>
+
+<footer class="crumbs" style="margin-top:48px;padding-top:18px;border-top:1px solid var(--atlas-line)">
+  sedimem · v1.2 计划对照 · 生成于 2026-11-15 · 相关文档：docs/plans/v1.2-task-context-ledger.md、docs/plans/future-architecture.md、docs/plans/v1.2-vs-future-dedup.md
+</footer>
+</main>
+</div>
+
+<script>
+(function(){
+  const DATA = {
+    f1: [
+      ['宿主转录','本机 <code>~/.dsh/sessions/--&lt;cwd&gt;--/&lt;uuid&gt;/session.v4.jsonl.zstd</code>。实测 63.9MB / 34,184 事件，多帧 zstd 必须逐帧解。','capture 的唯一输入；只读，不改。'],
+      ['capture','规则模式零 token（抽取 files/decisions/gotchas/pending/nextSteps/errors），<code>--llm</code> 才二次摘要。写段前过 <code>redactText</code> 与 <code>detectSuspicious</code>。','输出段；失败零写入（fail-closed）。'],
+      ['任务账本','<code>sessions/&lt;taskId&gt;/segments.jsonl</code> 追加 + <code>index.json</code> 派生（可重建）。段带 <code>anchor{path,fromSeq,toSeq}</code>。','只追加、区间幂等、无锚点不写。'],
+      ['briefJson()','纯函数、clock 注入、确定性排序；输出 pack schema 子集（decisions/gotchas/references/excluded/budget）。','不做预算裁剪——那是 pack 的活。'],
+      ['Agent / pack','Agent 通过 <code>memory_session_brief</code>（<code>--session-tools</code>）读简报；P1 的 pack 用 <code>includeLedger:true</code> 把账本当数据源。','段只进 references/summary，永不进 facts。'],
+      ['expand','本地 CLI：按 anchor 从转录解出原文，默认 <code>--to-file</code> 写文件。MCP 不给原文。','原文一致性用 CLI 路径测；简报脱敏用 MCP 路径测。']
+    ],
+    f2: [
+      ['HOSTS','DSH / Codex CLI / Claude Code 通过 MCP 接入；宿主自己的 auto memory 与 auto-compact 不覆盖、不双写。','只提供"按任务装配 + provenance + 失效"。'],
+      ['adapter','外部源（gmail/calendar/git）独立进程，Ed25519 信封投递，私钥不在 <code>MEMO_HOME</code>，未注册即 T3。','不读 items/inbox/events，只 ingest。'],
+      ['KERNEL 真相层','<code>items/&lt;scope&gt;.jsonl</code> append-only；四道门 = schema / 脱敏 / 去重 / 冲突。','账本不写这里；只有 close 晋升的 decision/gotcha 进来。'],
+      ['pack 装配器','预算 maxTokens、确定性排序（trustRank, kindRank, score, id）、超预算先裁 references 再裁低分 facts。','唯一装配逻辑；账本经 includeLedger 参与。'],
+      ['任务账本','内核内的独立数据源（<code>sessions/&lt;id&gt;/</code>），不进 record 契约。','为跨会话接力服务，不参与 facts。'],
+      ['DAEMON','单进程多职责：scheduler + supervisor + 审批队列；无 daemon 时功能全集可用。','P4 端点未合并前不启动。']
+    ]
+  };
+  document.querySelectorAll('.plate-detail-list').forEach((wrap) => {
+    const key = wrap.dataset.nodes;
+    const toc = wrap.querySelector('.toc');
+    const body = wrap.querySelector('.body');
+    const items = DATA[key] || [];
+    items.forEach((it, i) => {
+      const b = document.createElement('button');
+      b.type = 'button';
+      b.textContent = it[0];
+      b.setAttribute('aria-selected', i === 0 ? 'true' : 'false');
+      b.addEventListener('click', () => select(i));
+      toc.appendChild(b);
+    });
+    function select(i) {
+      [...toc.children].forEach((c, j) => c.setAttribute('aria-selected', j === i ? 'true' : 'false'));
+      const it = items[i];
+      body.innerHTML = '<h4>' + it[0] + '</h4><p>' + it[1] + '</p><ul><li>' + it[2] + '</li></ul>';
+    }
+    if (items.length) select(0);
+  });
+})();
+</script>
+
+</body>
+</html>

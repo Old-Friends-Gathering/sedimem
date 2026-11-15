@@ -1,7 +1,7 @@
 # 06 · 使用与运维（memo）
 
 > doc-kind: manual
-> doc-version: 1.1
+> doc-version: 1.2
 > verified-at: 2026-11-14
 > verified-against: versions/CURRENT（v1.0 / 1.0.0）
 
@@ -665,7 +665,7 @@ memo derive --json                  # 机读
 ### 20.1 开启写模式
 
 ```bash
-MEMO_HOME=$HOME/.memo node versions/v1.1/src/cli/memo.js serve --port 7788 --write
+MEMO_HOME=$HOME/.memo node versions/v1.2/src/cli/memo.js serve --port 7788 --write
 # 或：MEMO_WRITE=1 ... memo serve --port 7788
 ```
 
@@ -682,14 +682,14 @@ MEMO_HOME=$HOME/.memo node versions/v1.1/src/cli/memo.js serve --port 7788 --wri
 
 ```bash
 # 预览（默认 dry-run，不写盘）
-node versions/v1.1/src/cli/memo.js import agents ~/.codex/AGENTS.md
-node versions/v1.1/src/cli/memo.js import basic-memory ~/notes
-node versions/v1.1/src/cli/memo.js import obsidian ~/vault/some-folder
-node versions/v1.1/src/cli/memo.js import mem0 ~/mem0-export.json
-node versions/v1.1/src/cli/memo.js import cline ~/myproject/memory-bank
+node versions/v1.2/src/cli/memo.js import agents ~/.codex/AGENTS.md
+node versions/v1.2/src/cli/memo.js import basic-memory ~/notes
+node versions/v1.2/src/cli/memo.js import obsidian ~/vault/some-folder
+node versions/v1.2/src/cli/memo.js import mem0 ~/mem0-export.json
+node versions/v1.2/src/cli/memo.js import cline ~/myproject/memory-bank
 
 # 真写
-node versions/v1.1/src/cli/memo.js import agents ~/.codex/AGENTS.md --apply
+node versions/v1.2/src/cli/memo.js import agents ~/.codex/AGENTS.md --apply
 ```
 
 导入页（`#/import`）做的是同一件事，只是走 HTTP：先预览再写入。
@@ -718,3 +718,22 @@ memo session remove --scope session:<id> --yes     # 移到 $MEMO_HOME/trash/<ts
 ```
 
 观测台「任务」页做同样的事：点任务看细节、重命名、删除任务库、删单条记录（需 `memo serve --write`）。
+
+## 22、任务账本（v1.2）
+
+任务库记的是"这次任务做了什么"，账本记的是"过程本身"——会话转录被折成可还原的段。
+
+```bash
+memo session start "加语义检索"            # 建任务库（已有则复用）
+memo session capture                       # 规则抽取（零 token）；--llm 走模型，失败自动回落
+memo session segments                      # 看段：区间 / 模式 / 是否隔离 / 摘要
+memo session brief                         # 生成简报（pack schema 子集，≤2200 字）
+memo session expand --segment <segId>      # 按 anchor 还原该段原文
+memo session archive --yes                 # 归档整个任务（移到 archive/，不删）
+```
+
+观察台：任务页顶部是账本摘要（段数 / 覆盖区间 / 简报字数 / 上次捕获），下面是段时间线（点开看
+decisions / gotchas / nextSteps）与简报面板；`--write` 下才有「捕获 / 归档」按钮。
+
+策略键（`config/policy.json` 的 `session.ledger`）：`maxTurnsPerSegment`（默认 120）、`briefMaxChars`（2200）、
+`capture.mode`（`rules|llm`）、`capture.maxInputTokens`（16000）。段**不进**记忆库，`filter`/`search`/`brief` 都查不到它。

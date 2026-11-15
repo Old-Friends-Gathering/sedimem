@@ -42,6 +42,13 @@
       ],
       "glob": "versions/*/reviews/probes/**",
       "reason": "审核探针需要在真实路径上复现问题（路径穿越 / scope 解析）；只用于留证，不进产物。"
+    },
+    {
+      "rules": [
+        "S2"
+      ],
+      "glob": "versions/*/eval/cases/**",
+      "reason": "评测用例 I56 需要构造形似 GitHub PAT 的字面量来验证入库前脱敏与隔离；构造样例，不对应任何真实凭据。"
     }
   ],
   "syntheticSecrets": [

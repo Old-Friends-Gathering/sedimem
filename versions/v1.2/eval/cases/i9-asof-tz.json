@@ -1,0 +1,17 @@
+{
+  "id": "I9",
+  "name": "asof-timezone",
+  "desc": "asOf 必须按 Date.parse 归一到 UTC 比较（裁决 17）：+08:00 表达的同一时刻能查到；非法串抛 E_INVALID_ARG",
+  "tWriteMs": 1769472000000,
+  "write": {
+    "text": "端口是 6379",
+    "subject": "monitor.redis",
+    "predicate": "port",
+    "value": "6379"
+  },
+  "asOfUtc": "2026-01-27T00:00:00.000Z",
+  "asOfPlus08": "2026-01-27T08:00:00.000+08:00",
+  "asOfPlus08Before": "2026-01-27T07:59:59.000+08:00",
+  "asOfInvalid": "not-a-date",
+  "query": "端口"
+}

@@ -1,0 +1,39 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  夜间整合（macOS launchd）：配额淘汰、brief 重建、metrics 快照、去重候选统计。
+
+  同样走 scripts/sedimem-run.sh（跟 versions/CURRENT 走），所以换大版本不用改这里。
+  不要同时用 crontab：两边都装会让 nightly 一天跑两次，metrics 互相覆盖（同日同 scope 是覆盖写）。
+
+  用法：
+    1) 把两处占位符换成真实路径：__REPO_ROOT__ / __MEMO_HOME__
+    2) cp 到 ~/Library/LaunchAgents/ && launchctl load ~/Library/LaunchAgents/live.sedimem.nightly.plist
+    3) 立刻跑一次看效果：launchctl kickstart -k gui/$(id -u)/live.sedimem.nightly
+    日志：tail -f ~/.memo/nightly.log
+-->
+<plist version="1.0">
+<dict>
+  <key>Label</key><string>live.sedimem.nightly</string>
+  <key>ProgramArguments</key>
+  <array>
+    <string>__REPO_ROOT__/scripts/sedimem-run.sh</string>
+    <string>nightly</string>
+  </array>
+  <key>EnvironmentVariables</key>
+  <dict>
+    <key>MEMO_HOME</key><string>__MEMO_HOME__</string>
+    <key>MEMO_NODE</key><string>__NODE__</string>
+    <key>PATH</key><string>/usr/local/bin:/usr/bin:/bin:/opt/homebrew/bin</string>
+  </dict>
+  <key>WorkingDirectory</key><string>__REPO_ROOT__</string>
+  <key>RunAtLoad</key><false/>
+  <!-- 每天 03:30 本地时间；机器睡眠时唤醒后补跑（launchd 语义：错过则在唤醒时执行一次） -->
+  <key>StartCalendarInterval</key>
+  <dict>
+    <key>Hour</key><integer>3</integer>
+    <key>Minute</key><integer>30</integer>
+  </dict>
+  <key>StandardOutPath</key><string>__MEMO_HOME__/nightly.log</string>
+  <key>StandardErrorPath</key><string>__MEMO_HOME__/nightly.err.log</string>
+</dict>
+</plist>

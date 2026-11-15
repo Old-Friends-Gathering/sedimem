@@ -1,0 +1,10 @@
+{
+  "id": "I31",
+  "name": "入库脱敏四表面",
+  "expects": [
+    "text/value/title/quote 全部脱敏",
+    "supersede 不绕过",
+    "tags redacted:*",
+    "原文不落盘"
+  ]
+}

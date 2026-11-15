@@ -1,0 +1,16 @@
+{
+  "id": "I16",
+  "name": "index-parity",
+  "desc": "SQLite FTS5 索引一致性（docs/09 §7）：同一批 12 条中英混合记录，InvertedIndex 与 SqliteIndex 分别 build，8 条查询 top-3 集合相等（同分并列允许顺序不同）；sqlite 库删掉后重建（memo reindex 场景）size 等于真相层记录数；index.backend=sqlite 时 $MEMO_HOME/index/<scopeKey>.sqlite 真实存在且检索走 SQLite。证明索引后端可插拔且语义不漂移（G1/G2/G3）。",
+  "recordCount": 12,
+  "queries": [
+    "数据库 连接池",
+    "database connection pool",
+    "deploy script",
+    "缓存命中率 报警",
+    "cache alert",
+    "日志 保留 14 天",
+    "QPS 500 压测",
+    "does-not-exist-token"
+  ]
+}

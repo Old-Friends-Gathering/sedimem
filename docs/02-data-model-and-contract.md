@@ -893,7 +893,7 @@ v0.4 的取舍依据是竞品调研（`docs/research/competitive-dsh-plugins-202
 ## 附录 A · SQLite FTS5 后端（history）
 
 > doc-kind: history
-> doc-version: 1.1
+> doc-version: 1.2
 > verified-at: 2026-11-14
 > verified-against: versions/CURRENT（v1.0 / 1.0.0）
 
@@ -966,7 +966,7 @@ v1.0 是重构版本，**行为不改，只改结构与文档**。以下五条�
    `E_SCOPE_MISMATCH`（跨库写入 fail-loud，不允许静默写歪）。
 2. `forgetRecord` / `supersedeRecord` 打快照时显式把 `scope` 归一到 `svc.scope`
    —— 这是对遗留行的自愈，不改变记录的语义与 id。
-3. 由 `versions/v1.1/tests/unit/legacy-scope.test.js` 的 I1/I2/I3 守住；
+3. 由 `versions/v1.2/tests/unit/legacy-scope.test.js` 的 I1/I2/I3 守住；
    修数据用 `items/<scope>.jsonl` 的显式迁移，不允许靠「再 forget 一次」蒙混。
 
 ## §3.19 v1.0 LLM 派生层契约（裁决 83–88）与导出登记
@@ -1072,3 +1072,28 @@ Q5 契约覆盖按「导出名必须出现在 docs/」判定，这里逐模块�
 **裁决 114（删除是可审计的删除）**：单条记录走 `forget` → 墓碑（`status=tombstoned`，真相层不减行）；
 任务库走 `removeSession` → 整库文件移入 `$MEMO_HOME/trash/<yyyymmdd-HHMMSS>/` 并向 `events.jsonl` 追加
 `op:'session_remove'`。UI 的删除按钮只在 `--write` 下可用，且必须二次确认；没有静默删除。
+
+## §3.23 任务账本（v1.2，裁决 118–123）
+
+完整契约见 [`versions/v1.2/docs/SEGMENT-SPEC.md`](../versions/v1.2/docs/SEGMENT-SPEC.md)（磁盘布局、段字段、导出签名、错误码）。
+这里只固化六条不可协商的裁决：
+
+**裁决 118（账本不是 record）**：段存 `$MEMO_HOME/sessions/<taskId>/segments.jsonl`，**永不写进** `items/<scope>.jsonl`。
+因此段不过四道门、不占 `quota.maxActive`、不进 `brief` 的主库部分、不进主库 `search`、不进 `facts`。
+理由：`MAX_VALUE=2000` 装不下 8 段 JSON，且把过程塞进真相层会让"可追溯的事实"与"过程记录"混成一个池子。
+
+**裁决 119（区间幂等）**：段是 `[fromSeq,toSeq)` 区间，**两两不相交**；重复捕获必须返回 `created:0`，
+重叠写入抛 `E_ALREADY_CAPTURED` 且**零写入**（先判后写，在 `withLock` 内）。`index.json` 是派生物，可随时重建且逐字节相同。
+
+**裁决 120（摘要三段式）**：规则模式摘要固定为一行
+`诉求：<首条用户 turn ≤120 字>；<N 轮对话 · M 次提问>；结论：<末条 assistant turn ≤140 字>`，总长 ≤400、**不含换行**；
+先过滤噪声（运行时快照 / 时间采样 / ACP 元数据 / 纯代码块 turn），再抽句。`decisions`/`gotchas` 只从 **assistant** 发言抽取。
+
+**裁决 121（LLM 失败不阻塞）**：`capture --llm` 在 LlmPort 不可用、超时、输出不可解析时**回落到规则抽取**，
+段写 `fallbackReason`；`capture` 自身失败只告警，`session close` 不因此失败（`--require-capture` 才强制）。
+
+**裁决 122（写段前过卫生）**：段落盘前必须 `redactText` + `detectSuspicious`；
+命中注入证据的段 `quarantined=true`、`taint` 含 `suspicious`，**不进简报**（简报里只计 `excluded`）。
+
+**裁决 123（可还原 + 可归档）**：段必须带 `anchor{path,fromSeq,toSeq}`，`expand` 据此重读转录还原原文；
+`archive` 把整个 `sessions/<taskId>/` 移入 `archive/<taskId>-<ts>/` 并写事件，不做物理删除。

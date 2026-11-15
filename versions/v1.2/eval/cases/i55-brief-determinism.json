@@ -1,0 +1,11 @@
+{
+  "id": "I55",
+  "title": "简报确定性：固定 clock 两次 briefJson 逐字节相同，quarantined/未来段被排除且计数可解释",
+  "why": "简报要喂给下一个 agent，同一账本必须产生同一份简报（否则缓存、对比、回归都不可信），并且排除规则必须可解释：被隔离的段不能泄进输出，晚于 asOf 的段不能提前出现，预算不足要显式 truncated。",
+  "pass": [
+    "手工 append 5 段（1 段 quarantined、1 段 createdAt 晚于 asOf），同一 asOf + 固定 clock 调 briefJson 两次：JSON.stringify 完全相等、deepEqual",
+    "quarantined 段与未来段的标记文本都不出现在 JSON.stringify(brief) 里",
+    "segments==={total:5,used:3,quarantined:1}；excluded 含 {kind:'segment',reason:'quarantined',count:1} 与 {kind:'segment',reason:'future',count:1}",
+    "maxChars:8 时 budget.truncated===true、decisions 为空、excluded 含 {kind:'budget',reason:'maxChars'}、usedChars<=8"
+  ]
+}
