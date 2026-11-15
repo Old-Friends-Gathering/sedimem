@@ -1,0 +1,11 @@
+{
+  "id": "I29",
+  "name": "每步注入预算与安全",
+  "expects": [
+    "<=maxChars",
+    "围栏与声明",
+    "suspicious/superseded 不注入",
+    "brief 缺失走 items",
+    "无分库返回 null"
+  ]
+}

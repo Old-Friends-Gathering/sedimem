@@ -1,5 +1,5 @@
 > doc-kind: manual
-> doc-version: 1.0
+> doc-version: 1.3
 
 <div align="center">
 
@@ -18,7 +18,7 @@
 
 - 🔒 **真相层不可变**：`~/.memo/items/<scope>.jsonl` 只追加、永不原地改，改过去 = 追加新版本，可 `as-of` 回查任意时点
 - 🔌 **三端共用一个记忆**：DSH / Codex CLI / Claude Code 连同一个 stdio MCP server、同一个分库
-- 🧱 **零依赖离线**：12 个模块，0 运行时依赖（Node ≥ 22，内置 `node:sqlite` FTS5），不开 LLM 也完整可用
+- 🧱 **零依赖离线**：14 个模块，0 运行时依赖（Node ≥ 22.15，内置 `node:sqlite` FTS5），不开 LLM 也完整可用
 
 </div>
 
@@ -44,7 +44,7 @@ $NODE $V/src/cli/memo.js serve --port 7788   # 记忆中心 http://127.0.0.1:778
 | 项目 | 强项 | sedimem 不同在哪 |
 |---|---|---|
 | mem0 | 自动提取、云端服务 | 它靠 LLM 抽取与改写；sedimem 真相层不可变，提取只进旁路派生层 |
-| claude-mem | Claude 生态自动记忆 | 只服务 Claude；sedimem 三端共用同一 stdio MCP server |
+| claude-mem | 跨 agent 自动记忆（117k★，支持 6+ harness 含 dsh） | 自动摘要为主；sedimem 三端共用同一 stdio MCP server，且有 as-of 与裁决 |
 | dsh-engram | Windows 支持、图谱面板 | 图谱面板思路相近；sedimem 另有 as-of 回查与投毒可审计 |
 | supermemory | 云同步、跨设备 | 云为主；sedimem 刻意本地优先，删 `~/.memo/` 即彻底清除 |
 | 自建 Markdown | 简单可控 | 无索引、无去重、无冲突裁决；sedimem 有 BM25+语义检索与卫生门禁 |
@@ -54,9 +54,9 @@ $NODE $V/src/cli/memo.js serve --port 7788   # 记忆中心 http://127.0.0.1:778
 
 ## 架构
 
-![整体架构：客户端 → 接口层 → MemoryService → 12 模块 → 数据层](docs/shots/diagrams/master-arch.png)
+![整体架构：客户端 → 接口层 → MemoryService → 14 模块 → 数据层](docs/shots/diagrams/master-arch.png)
 
-- **三层单向**：客户端 → 接口层（CLI / MCP / Web）→ MemoryService → 12 模块（core / storage / index / hygiene / render / views / session / capture / llm / mcp / web / cli）→ 数据层，依赖只朝下。
+- **三层单向**：客户端 → 接口层（CLI / MCP / Web）→ MemoryService → 14 模块（api / config / core / storage / index / hygiene / render / views / session / capture / llm / mcp / web / cli）→ 数据层，依赖只朝下。
 - **写入四道门**：schema 校验 → 脱敏（密钥/内网域名/私有路径 → `[REDACTED:x]`，落盘前）→ 去重（contentHash / 实体键 / 汉字二元组 Dice 0.15 召回、0.85 判重）→ 冲突（同 slot 异值 → superseded 或 disputed，可交 Agent 裁决）。
 - **派生旁路**：LLM 总结走 outbox → sidecar（`derived/<scopeKey>.jsonl`），失败只降级，真相层字节不变。
 
@@ -163,7 +163,7 @@ memo session sweep      # 扫 14 天僵尸库
         serverName: memo
         transport: stdio
         command: node
-        args: ['/ABS/PATH/versions/v1.2/src/mcp/server.js']
+        args: ['/ABS/PATH/versions/v1.3/src/mcp/server.js']
         env: { MEMO_HOME: '$HOME/.memo' }
 ```
 
@@ -171,7 +171,7 @@ memo session sweep      # 扫 14 天僵尸库
 # Codex CLI：~/.codex/config.toml
 [mcp_servers.memo]
 command = "node"
-args = ["/ABS/PATH/versions/v1.2/src/mcp/server.js"]
+args = ["/ABS/PATH/versions/v1.3/src/mcp/server.js"]
 enabled = true
 [mcp_servers.memo.env]
 MEMO_HOME = "$HOME/.memo"
@@ -180,10 +180,10 @@ MEMO_HOME = "$HOME/.memo"
 ```bash
 # Claude Code
 claude mcp add --scope user memo -e MEMO_HOME=$HOME/.memo -- \
-  node /ABS/PATH/versions/v1.2/src/mcp/server.js
+  node /ABS/PATH/versions/v1.3/src/mcp/server.js
 ```
 
-自检：`bash versions/v1.2/configs/verify-three-clients.sh`（期望 `PASS`）。
+自检：`bash versions/v1.3/configs/verify-three-clients.sh`（期望 `PASS`）。
 
 工具面：10 个 `memory_*` + 5 个 `memory_session_*`，三端完全一致。
 
@@ -264,7 +264,7 @@ claude mcp add --scope user memo -e MEMO_HOME=$HOME/.memo -- \
 
 ![五层门禁：质量 → 安全 → 覆盖率 → docs-drift → pages-verify](docs/shots/diagrams/gates.png)
 
-本地脚本 = CI 脚本：质量 15 项 + 安全 9 项 + 覆盖率（lines ≥ 89 / functions ≥ 90 / branches ≥ 77）+ docs-drift + pages-verify，另含 747 tests 与 eval I1–I56。
+本地脚本 = CI 脚本：质量 15 项 + 安全 9 项 + 覆盖率（lines ≥ 85 / branches ≥ 70 / functions ≥ 90）+ docs-drift + pages-verify，另含 753 tests 与 eval I1–I56。
 
 ```bash
 node tools/quality-check.mjs && node tools/security-check.mjs && node tools/coverage-gate.mjs
@@ -287,7 +287,8 @@ node tools/quality-check.mjs && node tools/security-check.mjs && node tools/cove
 | 版本 | 主题 | 状态 |
 |---|---|---|
 | v1.0.2 | 三处真 fix（思考链/重建/懒加载）+ 文档改图为主 | ✅ 已发布 |
-| **v1.2.2** | 文档同步门禁 Q16 + README/项目站补「任务账本」章节与 CLI 速查 | ✅ 当前 |
+| **v1.3.0** | P0a 地基：CI 跑 CURRENT、覆盖率/Windows 冒烟去硬编码、engines 22.15、文档与门禁对齐 | ✅ 当前 |
+| v1.2.2 | 文档同步门禁 Q16 + README/项目站补「任务账本」章节与 CLI 速查 | ✅ 已发布 |
 | v1.2.1 | 任务账本补丁：简报可读性与预算、决策抽取精度、默认走 LLM | ✅ 已发布 |
 | v1.2.0 | 任务账本：会话转录折成可还原的段、简报、隔离与归档（`memo session capture/brief/expand`） | ✅ 已发布 |
 | v1.1.0 | 记忆中心整体 UI 重做 + 任务库按任务命名/可删除（`/api/tasks`） | ✅ 已发布 |
@@ -295,7 +296,7 @@ node tools/quality-check.mjs && node tools/security-check.mjs && node tools/cove
 | v1.0.4 | 任务库（`session:*`）在观测台可浏览：`SCOPE_PATTERN` 补上 `session` 前缀 | 已发布 |
 | v1.0.3 | 分库归属硬门（跨库写入 fail-loud）+ CI 门禁不再被 tee 吞 | 已发布 |
 | v1.0.1 | 图谱可用性 + 配色对齐 DSH | ✅ 已交付 |
-| v1.0.0 | 12 模块重构 + LLM 总结层 + 九页重做 | ✅ 已交付 |
+| v1.0.0 | 14 模块重构 + LLM 总结层 + 九页重做 | ✅ 已交付 |
 | 更早（v0.1–v0.6） | 核心层、语义道、pages-verify 等 | 🔒 冻结 |
 
 `X.Y` 换目录、`X.Y.Z` 同目录补丁；指针在 `versions/CURRENT`（当前 v1.0）。

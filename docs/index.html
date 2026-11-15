@@ -113,10 +113,10 @@ footer a:hover{text-decoration:underline}
   <h1>sedimem<span class="dot">.</span></h1>
   <p class="subtitle">本地优先的个人 AI 记忆系统：真相层只追加，其余全部可重建。</p>
   <div class="pills">
-    <span class="pill"><b>648</b>tests</span>
+    <span class="pill"><b>753</b>tests</span>
     <span class="pill"><b>0</b>运行时依赖</span>
-    <span class="pill"><b>12</b>模块</span>
-    <span class="pill"><b>v1.2.2</b>当前版本</span>
+    <span class="pill"><b>14</b>模块</span>
+    <span class="pill"><b>v1.3.0</b>当前版本</span>
   </div>
   <figure>
     <img src="shots/hero.png" alt="sedimem 首屏横幅"
@@ -130,10 +130,10 @@ footer a:hover{text-decoration:underline}
 <section>
   <h2>整体架构</h2>
   <figure>
-    <img src="shots/diagrams/master-arch.png" alt="整系统架构图：客户端→接口层→MemoryService→12 模块→数据层"
+    <img src="shots/diagrams/master-arch.png" alt="整系统架构图：客户端→接口层→MemoryService→14 模块→数据层"
          width="3520" height="1440" loading="lazy"
          style="aspect-ratio:3520/1440">
-    <figcaption>客户端 → 接口层 → MemoryService → 12 模块 → 数据层；①②③ 标出主链路。</figcaption>
+    <figcaption>客户端 → 接口层 → MemoryService → 14 模块 → 数据层；①②③ 标出主链路。</figcaption>
   </figure>
 </section>
 
@@ -213,7 +213,7 @@ footer a:hover{text-decoration:underline}
     <img src="shots/diagrams/gates.png" alt="五层门禁"
          width="3200" height="1120" loading="lazy"
          style="aspect-ratio:3200/1120">
-    <figcaption>质量 14 + 安全 9 + 覆盖率 + docs-drift + pages-verify；656 tests、eval I1–I51。</figcaption>
+    <figcaption>质量 15 + 安全 9 + 覆盖率 + docs-drift + pages-verify；753 tests、eval I1–I56。</figcaption>
   </figure>
 </section>
 
@@ -249,19 +249,19 @@ footer a:hover{text-decoration:underline}
         serverName: memo
         transport: stdio
         command: /opt/homebrew/bin/node
-        args: ['/ABS/PATH/versions/v1.1/src/mcp/server.js']
+        args: ['/ABS/PATH/versions/v1.3/src/mcp/server.js']
         env: { MEMO_HOME: '$HOME/.memo' }
         toolCallTimeoutMs: 15000</code></pre>
 <pre><code># Codex CLI：~/.codex/config.toml
 [mcp_servers.memo]
 command = "/opt/homebrew/bin/node"
-args = ["/ABS/PATH/versions/v1.1/src/mcp/server.js"]
+args = ["/ABS/PATH/versions/v1.3/src/mcp/server.js"]
 enabled = true
 [mcp_servers.memo.env]
 MEMO_HOME = "$HOME/.memo"</code></pre>
 <pre><code># Claude Code
 claude mcp add --scope user memo -e MEMO_HOME=$HOME/.memo -- \
-  /opt/homebrew/bin/node /ABS/PATH/versions/v1.1/src/mcp/server.js</code></pre>
+  /opt/homebrew/bin/node /ABS/PATH/versions/v1.3/src/mcp/server.js</code></pre>
 </section>
 
 <!-- 版本时间线 -->
@@ -274,7 +274,7 @@ claude mcp add --scope user memo -e MEMO_HOME=$HOME/.memo -- \
   <li><b>v0.4</b> 语义道 + 入库脱敏</li>
   <li><b>v0.5</b> DSH 插件化 + pages-verify</li>
   <li><b>v0.6</b> 任务库 + 批量导入</li>
-  <li><b>v1.0</b> 12 模块重构 + 记忆中心</li>
+  <li><b>v1.0</b> 14 模块重构 + 记忆中心</li>
   <li><b>v1.0.1</b> 图谱可用性 + 配色对齐</li>
   <li><b>v1.0.2</b> 思考链 / 重建 / 懒加载修复</li>
   <li><b>v1.2.0</b> 任务账本：会话转录 → 可还原的段 / 简报 / 隔离 / 归档</li>
@@ -283,7 +283,7 @@ claude mcp add --scope user memo -e MEMO_HOME=$HOME/.memo -- \
   <li><b>v1.0.4</b> 任务库可在观测台浏览（session 前缀修复）</li>
   <li><b>v1.0.3</b> 分库归属硬门 + CI 门禁修漏</li>
 </ol>
-<p class="cap">规则：<code>X.Y</code> 换目录（当前 <code>versions/v1.2</code>），<code>X.Y.Z</code> 同目录补丁；当前版本 <b>v1.2.2</b>。</p>
+<p class="cap">规则：<code>X.Y</code> 换目录（当前 <code>versions/v1.3</code>），<code>X.Y.Z</code> 同目录补丁；当前版本 <b>v1.3.0</b>。</p>
 </section>
 
 <div class="langfoot">中文 · <a href="en/index.html">English</a></div>

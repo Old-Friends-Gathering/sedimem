@@ -9,13 +9,15 @@
 // 其回归由 I13/I14 注入用例承担（见 docs/07 第三节）。
 
 import { execFile } from 'node:child_process';
+import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { promisify } from 'node:util';
 
 const execFileAsync = promisify(execFile);
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
-const VERSION_DIR = path.join(ROOT, 'versions', 'v0.1');
+const CURRENT = fs.readFileSync(path.join(ROOT, 'versions', 'CURRENT'), 'utf8').trim();
+const VERSION_DIR = path.join(ROOT, 'versions', CURRENT);
 
 const argv = process.argv.slice(2);
 const opt = (name, dflt) => {

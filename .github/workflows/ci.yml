@@ -2,8 +2,8 @@ name: ci
 
 # 门禁 1/3：行为正确性。任何 push 到 main 与任何 PR 都必须全绿。
 # - test:   单元 + 注入式回归（Node 22 / 24 双版本）
-# - eval:   I1–I15 注入式评测（行为契约，不看覆盖率）
-# - coverage: 覆盖率下限（lines≥85 / branches≥70 / functions≥90，改阈值需 ADR）
+# - eval:   I1–I56 注入式评测（行为契约，不看覆盖率）
+# - coverage: 覆盖率下限（在 test job 内跑；lines≥85 / branches≥70 / functions≥90，改阈值需 ADR）
 # - windows-smoke: Windows 回归冒烟（issue #62；只钉冒烟，不替代全量测试）
 
 on:
@@ -32,8 +32,16 @@ jobs:
       - uses: actions/setup-node@v7
         with:
           node-version: ${{ matrix.node }}
+      - name: 解析 CURRENT
+        id: current
+        run: |
+          set -euo pipefail
+          v=$(tr -d '\r\n' < versions/CURRENT)
+          [[ "$v" =~ ^v[0-9]+\.[0-9]+$ ]]
+          test -d "versions/$v"
+          echo "dir=versions/$v" >> "$GITHUB_OUTPUT"
       - name: 单元测试 + 注入式回归
-        working-directory: versions/v0.3
+        working-directory: ${{ steps.current.outputs.dir }}
         run: node --test 'tests/**/*.test.js'
       - name: 覆盖率门禁
         if: matrix.node == '22'
@@ -60,16 +68,24 @@ jobs:
       - uses: actions/setup-node@v7
         with:
           node-version: '22'
+      - name: 解析 CURRENT
+        id: current
+        run: |
+          set -euo pipefail
+          v=$(tr -d '\r\n' < versions/CURRENT)
+          [[ "$v" =~ ^v[0-9]+\.[0-9]+$ ]]
+          test -d "versions/$v"
+          echo "dir=versions/$v" >> "$GITHUB_OUTPUT"
       - name: 跑评测套件
-        working-directory: versions/v0.3
+        working-directory: ${{ steps.current.outputs.dir }}
         run: node eval/run.js
       - name: 归档评测结果
         if: always()
         uses: actions/upload-artifact@v7
         with:
           name: eval-results
-          path: versions/v0.3/eval/results/LATEST.json
-          if-no-files-found: warn
+          path: ${{ steps.current.outputs.dir }}/eval/results/LATEST.json
+          if-no-files-found: error
 
   plugin:
     name: plugin
@@ -86,7 +102,7 @@ jobs:
 
   gate:
     name: ci-gate
-    needs: [test, eval, plugin]
+    needs: [test, eval, plugin, windows-smoke]
     runs-on: ubuntu-latest
     steps:
       - run: echo "行为门禁全部通过"

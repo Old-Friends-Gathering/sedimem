@@ -1,5 +1,5 @@
 > doc-kind: manual
-> doc-version: 1.0
+> doc-version: 1.3
 
 <div align="center">
 
@@ -18,7 +18,7 @@
 
 - 🔒 **Immutable truth layer**: `~/.memo/items/<scope>.jsonl` is append-only, never edited in place. Fixing the past means appending a new version; query any point in time with `as-of`
 - 🔌 **One memory, three clients**: DSH / Codex CLI / Claude Code all connect to the same stdio MCP server and the same store
-- 🧱 **Zero deps, offline**: 12 modules, 0 runtime deps (Node ≥ 22, built-in `node:sqlite` FTS5); fully usable with no LLM at all
+- 🧱 **Zero deps, offline**: 14 modules, 0 runtime deps (Node ≥ 22.15, built-in `node:sqlite` FTS5); fully usable with no LLM at all
 
 </div>
 
@@ -46,7 +46,7 @@ $NODE $V/src/cli/memo.js serve --port 7788   # Memory Hub at http://127.0.0.1:77
 | Project | Strength | How sedimem differs |
 |---|---|---|
 | mem0 | Auto-extraction, cloud service | It relies on LLM extraction and rewriting; sedimem's truth layer is immutable — extraction only goes to a bypass derived layer |
-| claude-mem | Auto memory in the Claude ecosystem | Claude-only; sedimem serves three clients through one stdio MCP server |
+| claude-mem | Persistent context across sessions, 6+ harnesses (incl. dsh) | Auto summaries (117k★, 6+ harnesses incl. dsh); sedimem serves three clients through one stdio MCP server with as-of and adjudication |
 | dsh-engram | Windows support, graph panel | Similar graph-panel idea; sedimem adds as-of queries and auditable poisoning |
 | supermemory | Cloud sync, cross-device | Cloud-centric; sedimem is deliberately local-first — delete `~/.memo/` and it's gone |
 | DIY Markdown | Simple, controllable | No index, no dedupe, no conflict adjudication; sedimem has BM25 + semantic search and hygiene gates |
@@ -56,9 +56,9 @@ $NODE $V/src/cli/memo.js serve --port 7788   # Memory Hub at http://127.0.0.1:77
 
 ## Architecture
 
-![Overall architecture: clients → interface layer → MemoryService → 12 modules → data layer](docs/shots/diagrams/master-arch.png)
+![Overall architecture: clients → interface layer → MemoryService → 14 modules → data layer](docs/shots/diagrams/master-arch.png)
 
-- **Three layers, one-way flow**: clients → interface layer (CLI / MCP / Web) → MemoryService → 12 modules (core / storage / index / hygiene / render / views / session / capture / llm / mcp / web / cli) → data layer; dependencies point only downward.
+- **Three layers, one-way flow**: clients → interface layer (CLI / MCP / Web) → MemoryService → 14 modules (api / config / core / storage / index / hygiene / render / views / session / capture / llm / mcp / web / cli) → data layer; dependencies point only downward.
 - **Four write gates**: schema validation → redaction (secrets / intranet domains / private paths → `[REDACTED:x]`, before anything hits disk) → dedupe (contentHash / entity keys / CJK bigram Dice, 0.15 recall, 0.85 match) → conflict (same slot, different value → superseded or disputed, with agent-as-judge adjudication).
 - **Derived bypass**: LLM summaries go through outbox → sidecar (`derived/<scopeKey>.jsonl`); failures degrade only, and the truth layer stays byte-identical.
 
@@ -171,7 +171,7 @@ Each client gets one stdio MCP entry pointing at the same `server.js` and the sa
         serverName: memo
         transport: stdio
         command: node
-        args: ['/ABS/PATH/versions/v1.2/src/mcp/server.js']
+        args: ['/ABS/PATH/versions/v1.3/src/mcp/server.js']
         env: { MEMO_HOME: '$HOME/.memo' }
 ```
 
@@ -179,7 +179,7 @@ Each client gets one stdio MCP entry pointing at the same `server.js` and the sa
 # Codex CLI: ~/.codex/config.toml
 [mcp_servers.memo]
 command = "node"
-args = ["/ABS/PATH/versions/v1.2/src/mcp/server.js"]
+args = ["/ABS/PATH/versions/v1.3/src/mcp/server.js"]
 enabled = true
 [mcp_servers.memo.env]
 MEMO_HOME = "$HOME/.memo"
@@ -188,10 +188,10 @@ MEMO_HOME = "$HOME/.memo"
 ```bash
 # Claude Code
 claude mcp add --scope user memo -e MEMO_HOME=$HOME/.memo -- \
-  node /ABS/PATH/versions/v1.2/src/mcp/server.js
+  node /ABS/PATH/versions/v1.3/src/mcp/server.js
 ```
 
-Self-check: `bash versions/v1.2/configs/verify-three-clients.sh` (expect `PASS`).
+Self-check: `bash versions/v1.3/configs/verify-three-clients.sh` (expect `PASS`).
 
 Tool surface: 10 `memory_*` + 5 `memory_session_*`, identical across all three clients.
 
@@ -272,7 +272,7 @@ Tool surface: 10 `memory_*` + 5 `memory_session_*`, identical across all three c
 
 ![Five gate layers: quality → security → coverage → docs-drift → pages-verify](docs/shots/diagrams/gates.png)
 
-Local scripts = CI scripts: 14 quality checks + 9 security checks + coverage (lines ≥ 89 / functions ≥ 90 / branches ≥ 77) + docs-drift + pages-verify, plus 747 tests and eval I1–I56.
+Local scripts = CI scripts: 15 quality checks + 9 security checks + coverage (lines ≥ 85 / branches ≥ 70 / functions ≥ 90) + docs-drift + pages-verify, plus 753 tests and eval I1–I56.
 
 ```bash
 node tools/quality-check.mjs && node tools/security-check.mjs && node tools/coverage-gate.mjs

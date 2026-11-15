@@ -1,0 +1,17 @@
+{
+  "id": "I20",
+  "name": "search-metrics",
+  "desc": "检索健康指标：search 事件只记统计不落 query 原文；nightly metrics 四字段口径 null ≠ 0（裁决 52）",
+  "scope": "repo:eval-i20",
+  "records": [
+    { "kind": "fact", "subject": "toolchain.node", "predicate": "version", "value": "v22", "text": "推荐用 Node 22" },
+    { "kind": "fact", "subject": "release.train", "predicate": "cadence", "value": "weekly", "text": "每周四发版窗口" },
+    { "kind": "fact", "subject": "staleprobe.a", "predicate": "value", "value": "old-a", "text": "staleprobe 旧结论 A" },
+    { "kind": "fact", "subject": "staleprobe.a", "predicate": "value", "value": "new-a", "text": "staleprobe 新结论 A（与旧矛盾）" }
+  ],
+  "queries": {
+    "hit": "Node 推荐",
+    "stale": "staleprobe 旧结论",
+    "miss": "不存在的查询词组xyzq"
+  }
+}

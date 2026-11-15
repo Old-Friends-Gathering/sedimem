@@ -1,0 +1,14 @@
+{
+  "id": "I13",
+  "name": "static-security",
+  "desc": "静态资源与接口安全（docs/08 §7、docs/02 §3.9 裁决 32/34）：/ 与 /app.js 可达；路径穿越/目录列表一律 404；API 只读（写方法 405）；未知端点 404 ok:false；不开 CORS；只绑 127.0.0.1",
+  "traversalPaths": [
+    "/../package.json",
+    "/..%2fpackage.json",
+    "/%2e%2e/package.json",
+    "/ui/../package.json",
+    "/%2Fetc%2Fpasswd"
+  ],
+  "dirPaths": ["/ui/", "/subdir"],
+  "writeMethods": ["POST", "PUT", "DELETE", "PATCH"]
+}

@@ -1,9 +1,9 @@
 # 质量与安全指标（门禁规范）
 
 > doc-kind: contract
-> doc-version: 1.2
+> doc-version: 1.3
 > verified-at: 2026-11-14
-> verified-against: versions/CURRENT（v1.0 / 1.0.0）
+> verified-against: versions/CURRENT（v1.3 / 1.3.0）
 
 本文件是**门禁的权威说明**：每一项指标怎么算、阈值多少、失败时怎么处理、谁能改阈值。
 脚本是实现，本文件是契约——两者不一致时以本文件为准，并提 issue 修脚本。
@@ -23,8 +23,8 @@ cd "$(cat versions/CURRENT)" && node eval/run.js   # 行为（I1–I56）
 
 | 项 | 指标 | 阈值 | 失败含义 |
 |---|---|---|---|
-| `test (22)` / `test (24)` | `node --test 'tests/**/*.test.js'` | **0 失败**（2026-11-14 实测 747 用例） | 行为回归，或测试自身有竞态（历史上 I8 就因此偶发红，已修根因） |
-| `eval (I1–I56)` | `eval/run.js` 退出码 | **全 PASS**（最近一次见 `eval/results/LATEST.json`） | 注入式行为契约破了：重复/冲突/过时/删除/投毒/配额/改写/并发/时区/遮蔽/裁决回路/中文改写等 51 条 |
+| `test (22)` / `test (24)` | `node --test 'tests/**/*.test.js'` | **0 失败**（2026-11-14 实测 753 用例） | 行为回归，或测试自身有竞态（历史上 I8 就因此偶发红，已修根因） |
+| `eval (I1–I56)` | `eval/run.js` 退出码 | **全 PASS**（最近一次见 `eval/results/LATEST.json`） | 注入式行为契约破了：重复/冲突/过时/删除/投毒/配额/改写/并发/时区/遮蔽/裁决回路/中文改写等 56 条 |
 | `windows-smoke` | `node tools/windows-smoke.mjs`（`windows-latest`） | **全部 PASS** | Windows 真相层文件名 / 分库枚举 / `compact` / `nightly` 之一回归（见 §一.1） |
 | 关键指标 | `dupRatio` / `conflictRate` | `dupRatio = 0`；`conflictRate` 只允许由**真冲突用例**产生 | 冗余或冲突治理失效 |
 | 性能 | `bench n5000` search p95 | **< 50ms**（实测 1.9–2.4ms） | 索引退化（例如误改成 O(n) 扫描） |
@@ -53,9 +53,9 @@ cd "$(cat versions/CURRENT)" && node eval/run.js   # 行为（I1–I56）
 
 | 指标 | 当前基线 | 阈值 | 备注 |
 |---|---|---|---|
-| lines | 93.4% | **≥ 85%** | 未覆盖的主要是 MCP 协议边界与交互式分支 |
-| branches | 81.1% | **≥ 70%** | |
-| functions | 92.6% | **≥ 90%** | |
+| lines | 93.09% | **≥ 85%** | 未覆盖的主要是 MCP 协议边界与交互式分支 |
+| branches | 82.64% | **≥ 70%** | |
+| functions | 93.16% | **≥ 90%** | |
 
 统计方式：`npm run test:coverage`（排除 `src/cli/memo.js` 进程外壳，理由见 §七）。
 
@@ -65,7 +65,7 @@ cd "$(cat versions/CURRENT)" && node eval/run.js   # 行为（I1–I56）
 
 | ID | 检查 | 判定 | 为什么这条值得占一个门禁 |
 |---|---|---|---|
-| Q1 | 零运行时依赖 | `dependencies/devDependencies/peerDependencies/optionalDependencies` 全空；`type=module`；有 `engines.node`；`src/` 里无外部 `import` | 便携性是本项目的前提（三端装得上、无需联网装包）。想引库必须先改架构文档 |
+| Q1 | 零运行时依赖 | 当前版本与 `packages/*` 的 `dependencies/devDependencies/peerDependencies/optionalDependencies` 全空；`type=module`；有 `engines.node`；`src/` 里无外部 `import`（冻结快照不在此列；adapters/plugin 在 G6 落地前不得引入运行时依赖） | 便携性是本项目的前提（三端装得上、无需联网装包）。想引库必须先改架构文档 |
 | Q2 | 源码规模 | 单文件 **≤ 900 行**；`src` 总量 **≤ 13000 行**（v0.6 从 12000 调高：新增 session 模块 `src/session/*` 约 450 行 + `cli/session` 130 行 + 写侧契约约 60 行；单文件硬线不动） | 防上帝模块。`api/service.js` 868 行已登记 v0.2 拆分 |
 | Q3 | 测试清单 | 测试文件 ≥ 8；`tests/unit` 与 `tests/injection` 都非空 | 防"只有单元测试没有行为测试"或反之 |
 | Q4 | 评测对齐 | `eval/run.js` 里声明的每个 I 用例都要有注入测试文件；被引用的 `eval/cases/*.json` 必须存在 | 防"删了用例只留 runner 还显示全绿" |
@@ -153,13 +153,13 @@ Pages 构建是异步的（实测 2–5 分钟），脚本默认重试 20×15s�
   指标发生漂移就更新本文件（指标漂移本身就是信号，不要静默改阈值让数字好看）。
 - **禁止**：删除检查项、加 `// q-check-ignore` 式逃逸、把失败改成 warning 了事。
 
-## 七、当前基线（2026-11-13 实测，v0.6.0）
+## 七、当前基线（2026-11-15 实测，v1.3.0）
 
 | 门禁 | 结果 |
 |---|---|
-| 单元 + 注入式 | **747 tests pass**（`node --test 'tests/**/*.test.js'`） |
-| 评测 | **eval I1–I56 全 PASS**（`node eval/run.js`；最近一次结果归档于 `eval/results/LATEST.json`，2026-11-13T11:25Z，51/51 通过） |
-| 质量 | **11/11**（Q1–Q11，含 Q11 写侧粒度与会话库契约） |
+| 单元 + 注入式 | **753 tests pass**（`node --test 'tests/**/*.test.js'`） |
+| 评测 | **eval I1–I56 全 PASS**（`node eval/run.js`；最近一次结果归档于 `eval/results/LATEST.json`，2026-11-15T15:46Z，56/56 通过） |
+| 质量 | **15/15**（Q1–Q11 + Q13–Q16） |
 | 安全 | 9/9（含 S9：src/web 无写接口、只绑回环） |
 | 覆盖率 | 数值不落盘，跑 `node tools/coverage-gate.mjs` 实时采集（阈值 lines ≥ 85% / branches ≥ 70% / functions ≥ 90%）；eval 基线见 `eval/results/LATEST.json` |
 | Windows | `tools/windows-smoke.mjs` 全 PASS（`windows-latest` job 见 §一.1） |
@@ -178,7 +178,7 @@ Pages 构建是异步的（实测 2–5 分钟），脚本默认重试 20×15s�
 write→search→stats 走通）+ `tests/unit/run-script.test.js` + eval 的 CLI 子进程用例覆盖。
 **只有这一个文件被排除**，其余 `src/` 全在统计内——这是「排除不可 import 的入口」而不是「排除难测的逻辑」。
 
-## 八、线上状态与验收证据（快照时间 2026-11-14；权威以 .github/workflows/ci.yml 与 `gh api .../branches/main/protection` 为准）
+## 八、线上状态与验收证据（快照时间 2026-11-15；权威以 .github/workflows/ci.yml 与 `gh api .../branches/main/protection` 为准）
 
 仓库设置（`gh api .../branches/main/protection`）：
 

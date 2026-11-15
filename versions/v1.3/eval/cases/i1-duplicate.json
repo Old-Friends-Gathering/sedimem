@@ -1,0 +1,16 @@
+{
+  "id": "I1",
+  "name": "duplicate",
+  "desc": "同一事实 5 种措辞写 5 次，期望只留 1 条 active",
+  "subject": "project.alpha",
+  "predicate": "deploy.branch",
+  "value": "release-1",
+  "texts": [
+    "project alpha 的部署分支是 release-1",
+    "alpha 项目部署在 release-1 分支上",
+    "部署分支：project alpha 用 release-1",
+    "project alpha deploys from branch release-1",
+    "release-1 是 alpha 项目的部署分支"
+  ],
+  "query": "部署分支"
+}

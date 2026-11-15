@@ -1,9 +1,9 @@
 # 06 · 使用与运维（memo）
 
 > doc-kind: manual
-> doc-version: 1.2
+> doc-version: 1.3
 > verified-at: 2026-11-14
-> verified-against: versions/CURRENT（v1.0 / 1.0.0）
+> verified-against: versions/CURRENT（v1.3 / 1.3.0）
 
 > 当前版本 = **v0.6**（由仓库根的 `versions/CURRENT` 指向）。下文所有命令都从仓库根
 > 用 `cd versions/$(cat versions/CURRENT)` 进入当前版本目录后执行，**不写死任何 v0.x 路径**。
@@ -665,7 +665,7 @@ memo derive --json                  # 机读
 ### 20.1 开启写模式
 
 ```bash
-MEMO_HOME=$HOME/.memo node versions/v1.2/src/cli/memo.js serve --port 7788 --write
+MEMO_HOME=$HOME/.memo node versions/v1.3/src/cli/memo.js serve --port 7788 --write
 # 或：MEMO_WRITE=1 ... memo serve --port 7788
 ```
 
@@ -682,14 +682,14 @@ MEMO_HOME=$HOME/.memo node versions/v1.2/src/cli/memo.js serve --port 7788 --wri
 
 ```bash
 # 预览（默认 dry-run，不写盘）
-node versions/v1.2/src/cli/memo.js import agents ~/.codex/AGENTS.md
-node versions/v1.2/src/cli/memo.js import basic-memory ~/notes
-node versions/v1.2/src/cli/memo.js import obsidian ~/vault/some-folder
-node versions/v1.2/src/cli/memo.js import mem0 ~/mem0-export.json
-node versions/v1.2/src/cli/memo.js import cline ~/myproject/memory-bank
+node versions/v1.3/src/cli/memo.js import agents ~/.codex/AGENTS.md
+node versions/v1.3/src/cli/memo.js import basic-memory ~/notes
+node versions/v1.3/src/cli/memo.js import obsidian ~/vault/some-folder
+node versions/v1.3/src/cli/memo.js import mem0 ~/mem0-export.json
+node versions/v1.3/src/cli/memo.js import cline ~/myproject/memory-bank
 
 # 真写
-node versions/v1.2/src/cli/memo.js import agents ~/.codex/AGENTS.md --apply
+node versions/v1.3/src/cli/memo.js import agents ~/.codex/AGENTS.md --apply
 ```
 
 导入页（`#/import`）做的是同一件事，只是走 HTTP：先预览再写入。

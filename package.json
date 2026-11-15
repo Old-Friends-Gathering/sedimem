@@ -1,0 +1,12 @@
+{
+  "name": "sedimem-workspace",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=22.15"
+  },
+  "workspaces": [
+    "versions/v1.3",
+    "plugin/dsh-sedimem"
+  ]
+}

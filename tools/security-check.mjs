@@ -31,9 +31,9 @@ function record(id, title, ok, detail = []) {
 /** 优先用 git 跟踪清单（避免扫到未跟踪的本地垃圾），无 git 时退化为目录遍历 */
 export async function listFiles() {
   try {
-    const { stdout } = await execFileAsync('git', ['ls-files', '-z'], { cwd: ROOT, maxBuffer: 32 * 1024 * 1024 });
+    const { stdout } = await execFileAsync('git', ['ls-files', '-z', '-co', '--exclude-standard'], { cwd: ROOT, maxBuffer: 32 * 1024 * 1024 });
     const files = stdout.split('\0').filter(Boolean).map((f) => path.join(ROOT, f));
-    if (files.length > 0) return { files, source: 'git ls-files' };
+    if (files.length > 0) return { files, source: 'git ls-files -co' };
   } catch { /* 无 git 或非仓库：退化 */ }
   const out = [];
   async function walk(dir) {
@@ -133,7 +133,8 @@ async function s6License() {
   if (!license) problems.push('缺少 LICENSE');
   else if (!/MIT License/i.test(license)) problems.push('LICENSE 不是 MIT（若改协议需同步 README/package.json）');
   else if (!/Copyright \(c\) 2026 Old Friends Gathering/i.test(license)) problems.push('LICENSE 版权行不符合预期');
-  const pkgs = [path.join(ROOT, 'versions', 'v0.1', 'package.json')];
+  const cur = (await fsp.readFile(path.join(ROOT, 'versions', 'CURRENT'), 'utf8')).trim();
+  const pkgs = [path.join(ROOT, 'versions', cur, 'package.json')];
   for (const p of pkgs) {
     const pkg = JSON.parse(await fsp.readFile(p, 'utf8').catch(() => '{}'));
     if (pkg.license !== 'MIT') problems.push(`${rel(p)}: license 字段应为 MIT（实际 ${pkg.license ?? '缺失'}）`);

@@ -1,8 +1,13 @@
 # 02 · 数据模型与实现契约（唯一权威）
 
-> 本文件是 v0.1 的**编码契约**。任何实现不得偏离导出的名字与签名；如需变更，先改本文件 + 写 ADR（`docs/adr-*.md`）。
+> doc-kind: contract
+> doc-version: 1.3
+> verified-at: 2026-11-15
+> verified-against: versions/CURRENT（v1.3 / 1.3.0）
 
-技术基线：**Node ≥ 22，ESM，零第三方运行时依赖**，只用 `node:fs` / `node:path` / `node:crypto` / `node:os` / `node:process` / `node:test`。
+> 本文件是 v1.3 的**编码契约**。任何实现不得偏离导出的名字与签名；如需变更，先改本文件 + 写 ADR（`docs/adr-*.md`）。
+
+技术基线：**Node ≥ 22.15，ESM，零第三方运行时依赖**，只用 `node:fs` / `node:path` / `node:crypto` / `node:os` / `node:process` / `node:test`。
 目录根：`MEMO_HOME`（默认 `~/.memo`）。
 
 ## 1. 磁盘布局
@@ -420,7 +425,7 @@ await svc.exportRecords({ since, until, status = 'active', kind, limit = 2000 })
 **裁决 34（Web 层不得越权）**
 
 - `src/web/*` 只允许 `import` `src/api/service.js`、`src/core/*`、`src/config/*`；**禁止** import `src/hygiene/*`、`src/storage/*`、`src/index/*`（关系与判定都在 service 内完成，Web 只做投影）。
-- 静态资源只从 `versions/v0.3/ui/` 读取；路径穿越（`..`、绝对路径、软链接）一律 404。
+- 静态资源只从 `ui/` 读取；路径穿越（`..`、绝对路径、软链接）一律 404。
 - 服务只绑 `127.0.0.1`；无鉴权（用户决策 D1），因此**不得**提供任何写操作端点。
 
 ## 3.10 第八轮裁决（2026-11-02，Web 只读层实现期冻结；原记作 v0.1.3，0.2.0 起归入 v0.2 线）
@@ -463,7 +468,7 @@ await svc.exportRecords({ since, until, status = 'active', kind, limit = 2000 })
 
 ### 3.11 第九轮裁决 39–44（v0.2 双审核整改：常驻进程一致性 / 遮蔽 / 回环 / 拆分 / 导出顺序）
 
-> 来源：`versions/v0.3/reviews/arch-v0.2.md`（5 严重）与 `reviews/adversarial-v0.2.md`（4 严重）。
+> 来源：v0.3 的架构审核（5 严重）与对抗审核（4 严重）。
 > 两路结论均为「阻断项 no」，但以下五条属于「结构上会腐化」的问题，本版一次修掉并冻结语义。
 
 **裁决 39（常驻只读进程必须显式刷新视图）**
@@ -966,7 +971,7 @@ v1.0 是重构版本，**行为不改，只改结构与文档**。以下五条�
    `E_SCOPE_MISMATCH`（跨库写入 fail-loud，不允许静默写歪）。
 2. `forgetRecord` / `supersedeRecord` 打快照时显式把 `scope` 归一到 `svc.scope`
    —— 这是对遗留行的自愈，不改变记录的语义与 id。
-3. 由 `versions/v1.2/tests/unit/legacy-scope.test.js` 的 I1/I2/I3 守住；
+3. 由 `versions/v1.3/tests/unit/legacy-scope.test.js` 的 I1/I2/I3 守住；
    修数据用 `items/<scope>.jsonl` 的显式迁移，不允许靠「再 forget 一次」蒙混。
 
 ## §3.19 v1.0 LLM 派生层契约（裁决 83–88）与导出登记
@@ -1075,7 +1080,7 @@ Q5 契约覆盖按「导出名必须出现在 docs/」判定，这里逐模块�
 
 ## §3.23 任务账本（v1.2，裁决 118–123）
 
-完整契约见 [`versions/v1.2/docs/SEGMENT-SPEC.md`](../versions/v1.2/docs/SEGMENT-SPEC.md)（磁盘布局、段字段、导出签名、错误码）。
+完整契约见 [`versions/v1.3/docs/SEGMENT-SPEC.md`](../versions/v1.3/docs/SEGMENT-SPEC.md)（磁盘布局、段字段、导出签名、错误码）。
 这里只固化六条不可协商的裁决：
 
 **裁决 118（账本不是 record）**：段存 `$MEMO_HOME/sessions/<taskId>/segments.jsonl`，**永不写进** `items/<scope>.jsonl`。

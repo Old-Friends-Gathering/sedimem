@@ -1,21 +1,22 @@
 # 未来架构：记忆治理内核与个人 AI 端点
 
-状态：待批准（四轮对抗审核完成，无 blocker；记录见 §17.3）
-依据：m00089 用户指示「把未来架构写进计划、对抗性审核到没问题」，以及 2026-11-14 的四轮对抗审核（4 + 2 + 1 + 1 名审核者）
-版本规则：本计划不绑定版本号。阶段是工作单元，何时拆成哪个版本由维护者排期决定。阶段结论写入后补「执行结果」节。
+状态：已批准（A 方案；2026-11-15 用户拍板，自 v1.3 起执行；第五轮 delta 复核记录见 §17.5）
+依据：m00089 用户指示「把未来架构写进计划、对抗性审核到没问题」；m00378 要求基于 v1.2 重新调研规划；m00766 拍板 A 并给出四条规定（版本映射 / 文档先行+TDD+多 agent 审核 / 不自造常量 / 红线）；2026-11-14 四轮对抗审核（4 + 2 + 1 + 1 名审核者）；2026-11-15 v1.2.2 实测（753 tests / 56 eval / Q15）与 GitHub 生态扫描
+版本规则：**P0a→`v1.3`、P0b→`v1.4`、P1→`v2.0`，其后每个阶段在 `2.x` 上递增**；每阶段一个版本目录，完成后冻结（`FROZEN.md`）。版本号由维护者排期，本文不预设 patch 节奏。阶段结论写入后补「执行结果」节。
 
-> 本文是**未来计划**，不是当前版本规格。当前行为以 `versions/v1.0/` 与 `docs/02` 为准。
-> 标注「已有 / 部分 / 缺失」的地方，均已对 v1.0.3 源码核实。
+> 本文是**未来计划**，不是当前版本规格。当前行为以 `versions/v1.2/` 与 `docs/02` 为准。
+> 标注「已有 / 部分 / 缺失」的地方，均已对 v1.2.2 源码核实；2026-11-14 的基线与 2026-11-15 的复核差异见 §0.1 / §17.5。
 
 ---
 
 ## 0. 结论先行
 
-1. **项目定位收窄为「决策与坑的可审计账本」**：跨 agent、append-only、冲突可失效、as-of 可回查。对外一句话：*It remembers why you decided that — and shows you the receipt.*
+1. **项目定位收窄为「个人 AI-native 记忆观测台 + 可审计决策账本」**：跨 agent、append-only、冲突可失效、as-of 可回查。对外一句话：*It remembers why you decided that — and shows you the receipt.*
+   - 2026-11-15 限定：这是**个人**观测台/工作台，不是通用记忆平台；不再声称「治理是市场空位」（见 §0.1）。
 2. **不重做存储内核**。检索、去重、四道门已是资产；下一步补的是「捕获的签名与去污」「按任务装配」「按来源删除」，不是换数据库、不是换检索算法。
 3. **不做通用 agent 框架、不做聊天 UI、不做全屏录制、不做连接器数量竞赛**。
 4. **阶段顺序按用户感知价值排**，不是按模块完整度：
-   - **P0a 地基**：CI/门禁/文档先变真（当前 CI 跑的是 v0.3，`docs/07` 声明的必需检查从未运行）。
+   - **P0a 地基**：CI/门禁/文档先变真（v1.3 已把 CI/覆盖率/Windows 冒烟指向 `versions/CURRENT`，待 PR 验证）。
    - **P0b 语义与信任**：锁、鉴权、权限、trust/taint、按来源删除。没有这些，后面每一步都在放大不可审计性。
    - **P1 装配**：`memory_pack` + `export agents-md` + `init/audit`。零迁移即可感到「答得更准」。
    - **P2 导入**：只读导入 claude-mem / AGENTS.md / git / `.ics`，不做 hook 矩阵。
@@ -25,7 +26,70 @@
 5. **设计变更前置**：本计划有意改变若干现行契约（C1/C6 口径、锁、鉴权、信任字段、审计链、profile 布局）。按 `docs/plans/README.md`「计划不改设计」，这些必须先改 `docs/` 规格或落 ADR、并开 issue，再进代码。清单见 §6.0。
 6. **十三项阻塞项在本计划中全部有归属**（§17.1）；两轮审核发现的 4 条错误、4 条未闭合、8 条 must-fix 已按 §17.3 修订；第三、四轮 delta 复核无 blocker。
 
-**如果只能做一件事**：P1 的 `memory_pack`。它用现有数据就能验证「装配比全文注入更省且更准」，是整条路线唯一的单点验证。
+### 0.1 2026-11-15 复核：竞争格局变了，路线必须收窄
+
+v1.2 交付了任务库与任务上下文账本（`session` 命令组 + `sessions/<taskId>/segments.jsonl` + brief/expand/archive + UI 任务页）。这解决了「同一任务跨会话继续」的真实痛点，但也把项目带入三个已经拥挤的赛道。2026-11-15 的 GitHub 扫描给出四个新事实：
+
+| 事实 | 证据 | 含义 |
+|---|---|---|
+| 捕获/交接已商品化 | claude-mem 117,263★，描述已改为「Persistent Context Across Sessions for Every Agent」，支持 Claude Code / Codex / Gemini / OpenCode 等 | 不再做捕获/hook 矩阵；只做只读导入 |
+| 任务账本已商品化 | guild 297★（Go 单二进制 + SQLite，shared context/memory/task coordination，原子 claim）；v1.2 自己也有账本 | 账本是 substrate，不是卖点 |
+| 治理已不是空位 | Mnemosyne 161★（每条记忆带来源与信任级、superseded 可回看、as-of 重放、更正沿依赖失效、`bisect`、投毒测试 227 例、整合回执、LongMemEval-S 409/500、npm/MIT/Node 22.16）；GateMem 136★（多主体记忆治理 benchmark） | 不能声称「唯一可审计」；P0b+P1 要做的事已有成熟参照 |
+| 可观测性也在被占 | brain0 289★（把 commit 链接到 agent prompt 的决策图「黑盒」） | UI 必须给出别人没有的东西：**注入回执** |
+
+结论：
+
+1. **不要打「最完整的记忆平台」**。单人对 117k★ 的捕获层、161★ 且有论文级 eval 的治理层、297★ 的任务协调层，三线作战必输。
+2. **保留唯一可守的组合**：本地、中文/DSH 原生、单进程零依赖、**看得见**（UI 观测台 + 注入回执）。一句话：*别人的记忆层你不知道它喂了什么；sedimem 让你看见并复核。*
+3. **治理仍是底座，但不再是叙事主角**：append-only、as-of、矛盾失效、provenance/trust、按来源删除，这些是「自己敢用」的安全底线，不是「市场空位」。
+4. **砍掉通用平台件**：不建常驻 adapter 生态、不在 P0b 引入 Ed25519、不做 gateway、不做公开榜单。P2 只做只读导入（claude-mem / AGENTS.md / git / `.ics`），够用即止。
+5. **阶段改为**：P0a 地基（v1.2 真值化）→ P0b 安全与信任最小集 → P1 pack + 注入回执 → P2 只读导入 → P3 行动（条件触发）→ P4 端点（可选）→ P5 内部一致性/对照（非榜单）。
+6. **工作量随之下调**：MVP（P0a+P0b+P1）约 5.5–7.5 个周末；P1 从 3–4 降到 2–3（v1.2 的 `briefJson` 已是 pack 子集）。
+
+**战略分叉（待用户拍板，见 §18-9）**：
+
+- A（本计划默认）：个人观测台 + 治理工作台，继续自研内核；
+- B：通用治理平台，对标 Mnemosyne/GateMem——单人维护不建议；
+- C：把 Mnemosyne 作为内核或导入源，sedimem 专注 DSH/中文/UI——可保留学习价值，但放弃内核控制。
+
+**如果只能做一件事**：P1 的 `memory_pack` + **注入回执**。它用现有数据就能验证「装配比全文注入更省且更准」，并且把「agent 到底看到了什么」变成可复核的证据——这是 claude-mem/Mnemosyne 的 CLI 叙事里最弱、而 sedimem 的 UI 最强的一环。
+
+### 0.2 版次映射（2026-11-15 用户拍板，A 方案）
+
+| 阶段 | 版本目录 | 版本起点 | 说明 |
+|---|---|---|---|
+| P0a 地基 | `versions/v1.3/` | 1.3.0 | 从 v1.2 复制自包含快照；v1.2 冻结 |
+| P0b 安全与信任最小集 | `versions/v1.4/` | 1.4.0 | P0a 完成后冻结 v1.3 |
+| P1 装配与注入回执 | `versions/v2.0/` | 2.0.0 | 新大版本；不再在 1.x 上加功能 |
+| P2 只读导入 | `versions/v2.1/` | 2.1.0 | 在 2.x 上递增 |
+| P3 行动 | `versions/v2.2/` | 2.2.0 | 条件触发 |
+| P4 个人端点 | `versions/v2.3/` | 2.3.0 | 可选；硬触发后才开 |
+| P5 内部一致性 + 可选对照 | `versions/v2.4/` | 2.4.0 | 不作为对外榜单 |
+
+规则：`versions/CURRENT` 只指向当前开发版本；阶段完成即写 `FROZEN.md` 并切到下一目录；`X.Y` 换目录、`X.Y.Z` 同目录递增；跨版本只共享文档思想与 eval cases，不共享代码路径（`docs/03:32-36`）。**P1 起是 2.0 大版本，1.x 不再接受新功能。**
+
+### 0.3 工作规则与红线（写进每个阶段的验收）
+
+**四条工作规则（用户 m00766 指定，缺一不可）**
+
+1. **文档先行、实时同步**：每次开发先改文档再改代码；PR 必须同步更新受影响的 `docs/*`、`README.md`、`docs/index.html`（项目站）与 `docs/en/*`（英文页）；契约文档 `doc-version` 必须等于 `versions/CURRENT`；`docs-drift-check` 未通过不得提交。
+2. **TDD + eval**：先写失败测试（red）再实现（green）；每条不变量配负向测试；每个新行为配一条 eval case，并同步 `docs/04-eval-plan.md` 的 case 数与 `docs/07` 的 Q 口径；覆盖率门槛 lines ≥85 / branches ≥70 / functions ≥90；测试、eval、quality、security 全绿才允许进入审核。
+3. **多 agent 审核、本地闭环**：每个 PR 前至少 2 个独立审核者（一个架构/矛盾猎手，一个安全/可行性），blocker 必须修完并复跑；审核结论写进 `docs/plans/` 或 `reviews/`；**本地审核未通过不得 push / 开 PR**。
+4. **不自造常量**：阈值、预算、超时、条数、比例一律进 `config/policy.js`（或版本内配置）并写进文档；代码里不得出现无出处的魔法数字；新增常量必须同时补文档、测试与回滚说明。
+5. **多模型分工与额度**：多 agent 开发/审核优先用 `glm-5.3` / `glm-5.3-flash`（复杂审核用 5.3，例行检查用 flash）；DeepSeek 额度有限，不用于批量全量复读；每次 spawn 记录模型、用途与结论，避免同一 diff 重复审。
+
+**红线（不可谈判；违反即拒绝合入）**
+
+- **R1 真相只追加**：`items/*.jsonl` 永不物理删除/重写；删除是墓碑 + 派生清理；`compact` 是显式维护操作且必须留审计。
+- **R2 派生可弃**：index / brief / views / vectors / projections 删光必须可重建，且重建结果与 asOf 冻结一致。
+- **R3 无静默降级**：语义道、注入、网关失败必须显式 `degraded` 或报错，不得假装成功。
+- **R4 T2 不进 facts**：远程内容默认只进 references 且不注入原文；提升必须人工、带理由、留审计。
+- **R5 秘密不落明文**：secret 不进 env / 日志 / 审计 / items；只走 Keychain 或 credential-provider，按调用注入。
+- **R6 默认不出站**：未声明目的地的 adapter 无网络；出站白名单在 socket/HTTP 层强制。
+- **R7 同 UID 不承诺机密**：文档必须写明本机同 UID 进程可读可改；不把「加密」当同 UID 防线。
+- **R8 不破坏跨版本承诺**：`MEMO_HOME` 布局与 `MemoryRecord.version` 只加字段、不改语义；schema 变更必须「新字段可缺省 + ADR + `memo migrate`」。
+- **R9 不造假数据**：benchmark/评测不得用真实第三方隐私内容；演示数据必须标注为合成。
+- **R10 不 push 未审核代码**：本地测试 + eval + 多 agent 审核全过之前，不得 push 或开 PR。
 
 ---
 
@@ -33,36 +97,45 @@
 
 ### 1.1 已有资产（2026-11 实测）
 
-| 资产 | 状态 | 证据 |
+| 资产 | 状态 | 证据（v1.2.2） |
 |---|---|---|
-| 真相层 append-only + 派生层可重建 | 已有 | `docs/02`；651 tests / 50 eval |
-| 写入四道门（schema / 脱敏 / 去重 / 冲突） | 已有 | `versions/v1.0/src/core/`、`hygiene/` |
+| 真相层 append-only + 派生层可重建 | 已有 | `docs/02`；753 tests / 56 eval |
+| 写入四道门（schema / 脱敏 / 去重 / 冲突） | 已有 | `versions/v1.2/src/core/`、`hygiene/` |
 | BM25 + 语义 + RRF、degraded 显式降级 | 已有 | `index/search.js`、`api/search-path.js` |
 | 三端共用一份记忆 | 已有 | DSH 插件、MCP server；Codex/Claude 走 MCP |
 | 会话决策/坑自动晋升 | 部分 | `session/cli-support.js`（close 时白名单晋升） |
+| 任务库（跨任务隔离） | 已有 | v1.1 `session list|rename|remove` |
+| 任务上下文账本 | 已有 | v1.2 `session capture|segments|brief|expand|archive`；`sessions/<taskId>/segments.jsonl`；段不进 items/facts；UI 任务页 |
 | 夜间确定性整合 | 已有 | `cli/nightly.js`、`config/policy.js` |
-| 治理门禁 | 部分 | `quality-check` 14 项、`security-check`、`coverage-gate`、`docs-drift`；**但 CI 未指向当前版本** |
+| LLM 派生层（可关） | 部分 | `llm/`、Q15；默认不影响真相层 |
+| Web 观察台 | 已有 | 九页 UI；任务页含账本 |
+| 只读导入 | 部分 | `memo import` 有通用导入；无 claude-mem / AGENTS.md 专用导入 |
+| 治理门禁 | 部分 | `quality-check` 15 项、`security-check`、`coverage-gate`、`docs-drift`；v1.3 已把 CI 指向 CURRENT |
 
-### 1.2 竞争格局（2026-11-14 实测，star 会漂移）
+### 1.2 竞争格局（2026-11-15 实测，star 会漂移）
 
 | 项目 | 事实 | 对我们的含义 |
 |---|---|---|
-| mem0（68,936★） | v3 ADD-only，**明确不做 UPDATE/decay**，旧事实永不失效 | 它放弃的正是我们要做的治理；但它有分发与连接器 |
-| Hindsight（60,937★） | 四网（world/experience/observation/opinion）、事实-信念分离、Postgres+pgvector、写入时压成本 | 最接近的「认知架构」参照；依赖重，不是单人本机形态 |
-| claude-mem（116,912★） | 6 个 hook、SQLite+FTS5、支持 6+ harness（含 dsh） | **钩子层已被占**；我们只做只读导入，不建 hook 矩阵 |
-| Graphiti（32,800★） | 时序知识图谱、bi-temporal | 图模型完整，但需要图库，违反 C6 |
-| Letta / cognee / MemOS / supermemory | 各自有记忆 OS / 图谱 / 分层记忆 | 都是平台级，不是「可审计账本」 |
-| Lanes Link（36★，lanes-sh/link） | 一条本地 MCP 端点：connections + memory + tasks + files + contacts + secrets；profile 隔离；默认拒绝；append-only 审计；Markdown 存储 | **最直接的重叠者**；它已发货我们计划里 P0b–P3 的大部分。**本期不做它的超集**；长期可做它的 memory provider（非承诺，§18-2） |
+| mem0（69,004★） | v3 ADD-only，**明确不做 UPDATE/decay**，旧事实永不失效 | 它放弃的正是治理；但它有分发与连接器 |
+| claude-mem（117,263★） | 描述已改为「Persistent Context Across Sessions for Every Agent」；6 个 hook、SQLite+FTS5、支持 Claude Code/Codex/Gemini/OpenCode 等 | **捕获/交接已被占**；我们只做只读导入，不建 hook 矩阵 |
+| **Mnemosyne（161★，`28naem-del/mnemosyne`）** | 本地 SQLite；每条记忆带来源与信任级；superseded 可回看；as-of 重放；更正沿依赖失效；`bisect`；投毒测试 227 例；整合回执；LongMemEval-S 409/500；npm/MIT/Node 22.16；MCP/HTTP/CLI/SDK | **治理已不是空位**。它是 P0b+P1 的成熟参照；我们不能再声称「唯一可审计」。差异化只能在「看得见 + DSH/中文 + 单进程」 |
+| **GateMem（136★，`rzhub/GateMem`）** | 多主体共享记忆治理 benchmark：效用 / 访问控制 / 主动遗忘 | 不要自建榜单；P5 改为内部一致性 + 可选对照，引用它而不是重复它 |
+| **guild（297★，`mathomhaus/guild`）** | Go 单二进制 + SQLite；shared context/memory/task coordination；原子 claim；跨编辑器 agent | 任务协调/账本已被占；v1.2 的账本不是差异化，只是 substrate |
+| **brain0（289★，`Brain0-ai/brain0`）** | 把 commit 链接到 agent prompt 的决策图「黑盒」 | 可观测性也在被占；我们的 UI 必须给出「注入回执」，而不只是图谱 |
+| Hindsight（61,163★）/ Graphiti（32,820★）/ cognee（33,328★）/ Letta（25,449★）/ supermemory（31,628★） | 平台级认知架构 / 时序图 / 记忆 OS | 依赖重，不是单人本机形态；不跟 |
+| Lanes Link（36★，lanes-sh/link） | 一条本地 MCP 端点：connections + memory + tasks + files + contacts + secrets；profile 隔离；默认拒绝；append-only 审计 | 仍是端点参照；本期不做它的超集；P4 仍按其触发条件 |
 | OpenHuman / Screenpipe | 前者转向 agent harness，后者转向流程挖掘 | 证明「全量捕获」不是单人可持续路线 |
 | AGENTS.md / SKILL.md / MCP | 均已捐给 Linux Foundation AAIF；AGENTS.md 60k+ 项目；Skill 70+ 平台 | 接入标准，不发明标准 |
 
-**结论**：检索与钩子都不是空位。**「决策与坑的可审计治理」仍是空位**——也是我们唯一已有深度的位置。
+**结论（2026-11-15 修订）**：检索、钩子、任务账本、治理、可观测性**都不是空位**。sedimem 唯一可守的不是「某个功能没人做」，而是「本地 + 中文/DSH 原生 + 单进程零依赖 + 看得见」的组合。因此本计划从「做最完整的治理内核」降级为「做自己能每天用、并且能复核的个人观测台」；治理深度只保留自己敢用所需的底线。
 
-### 1.3 反证：为什么不是别的三件事
+### 1.3 反证：为什么不是别的五件事
 
-- **为什么不做第二个 claude-mem？** 钩子矩阵要跟 harness 升级赛跑，且已被 116k★ 项目占住；我们只做只读导入，成本低一个量级。
-- **为什么不做第二个 Lanes Link？** 它 36★ 说明「个人端点」目前没有拉力；跟做只会得到它的子集。等我们有 pack 的真实使用证据再说。
-- **为什么不做 benchmark 榜单？** 74★ 的自测榜单不可信且太晚；BEAM（arXiv 2510.27246）已把矛盾消解列为主要短板。做「一致性套件」——让别人能复现我们对任意记忆库的判定。
+- **为什么不做第二个 claude-mem？** 钩子矩阵要跟 harness 升级赛跑，且已被 117k★ 项目占住；它已支持 Claude Code/Codex/Gemini/OpenCode 等，我们只做只读导入，成本低一个量级。
+- **为什么不再扩任务账本？** v1.2 已有账本，guild（297★）与 Mesh 也在做；继续加功能是红海里的功能竞赛。账本只作为 pack 的数据源（`includeLedger`），不单独做产品。
+- **为什么不对标 Mnemosyne（161★）？** 它已有来源/信任级、as-of 重放、更正沿依赖失效、`bisect`、投毒测试、整合回执和论文级 eval；单人无法在「治理完整度」上超过它。我们只保留自己敢用所需的最小治理（T2 排除、按来源删除、矛盾失效），并把力气放在它没有的：UI 回执、DSH/中文、单进程。
+- **为什么不做第二个 Lanes Link？** 它 36★ 说明「个人端点」目前没有拉力；跟做只会得到它的子集。等我们有 pack 的真实使用证据再说（P4 触发条件）。
+- **为什么不做 benchmark 榜单？** GateMem（136★）已在做多主体治理 benchmark，BEAM（arXiv 2510.27246）已把矛盾消解列为主要短板；再做榜单是重复且不可信。P5 只做内部一致性 + 可选对照，不做排行榜。
 
 ---
 
@@ -70,19 +143,20 @@
 
 | # | 债务 | 证据 |
 |---|---|---|
-| 1 | CI 跑的是 v0.3，`coverage-gate` 写死 v0.1，651 个测试从未在 CI 执行 | `.github/workflows/ci.yml:36,64`；`tools/coverage-gate.mjs:18` |
+| 1 | ~~CI 跑的是 v0.3，`coverage-gate` 写死 v0.1~~（P0a 已修，待 PR 验证） | `.github/workflows/ci.yml`；`tools/coverage-gate.mjs` |
 | 2 | Q1「全仓零依赖」会让引入 SDK 的 adapter 直接红 | `tools/quality-check.mjs:91-116` |
 | 3 | 仓库无根 `package.json` / lockfile / workspace；插件 `lib/src` 是拷贝（44 文件 / 8,828 行，与 v0.4 差 20 处） | `plugin/dsh-sedimem/`；`scripts/sync-plugin.sh` 只同步 2 文件 |
 | 4 | `~/.memo` 已是 880K items，无 workspace 级 profile/迁移测试 | `~/.memo/items/`、`events/`、`brief/`、`metrics/`、`derived/` |
-| 5 | 版本矩阵：6 个版本目录 × 3 端 × 3 OS，一人维护不动 | `versions/v0.1`–`v1.0` |
+| 5 | 版本矩阵：9 个版本目录 × 3 端 × 3 OS，一人维护不动 | `versions/v0.1`–`v1.2` |
 | 6 | 锁：30s 判陈旧、不刷心跳；inbox 另有一套锁 | `storage/lock.js:18,37`；`capture/queue.js:35` |
 | 7 | 信任：inbox 无签名；accept 丢来源；记录无 trust/taint | `capture/queue.js:28-29,195-200`；`core/record.js:120-160` |
 | 8 | Web：无 token、Host 不校验、缺失 Origin 放行 | `web/server.js:93,101-109`；`web/api/write.js:43` |
 | 9 | 权限：全仓仅一处 0o600；`~/.memo` 会被 Time Machine/iCloud 备份 | `index/vector-index.js:120`；`config/paths.js` |
 | 10 | 读路径把 hits 写回真相层，pack 非纯派生 | `api/search-path.js:150`；`api/lifecycle.js:152` |
 | 11 | 凭据走 env 会被 `printenv` / `ps eww` / 子进程读走 | §10 改为 Keychain + fd/pipe |
-| 12 | 文档口径漂移：README 写覆盖率 89/90/77、12 模块；实际 85/70/90、14 目录 | `README.md:55-59,200`；`docs/07:56-58` |
-| 13 | `engines.node` 写 `>=22`，但 transcript 的 zstd 需要 `>=22.15` | `versions/v1.0/package.json`；`session/transcript.js:70-81` |
+| 12 | 文档口径漂移：README 写 747 tests、覆盖率 89/90/77、12 模块；实际 753 tests / 14 目录；85/70/90 是 docs/07 的覆盖率阈值 | `README.md:21,200,267`；`docs/07:56-58` |
+| 13 | `engines.node` 写 `>=22`，但 transcript 的 zstd 需要 `>=22.15` | `versions/v1.2/package.json:11-12`；`session/transcript.js:70-81` |
+| 14 | v1.2 任务账本 segments 在 items 之外，未纳入数据地图/保留期/按来源删除/导出 | `src/session/ledger.js`、`sessions/<taskId>/segments.jsonl`；`docs/12-data-map.md` 尚不存在 |
 
 ---
 
@@ -120,7 +194,7 @@
 | I-1 | 常规运行只追加；**`compact` 是唯一例外**（显式维护操作，写 ADR + 审计事件）；读路径与 pack 永不触发 compact | 写 100 条后 `items` 行数只增；`pack` 前后行数不变 |
 | I-2 | 派生层（index / brief / views / vectors / projections）删光可重建，且重建结果与 asOf 冻结的基线一致 | 删除派生目录后 rebuild，逐字节比对 |
 | I-3 | **数据锁**统一在 storage 层（items / inbox / events 共用一把 `<memoHome>/.lock`）；`llm/outbox` 保留独立锁（Q15 禁止 `llm` 依赖 `storage`，写理由进 ADR） | 两把锁的 key 集合断言；两进程并发 append 无丢写 |
-| I-4 | adapter 不读 items / inbox / events；不接收 `MEMO_HOME`；只持自己的私钥；只通过 ingest 投递 | `spawn` 清 env 后 adapter 无法定位 `~/.memo`；直写 items 必须失败并写 `acl.deny` |
+| I-4 | **（P3 起生效）** adapter 不读 items / inbox / events；不接收 `MEMO_HOME`；只持自己的私钥；只通过 ingest 投递 | `spawn` 清 env 后 adapter 无法定位 `~/.memo`；直写 items 必须失败并写 `acl.deny` |
 | I-5 | 外部读取默认最小：search 只回 id + 片段（单条 ≤200 字，默认 ≤N 条/次），每次会话有字节预算 | 超预算报错；`search` 不返回正文 |
 | I-6 | 同一 `asOf` 的 pack 逐字节相等（确定性排序；nonce 由 `hash(contentHash+asOf)` 确定性派生） | 同参数两次 pack `diff` 为空 |
 | I-7 | 冲突可失效、as-of 可回查；`superseded` 是失效不是删除 | 旧 asOf 能检出新旧两版；新 asOf 只回有效版 |
@@ -129,8 +203,8 @@
 | I-10 | profile 显式映射，不跨 profile 读；**默认 profile 固定在 `~/.memo`**，命名 profile 在 `~/.memo/profiles/<name>/`，不做物理迁移 | 切 profile 后 `memory_get` 看不到旧数据；缺失指针 fail-closed |
 | I-11 | T2 内容默认不注入原文；必须注入时只注入结构化抽取，围栏加确定性 nonce，并逐行转义所有分隔符 | canary T2 不得触发任何工具调用/出站 |
 | I-12 | 逻辑删除是默认语义；审计脱敏只追加「脱敏事件」，**不改历史行**（否则 prevHash 链断） | 删除后 `get` 为空但链仍可验；脱敏后旧行 hash 不变 |
-| I-13 | 协议版本由写入端盖章；旧 kernel 遇未知大版本拒收，不 fail-open | 用 v2 信封打 v1 kernel → `E_PROTOCOL_UNSUPPORTED` |
-| I-14 | Q 门禁冻结为 14 项（Q1–Q11、Q13、Q14、Q15）；新增不变量走 G 系列，不挤 Q | `quality-check` 断言 Q 集合 = 冻结集合 |
+| I-13 | **（P3 起生效）** 协议版本由写入端盖章；旧 kernel 遇未知大版本拒收，不 fail-open | 用 v2 信封打 v1 kernel → `E_PROTOCOL_UNSUPPORTED` |
+| I-14 | Q 门禁冻结为 15 项（Q1–Q11、Q13–Q16）；新增不变量走 G 系列，不挤 Q | `quality-check` 断言 Q 集合 = 冻结集合 |
 | I-15 | 任务账本段永不进入 pack 的 `facts`；账本为空时 pack 输出与引入账本前逐字节一致（可加性扩展） | 关账本后 pack `diff` 为空；构造含段的 pack 断言 `facts` 里无段 id |
 
 ### 3.2 边界规则（可检查，不是口号）
@@ -138,7 +212,7 @@
 - **B1 读写分离**：`api/*` 不直接碰 `storage/jsonl-store.js`；以 `tests/unit/arch-boundaries.test.js` 为起点扩展到根包。
 - **B2 依赖方向**：kernel 不 import adapters / plugin；adapters 只依赖 `packages/protocol` 与自身 SDK。
 - **B3 副作用隔离**：`render/*`、`views/*` 纯函数；`Date.now()` / `process.env` 只在入口注入。
-- **B4 版本冻结**：每个 `versions/vX.Y/` 下有 `FROZEN.md`（v0.1–v0.6 已有；v1.0 尚未冻结，故可改）；`versions/CURRENT` 是**文件**，内容是版本名；跨版本不共享代码路径（`docs/03:32-36`）。
+- **B4 版本冻结**：每个 `versions/vX.Y/` 下有 `FROZEN.md`（v0.1–v1.1 已有；v1.2 尚未冻结，故可改）；`versions/CURRENT` 是**文件**，内容是版本名；跨版本不共享代码路径（`docs/03:32-36`）。
 - **B5 网关失败策略**：网关是**可选旁路**（默认不启用），在环时结果与直连逐字节一致；半死时客户端必须显式报 `degraded`，不静默降级。
 - **B6 无隐式全局**：`MEMO_HOME` 只经 `config/paths.js#resolveMemoHome` 解析；`src` 层不读 `process.env`。
 
@@ -182,6 +256,8 @@
 - **轮换**：`kid` 标识密钥版本；kernel 保留双 key 过渡窗口（旧 key 仍可验，新 key 优先），`memo adapter rotate <name>` 打印新公钥指纹。
 - **信任上限**：`adapter.json` 里声明的 `trustCeiling` 只是上限，真实等级由人工签署的注册表决定；未注册 → T3。
 - **版本**：信封 `v` 是大版本；kernel 落盘前盖 `protocol` 版本；未知版本拒收（I-13）。
+
+**实施时点（重要）**：本节协议随**未来的常驻 adapter**（最早 P4）一起实施；P0b 只做 §4.2 的字段、backfill 与人工提升，不做密钥、`packages/protocol` 或常驻 adapter；P2 一期是 `memo import <source>` 只读 CLI，不经过本节信封。换句话说，P0b/P1 的安全边界是「单机、单写者、人工提升」，Ed25519 解决的是「多进程各自写候选」的场景，等真正需要常驻 adapter 时再加。
 
 ### 4.4 威胁模型（同 UID 为前提）
 
@@ -239,7 +315,8 @@
   "references": [{ "id": "...", "snippet": "...", "trust": "T2" }],
   "excluded": [{ "id": "...", "reason": "stale|disputed|over-budget|tainted" }],
   "degraded": false,
-  "basis": { "retrieval": "bm25+vector+rrf", "k": 60 }
+  "basis": { "retrieval": "bm25+vector+rrf", "k": 60 },
+  "receipt": { "id": "evt_...", "packHash": "sha256:..." }
 }
 ```
 
@@ -251,6 +328,7 @@
 - T2 默认只进 `references`，且只给片段；`includeT2: true` 才进 `facts`（仍需人工提升）。
 - 不读写真相层计数（hits 移出真相层，见 §6.2-11、§18-3）。
 - `includeLedger:true` 时，任务账本（`~/.memo/sessions/<taskId>/segments.jsonl`）作为一个数据源参与装配；**段只贡献 `references` 与 `summary`，永不进 `facts`**（见 v1.2 计划与 I-15）。
+- **注入回执**：每次 pack / brief / inject 都向 `events.jsonl` 追加一条 `kind:"inject"` 事件（`packHash`、`recordIds`、`excluded`、`asOf`、`surface`）；只写 events，不写 items。回执是「agent 到底看到了什么」的证据，也是 UI 观测台的可展开项。
 
 ### 5.4 审批队列（P3）
 
@@ -260,9 +338,11 @@
 
 ### 5.5 CLI / MCP 表面
 
-**默认面 ≤4 个工具**（P1 起）：`memory_search`、`memory_write`、`memory_brief`、`memory_pack`。
-其余工具（`get/supersede/forget/curate/dedupe_scan/stats/scope` 与会话工具）通过 `memo mcp --all-tools` / `--session-tools` 显式开启；P0b 阶段默认仍是现有 3 个（search / write / brief），P1 加 pack。
-兼容表：旧配置若依赖 `memory_curate`，在插件 UI 里改走 CLI 或 `--all-tools`，并在升级说明里写清楚。
+**现状（v1.2）**：MCP 默认注册 17 个工具（`tools.js:324` 的 `TOOL_DEFS = [...MEMORY_TOOL_DEFS, ...SESSION_TOOL_DEFS]`），且 `--session-tools` 开关尚未实现、没有 `memo mcp` 子命令。**目标**：P1 默认面 4 个（`memory_search`、`memory_write`、`memory_brief`、`memory_pack`）；其余走显式开关。
+
+**P0b 必须先做迁移开关**，再做收敛：新增 `memo mcp --surface core|all`（`core` = 3 个，P1 变 4 个）与 `--session-tools`；先把现有 17 个的兼容表写出来，再把默认切到 `core`。默认面收敛与「先新增开关」在同一阶段完成，不允许直接删工具。
+
+兼容表：旧配置若依赖 `memory_curate` / 会话工具，在插件 UI 里改走 CLI 或 `--surface all` / `--session-tools`，并在升级说明里写清楚。
 
 ---
 
@@ -278,93 +358,95 @@
 | 审计链与外部锚定 | `docs/02` + ADR | 链格式、锚定策略、保留期 |
 | profile 显式映射 | `docs/03` + ADR | 映射表、缺失指针 fail-closed |
 | Web 鉴权 | `docs/08-web-ui.md` | cookie/Authorization/Host 规则 |
-| adapter 协议 v1 | `docs/02` + `packages/protocol` | 信封 schema、错误码、`adapter.json` |
+| adapter 协议意图（不建 `packages/protocol`） | `docs/02` + ADR | 只记信封/签名/版本意图；P4 引入常驻 adapter 时才实现 |
 | Q1 scope 调整 | `docs/03:44` + `docs/07` | 与「Q1 全仓生效」同步改口径 |
+| 任务账本纳入数据地图/删除 | `docs/12` + `src/session/ledger.js` | 段保留期、导出、`deleteBySource` |
 
 每项一个 issue；PR 用 `Refs #N`。未完成前不动对应代码。
 
-### 6.1 P0a 地基（工作量 1–1.5 个周末）
+### 6.1 P0a 地基 · v1.3（工作量 1.5–2 个周末）
 
 目标：**让「CI 绿」这句话变真**。
 
 1. **CI 指向当前版本**（半天）：新增 step
-   `echo "dir=versions/$(cat versions/CURRENT)" >> "$GITHUB_OUTPUT"`，各步骤 `working-directory: ${{ steps.v.outputs.dir }}`；artifact 路径同样用该 output。禁止把 `versions/CURRENT` 当目录。
+   `echo "dir=versions/$(cat versions/CURRENT)" >> "$GITHUB_OUTPUT"`，各步骤 `working-directory: ${{ steps.v.outputs.dir }}`；artifact 路径同样用该 output。禁止把 `versions/CURRENT` 当目录。目标：753 tests / 56 eval 真正跑起来。
 2. **windows-smoke 跟随 CURRENT**：`tools/windows-smoke.mjs:24-26` 改为按 `versions/CURRENT` import；否则 G0 必红。
 3. **门禁防回退**：`tools/meta-check.mjs` 断言 CI/gate 脚本里不得出现字面 `versions/v0.x`（allowlist 需 reason + until）。
 4. **Q1 scope**：`quality-check.mjs:91-116` 只对 `versions/CURRENT/src` + 已存在的 `packages/*/src` 生效；adapters 由 G6（依赖清单）与 G7（架构负向测试）覆盖；同步改 `docs/03:44` 的「Q1 全仓生效」表述。
 5. **根 workspace**：根 `package.json`（`private: true`）+ `pnpm-workspace.yaml` + 单 lockfile；`plugin/dsh-sedimem` 改为 `workspace:*` 依赖（workspace 链接不需要发布，`private:false` 不等于要发 npm）；`private:false` 只对将来要发布的一方包设置。
-6. **README 口径修正**：覆盖率 85/70/90（不是 89/90/77）；14 个模块目录（不是 12）；「零依赖」改为「内核零运行时依赖」；claude-mem「只服务 Claude」改为「支持 6+ harness（含 dsh）」。
-7. **engines 抬到 `>=22.15`**：`versions/v1.0/package.json`；README 注明 transcript 源需 22.15+（`session/transcript.js:70-81` 已有 feature guard）。
+6. **README 口径修正**：tests 753（不是 747）；覆盖率 85/70/90（不是 89/90/77）；14 个模块目录（不是 12）；「零依赖」改为「内核零运行时依赖」；claude-mem「只服务 Claude」改为「支持 6+ harness（含 dsh）」。
+7. **engines 抬到 `>=22.15`**：`versions/v1.3/package.json`；README 注明 transcript 源需 22.15+（`session/transcript.js:70-81` 已有 feature guard）。
 8. **命名澄清（只改文档）**：四道门 = schema / 脱敏 / 去重 / 冲突；`V1–V5` 仅指 curate 批文件校验，**不改代码标识符**。
 9. **G0 基线**：记录 `tests / eval / quality / security / docs-drift` 的耗时与通过率，写进计划「执行结果」。
 10. **最小 G6**：`tools/supply-check.mjs`——committed lockfile、`npm ci --ignore-scripts` 可装、无 postinstall 网络、SBOM 生成。
 
-**验收**：CI 在 `versions/CURRENT` 上绿；G0 五项可见；meta-check 能拦住硬编码版本；README 数字与门禁一致。
+**验收**：CI 在 `versions/CURRENT` 上绿（753 tests / 56 eval）；G0 五项可见；meta-check 能拦住硬编码版本；README 数字与门禁一致。
 
-### 6.2 P0b 语义与信任（工作量 2–3 个周末）
+### 6.2 P0b 安全与信任最小集 · v1.4（工作量 2–2.5 个周末）
 
-目标：**让「审计」这个词站得住**。
+目标：**让「审计」这个词站得住，但不建通用平台件**。
 
 1. **锁**：storage 数据锁（items / inbox / events）统一为 `<memoHome>/.lock`，加 5s 心跳，判陈旧改「mtime 超时 **且** pid 不存在」；`capture/queue.js` 的 mkdir 同步锁改为同一把；`llm/outbox` 锁保留（Q15 禁依赖 storage），在 ADR 写理由。CI 加两进程并发 append + `kill -9` 测试。
 2. **队列流式化**：append 不整文件重读重写；per-adapter + 每日 + 单文件字节配额；行长度与 `provenance` 数组上限；超限拒绝并审计。
-3. **Ed25519 验签**：注册 / 轮换 / kid / 双 key 窗口；`memo adapter register|rotate|list`；伪造信封 → `E_SIG_INVALID` + `acl.deny`。
+3. **签名信封（不在 MVP；最早 P4）**：本阶段只定义 `adapter.json` 的 trust 上限与来源字段；Ed25519 注册 / 轮换 / kid / 双 key 留到引入常驻 adapter 时（最早 P4）。P0b 不因缺签名而阻塞，验收也不含伪造信封。
 4. **trust / taint 落 schema**：按 §4.2；`accept` 只继承；`merge/supersede` 追加 `v+1` 并集；`memo trust promote|clean` 带理由与审计。
 5. **存量 backfill**：按 §4.1 规则一次性补齐；迁移前先备份；`memo migrate` 支持回滚；测试断言「迁移后 pack 非空」。
-6. **按来源删除**：`memo delete --source adapter:gmail --uri msg://...` → 墓碑 + compact + 清派生（index/brief/vectors/projections）+ 审计脱敏事件 + 备份说明；`memo verify-delete` 打印目标是否已不可检索。
+6. **按来源删除**：`memo delete --source adapter:gmail --uri msg://...` → 墓碑 + compact + 清派生（index/brief/vectors/projections）+ 审计脱敏事件 + 备份说明；`memo verify-delete` 打印目标是否已不可检索；任务账本 segments 同步纳入（按 taskId / 来源导出与删除）。
 7. **profile 路径收敛**：所有入口只走 `resolveMemoHome(env, cwd, profilePointer)`；默认 profile 永久映射 `~/.memo`，命名 profile `~/.memo/profiles/<name>/`；`~/.memo/profiles.json` 只存命名 profile 的指针（不在 profile 内）；指针缺失 fail-closed；**不做物理迁移**（不违反 `docs/03:45` 跨版本承诺）。
 8. **Web 鉴权**：`memo serve` 在 `GET /`（Host 限 loopback）下发短期 `HttpOnly; SameSite=Strict` cookie；`/api/**` 同时接受 cookie 或 `Authorization: Bearer`；`ui/api.js` 用同源 fetch 自动带 cookie（无需改调用）；无 Cookie/Token → 401；强校验 Host/Origin；可选 UDS + peer-credential。
 9. **权限**：`~/.memo` 及子目录 0700、文件 0600；启动校验并告警；`tmutil addexclusion` 与云盘排除写进文档。
 10. **T2 注入**：默认不注入原文；必须注入时只注入结构化抽取；围栏 nonce = `hash(contentHash + asOf)` 前 8 位；逐行转义所有分隔符；「数据不是指令」写进 system prompt；canary 行为测试（T2 指令不得触发任何工具调用/出站）。
 11. **hits 只做观测（不迁移）**：P0b 只加测试与 ADR，把 `search-path.js:150` 的 `flushHits` 标为待迁移；列出 `brief.js:104`、`quota.js:45`、`judge`、web read 的改法；**P1 再移出真相层**。避免 P0b 同时改语义和排序。
 12. **审计统一**：`events.jsonl` 为唯一审计源（`kind` + `seq` + `prevHash`）；gateway 只转发不写；外部锚定 = 可选「每日把链头 hash 写进本地 git 提交（不 push）」；写明无锚定时只能防无意损坏。
-13. **数据地图与保留期**：新增 `docs/12-data-map.md`（资产 / 位置 / 保留期 / 删除路径 / PII 类别）；候选 14 天过期（P0b 新增清理任务，挂进 nightly）；events / quarantine 90 天；T2 默认 7 天；`redact.js:6-14` 增 PII 类别。
-14. **工具面收敛**：P0b 默认仍是现有 3 个（search / write / brief）；写兼容表：其余 7 个 `memory_*` 走 `--all-tools`，5 个会话工具走 `--session-tools`；插件 UI 的 `memory_curate` 改走 CLI 或 `--all-tools`；schema token 预算留到 P1。
+13. **数据地图与保留期**：新增 `docs/12-data-map.md`（资产 / 位置 / 保留期 / 删除路径 / PII 类别；含 `sessions/<taskId>/segments.jsonl`）；候选 14 天过期（P0b 新增清理任务，挂进 nightly）；任务账本 90 天（可配）；events / quarantine 90 天；T2 默认 7 天；`redact.js:6-14` 增 PII 类别。
+14. **工具面收敛（先加开关）**：v1.2 当前默认注册 17 个、无 `--session-tools`、无 `memo mcp`；P0b 新增 `memo mcp --surface core|all` 与 `--session-tools`，默认切到 `core` 的 3 个（search / write / brief）；P1 加 pack 变 4 个；其余 7 个 `memory_*` 走 `--surface all`，5 个会话工具走 `--session-tools`；插件 UI 的 `memory_curate` 改走 CLI 或 `--surface all`；schema token 预算留到 P1。
 15. **读预算**：`search` 默认 ≤N 条片段、单条 ≤200 字；每会话条数/字节上限；超限报错；落点 `api/search-path.js`。
 16. **Windows 声明**：只支持 kernel / CLI；adapters 不支持；`memo doctor` 在 win32 打印 `unsupported` 并 exit 2；写进 README 与 §16。
 17. **quarantine**：只存引用（uri + hash + ≤200 字摘录），不存正文；`memo quarantine list|accept|reject`；retention 与配额同 inbox。
 
-**验收**：伪造信封被拒并审计；T2 canary 零外写；kill -9 后锁可恢复且不丢写；`memo verify-delete` 通过；web 无 token 401、有 token 200 且 UI 仍可用；两 profile 互不可见；存量迁移后 pack 非空。
+**验收**：T2 canary 零外写；kill -9 后锁可恢复且不丢写；`memo verify-delete` 通过（含任务账本段）；web 无 token 401、有 token 200 且 UI 仍可用；命名 profile 互不可见（同进程切换不串数据）；存量 backfill 后 pack 非空且 trust 可查。
 
-### 6.3 P1 装配（工作量 3–4 个周末）
+### 6.3 P1 装配与注入回执 · v2.0（工作量 2–3 个周末）
 
-目标：**用现有数据证明「装配」值得做**。
+目标：**用现有数据证明「装配」值得做，并让「agent 看到了什么」可复核**。
 
-1. `memory_pack`（内核内实现，不引第三方）：确定性排序、预算裁剪、T2 分区、`excluded` 原因。
+1. `memory_pack`（内核内实现，不引第三方）：以 `session/ledger-brief.js` 的 `briefJson` 为子集基线，扩成超集（records + ledger + `includeLedger`）；确定性排序、预算裁剪、T2 分区、`excluded` 原因。
 2. `memo export agents-md`：把 decision/gotcha 写成**带 provenance 的 AGENTS.md 节**，可配置 marker，不覆盖用户手写内容。
-3. `npx @old-friends-gathering/sedimem init`（`mem init`）：探测 DSH/Codex/Claude 配置，幂等写 MCP 配置 + 打印验证命令。
-4. `npx ... audit`：只读扫描 `~/.claude-mem/*.sqlite`、`AGENTS.md` / `CLAUDE.md`、`~/.codex/memories`，输出卫生报告（重复/过期/无来源/冲突），不写任何东西。
+3. **`memo init`**（clone 后本地运行，暂不发 npm）：探测 DSH/Codex/Claude 配置，幂等写 MCP 配置 + 打印验证命令。
+4. **`memo audit`**：只读扫描 `~/.claude-mem/*.sqlite`、`AGENTS.md` / `CLAUDE.md`、`~/.codex/memories`，输出卫生报告（重复/过期/无来源/冲突），不写任何东西。二者都以 `git clone` 后本地可用为前提；是否发 npm 单列决策，不在 P1 阻塞。
 5. 默认工具面变 4 个（加 `memory_pack`）；schema token 预算进 G4。
 6. **先做基线实验**：固定 20 个任务、同一 harness、同一模型；对比 `brief` 与 `pack` 的 token 与事实召回。**不达标不发**：事实召回 20/20（Wilson 95% 下界 ≈84%；19/20 不通过）、token ≤ brief 的 70%。
 7. hits 迁移到 metrics/events（带 ADR）；更新 brief / quota / judge / web-read 四处读取。
+8. **注入回执**：每次 brief / pack / inject 生成一条 `inject` 事件（`packHash`、`recordIds`、`excluded` 原因、`asOf`、`surface`），只写 `events.jsonl`，**不写 items**；UI 的今日页/任务页可展开「这次 agent 看到了什么」。这是与 claude-mem / Mnemosyne CLI 叙事的差异点。
 
-**验收**：pack 输出可复现（逐字节）；AGENTS.md 导出可被 DSH/Codex 直接消费；init 在干净机器上 5 分钟内完成；基线实验报告可复现。
+**验收**：pack 输出可复现（逐字节）；AGENTS.md 导出可被 DSH/Codex 直接消费；init 在干净机器上 5 分钟内完成；基线实验报告可复现；**注入回执覆盖率 100%**（每次注入都有一条可查事件）。
 
-### 6.4 P2 导入（工作量 3–4 个周末，先做 2 周 spike）
+### 6.4 P2 只读导入 · v2.1（工作量 2–3 个周末，先做 1 周 spike）
 
-目标：**零迁移获得增量**，不建钩子矩阵。
+目标：**治理别人的捕获，而不是自己再抓一遍**；零迁移获得增量，不建钩子矩阵。
 
 | 源 | 做法 | 不做什么 |
 |---|---|---|
 | claude-mem | 只读 `~/.claude-mem/*.sqlite` → 候选（T2，需 accept） | 不装它的 hook、不双写 |
 | AGENTS.md / CLAUDE.md / SKILL.md | 解析标题/条目 → 候选；只当数据 | 不执行指令、不改原文件 |
-| git | adapter 读本地 repo（可配作者过滤）→ 提交摘要候选 | 不做 CI 集成、不读远端 |
+| git | CLI 读本地 repo（可配作者过滤）→ 提交摘要候选 | 不做 CI 集成、不读远端 |
 | 本地文档 | markdown / 纯文本目录 → 候选 | 不做全盘索引 |
 | `.ics` | 读导出文件；只取本人相关字段（subject/time/attendee 的最小集） | 不做 OAuth、不做 IMAP |
 | DSH transcript | 已有 `session/transcript.js`；**仅 Node ≥22.15 可用**；先补测试再接 `memo import transcript` | 不做常驻 tail |
 
-- 每源一个 adapter 进程，各自私钥；互不 import。
+- 一期全部走 `memo import <source>` CLI（一次性 / 按需），**不引入常驻 adapter 进程、不引入 Ed25519**；只有出现第二个需要持续同步的源，才启用 §4.3 协议。这样 P2 不依赖 `packages/protocol`。
 - **不做**：hook 矩阵、OAuth、IMAP、日历/邮件 API（§16）。
 - 验收（连续 14 天，每日手动跑一次即可，**不依赖 P3 的调度器**）：候选 ≥150；accept ≥60%；40–60% 先调启发式再延一轮；<40% 停。
 
-### 6.5 P3 行动（工作量 4–6 个周末）
+### 6.5 P3 行动 · v2.2（工作量 3–5 个周末）
 
 1. 最小 scheduler：one-shot + cron 一行（不引 cron 库，`setTimeout` 到下一分钟）；`memo schedule add|list|run`。
 2. 最小 supervisor：child_process 拉起 / 重启 / 退避；最大进程数；健康超时；`memo adapter doctor` 打印 last-event。
-3. 任务库 + 审批：`memo tasks list|approve|reject`；外写 adapter 必须拿到 approved token。
+3. 任务审批（任务库 v1.1 已有，不再重做）：`memo tasks list|approve|reject`；外写 adapter 必须拿到 approved token。
 4. 首个动作：`memo next`（今日待办/待确认）+ 晚间 `today.md` 摘要。
 5. 验收：`today.md` 使用率 ≥50%（<20% 停）。判定口径：当日 `today.md` mtime 发生变化，且次日 `memo next` 的输出包含其中至少一条；两项都满足才算「使用」。每周至少一次由调度产生的有效动作。
 
-### 6.6 P4 个人端点（可选，4–6 个周末，触发后才做）
+### 6.6 P4 个人端点 · v2.3（可选，4–6 个周末，触发后才做）
 
 只在**两个硬条件同时成立**时启动：
 
@@ -373,9 +455,9 @@
 
 内容：gateway（聚合 + profile + 默认拒绝 + 审计转发）、`secrets`（Keychain / credential-provider）、`files` / `contacts` 只读视图。**不承接内核写**；不把网关做成单点（默认不启用，旁路）。
 
-### 6.7 P5 一致性套件（3–5 个周末）
+### 6.7 P5 内部一致性 + 可选对照 · v2.4（2–3 个周末，不作为对外榜单）
 
-把 eval runner 抽成 `sedimem-conformance`：输入任意记忆库导出（JSONL / MCP 只读端点），输出治理判定（重复、过期、矛盾、来源、删除、as-of）。公开对 mem0 / claude-mem / Lanes Link 各一份报告 + 复现脚本。**不做排行榜**；把治理用例提给 BEAM / LongMemEval。
+把 eval runner 抽成 `sedimem-conformance`：输入任意记忆库导出（JSONL / MCP 只读端点），输出治理判定（重复、过期、矛盾、来源、删除、as-of）。**先服务自己**：每次发布前跑一遍，防止治理行为回退。只有在主仓出现外部使用者后，才可选做「对 mem0 / claude-mem / Mnemosyne 各跑一份对照」；引用 GateMem / BEAM 的方法，不自建排行榜。
 
 ---
 
@@ -383,7 +465,7 @@
 
 ### 7.1 为什么治理而不是检索
 
-检索是红海且有现成 RRF/向量库；治理（append-only + 失效 + as-of + 来源删除）是 mem0 明确不做、claude-mem 不覆盖、Lanes Link 只做日志的空白。我们已有的 eval 与四道门是别人没有的资产。
+检索是红海且有现成 RRF/向量库；治理（append-only + 失效 + as-of + 来源删除）曾是 mem0 明确不做、claude-mem 不覆盖的空白，但 2026-11-15 复核发现 Mnemosyne（161★）已把它做成产品。**治理不再是差异化，而是自用底线**；我们保留最小治理，是为了「自己敢把真实决策交给它」，不是为了在功能表上赢。差异化改由 UI 回执、DSH/中文、单进程承担（§0.1）。
 
 ### 7.2 为什么 pack 不自定义主格式
 
@@ -391,7 +473,7 @@
 
 ### 7.3 为什么不建 hook 矩阵
 
-claude-mem 已支持 6+ harness（含 dsh），且钩子要跟 harness 升级赛跑。我们只保留 DSH 插件一条实时路径 + 只读 importer；Claude 用其自身 hook 打 loopback（P2 可选），Codex 只做按需 import。
+claude-mem（117k★）已支持 Claude Code/Codex/Gemini/OpenCode 等 6+ harness，且钩子要跟 harness 升级赛跑。我们只保留 DSH 插件一条实时路径 + 只读 importer；Claude 用其自身 hook 打 loopback（P2 可选），Codex 只做按需 import。
 
 ### 7.4 为什么先 pack 后捕获
 
@@ -403,11 +485,11 @@ claude-mem 已支持 6+ harness（含 dsh），且钩子要跟 harness 升级赛
 
 ### 7.6 为什么 Ed25519 而不是 HMAC
 
-HMAC 要求 adapter 持有共享密钥，而共享密钥只能放 `MEMO_HOME`（违反 I-4），且无 `kid` 无法轮换。Ed25519 让 adapter 只持私钥、kernel 只存公钥，轮换用 `kid` 双窗口。
+HMAC 要求 adapter 持有共享密钥，而共享密钥只能放 `MEMO_HOME`（违反 I-4），且无 `kid` 无法轮换。Ed25519 让 adapter 只持私钥、kernel 只存公钥，轮换用 `kid` 双窗口。**本期不实施**：P2 的只读导入走 CLI，不引入常驻 adapter；只有出现持续同步源时才启用。
 
 ### 7.7 为什么不做 benchmark 榜单
 
-自测榜单不可信且太晚；BEAM 已覆盖矛盾消解。做「可对任意库跑的卫生套件」既有差异化，又能被引用。
+GateMem（136★）已在做多主体治理 benchmark，BEAM 已覆盖矛盾消解；再做榜单是重复且不可信。P5 只做内部一致性 + 可选对照，不做排行榜。
 
 ---
 
@@ -415,20 +497,22 @@ HMAC 要求 adapter 持有共享密钥，而共享密钥只能放 `MEMO_HOME`（
 
 | 阶段 | 指标 | 阈值 | 样本 |
 |---|---|---|---|
-| P0a | CI 在 CURRENT 上绿 | 五项全绿 | 每次 push |
+| P0a | CI 在 CURRENT 上绿 | 五项全绿（753 tests / 56 eval） | 每次 push |
 | P0a | 门禁防回退 | meta-check 拦硬编码 | 故意注入 v0.3 的 PR |
-| P0b | 伪造信封 | 100% 拒绝 + 审计 | 20 个变体 |
+| P0b | 任务账本删除 | `verify-delete` 覆盖 segments | 集成 |
 | P0b | T2 canary | 0 次外写/工具调用 | 20 条注入样本（含改写/翻译/base64） |
 | P0b | 并发丢写 | 0 | 2 进程 × 1000 次 append + kill -9 |
 | P0b | web 鉴权 | 无 token 401 / 有 token 200 | 手工 + 集成 |
 | P1 | pack 事实召回 | 20/20（Wilson 95% 下界 ≈84%） | 20 个固定任务 |
 | P1 | pack token | ≤ brief 的 70% | 同上 |
 | P1 | pack 确定性 | 同 asOf 两次逐字节相等 | 10 次 |
+| P1 | 注入回执 | 覆盖率 100% | 10 次注入 |
 | P2 | 候选量 | ≥150 / 14 天 | 真实使用 |
 | P2 | accept 率 | ≥60%；40–60% 调启发式后再测；<40% 停；候选 50–150 条时延长试验 | 同上 |
 | P3 | today.md 使用 | ≥50%（<20% 停） | 4 周 |
 | P4 | 第二消费者 | 有 issue + 实测 30 天 | 硬触发 |
-| P5 | 外部复现 | 3 个外部使用者跑通 | 公开邀请 |
+| P5 | 内部一致性 | 发布前全过 | 每次发布 |
+| P5 | 外部对照（可选） | 3 个外部使用者跑通 | 公开邀请 |
 
 ---
 
@@ -469,20 +553,20 @@ HMAC 要求 adapter 持有共享密钥，而共享密钥只能放 `MEMO_HOME`（
 
 ## 12. 时间与节奏（现实版）
 
-- 历史证据：v1.0 重构 12 天 / 90 commits；2026-11-14 单日 22 commits。单人可持续节奏约每周 1–2 个有效工作日。
+- 历史证据：v1.0 重构 12 天 / 90 commits；2026-11-14 单日 22 commits；v1.1–v1.2（任务库 + 账本）约一周内交付、+约 100 tests。单人可持续节奏约每周 1–2 个有效工作日。
 - 阶段工作量按「周末」计（1 周末 ≈ 2 天）：
 
 | 阶段 | 周末 | 日历（含缓冲） |
 |---|---|---|
-| P0a | 1–1.5 | 2 周 |
-| P0b | 2–3 | 4–6 周 |
-| P1 | 3–4 | 6–8 周 |
-| P2 | 3–4 | 6–8 周 |
-| P3 | 4–6 | 8–12 周 |
+| P0a | 1.5–2 | 3 周 |
+| P0b | 2–2.5 | 5–6 周 |
+| P1 | 2–3 | 5–6 周 |
+| P2 | 2–3 | 5–6 周 |
+| P3 | 3–5 | 6–10 周 |
 | P4 | 4–6 | 仅在触发后 |
-| P5 | 3–5 | 仅在主仓有外部使用者后 |
+| P5 | 2–3 | 仅在主仓有外部使用者后 |
 
-**MVP（P0a + P0b + P1）合计 6–8.5 个周末，日历约 3–4 个月**。验收窗口里的「14 天 / 4 周」是**日历观察窗口**，不是额外工作量；累计日历至少 +6–10 周。
+**MVP（P0a + P0b + P1）合计 5.5–7.5 个周末，日历约 3–4 个月**。验收窗口里的「14 天 / 4 周」是**日历观察窗口**，不是额外工作量；累计日历至少 +6–10 周。P1 从 3–4 降到 2–3，因为 v1.2 的 `briefJson` 已是 pack 的子集。
 
 不承诺日期，只承诺顺序与验收；每阶段结束补「执行结果」并用实际耗时校准下一阶段。
 
@@ -502,7 +586,7 @@ HMAC 要求 adapter 持有共享密钥，而共享密钥只能放 `MEMO_HOME`（
 | R-08 | 迁移把存量误判为 T2，pack 变空 | 中 | 高 | backfill 规则 + 「迁移后 pack 非空」测试 + 回滚 |
 | R-09 | 审计链被同 UID 重算 | 中 | 中 | 可选 git 锚定；文档写明边界 |
 | R-10 | web token 引导导致 UI 全 401 | 中 | 中 | cookie 下发 + UI 验收 + 保留 `--no-auth` 仅 loopback 调试 |
-| R-11 | Q 门禁与 G 系列漂移 | 中 | 低 | Q 冻结 14；G 单独编号；docs/07 R5 同步 |
+| R-11 | Q 门禁与 G 系列漂移 | 中 | 低 | Q 冻结 15（Q1–Q11+Q13–Q16）；G 单独编号；docs/07 R5 同步 |
 | R-12 | `~/.memo` 被云盘/备份带走 | 中 | 高 | 启动校验 + 排除 + 可选加密 |
 | R-13 | 供应链（第三方包/可选二进制） | 中 | 高 | 单 lockfile + `--ignore-scripts` + SBOM + 签名 |
 | R-14 | 删来源时漏清派生层 | 中 | 中 | `deleteBySource` 统一入口 + `verify-delete` |
@@ -515,10 +599,10 @@ HMAC 要求 adapter 持有共享密钥，而共享密钥只能放 `MEMO_HOME`（
 
 ### 14.1 现状
 
-- `quality-check.mjs`：Q1–Q11、Q13、Q14、Q15，共 **14 项**（Q12 跳号预留）。
+- `quality-check.mjs`：Q1–Q11、Q13–Q16，共 **15 项**（Q12 跳号预留）。
 - `docs-drift-check.mjs`：R1–R6；`docs/07` 声明的 Q 项数必须等于实际 Q 编号数。
 - `coverage-gate.mjs`：lines ≥85 / branches ≥70 / functions ≥90（与 `docs/07:56-58` 一致）。
-- **Q 冻结**：本计划期间不新增 Q；新增不变量走 G 系列。
+- **Q 冻结 15 项**：本计划期间不新增 Q；新增不变量走 G 系列。
 
 ### 14.2 新增（按阶段）
 
@@ -652,6 +736,28 @@ HMAC 要求 adapter 持有共享密钥，而共享密钥只能放 `MEMO_HOME`（
 - 单人项目无第二 maintainer：adapter 上限 2 个，外部贡献只收测试/文档。
 - 不支持 Windows adapters：接受，文档写明。
 
+### 17.5 2026-11-15 v1.2 复核记录（本轮修订）
+
+**触发**：m00378。仓库从计划基线 v1.0.3 前进到 v1.2.2：v1.1 增加任务库管理，v1.2 增加任务上下文账本（753 tests / 56 eval / Q15）；同时外部生态出现 claude-mem 117,263★、Mnemosyne 161★、GateMem 136★、guild 297★、brain0 289★。
+
+**方法**：重读 v1.2 的 `versions/CURRENT`、`package.json`、`README.md`、`.github/workflows/ci.yml`、`tools/coverage-gate.mjs` 与四份新调研文档；对照 §0.1 的竞争事实与 §6 的阶段依赖逐条改写；改后跑 `quality-check`（15/15）与 `docs-drift-check`（17 文档 / 56 eval / Q15）。随后启动第五轮 delta 对抗复核（只读）：**返回 1 blocker + 8 major + 3 minor，均已在下面修掉**；修后复跑门禁通过，本轮结论为「第五轮 pass（文档级）、待用户拍板」。
+
+**本轮修掉的 9 处不一致**：
+
+1. 旧稿把 Ed25519 写成 P0b「应该做」——与「P0b 不做签名」冲突；现明确「最早 P4，等常驻 adapter」。
+2. B4 仍写「v1.0 尚未冻结」——实际 v1.0/v1.1 已冻结、v1.2 才是可改版本；已改。
+3. 旧稿 MVP 6–8.5 周末、P1 3–4——与 v1.2 `briefJson` 已是 pack 子集不符；现 5.5–7.5、P1 2–3。
+4. Q 冻结仍写 14 项——v1.2 已有 Q16，实际 15 项；I-14/§14.1/R-11 已同步。
+5. 旧稿写 P2 会引入常驻 adapter/协议包——与「只读导入」冲突；现 P2 全部走 `memo import`，且 §6.0 不再把 `packages/protocol` 列为 P0a 前置。
+6. §19 写了不存在的 `cli/mcp.js`、`cli/serve.js`——实际 `cmdServe` 在 `cli/commands/ops.js`；已改为真实路径并补 `commands/memory.js`。
+7. §19 漏了 `quarantine` 的模块与子命令——已补 `capture/quarantine.js`（新增）与 `memo quarantine`。
+8. 工具面把「现有 3 个」当事实——v1.2 实际默认注册 17 个、无 `--session-tools`；现改为「P0b 先新增 `memo mcp --surface core|all` 开关，再收敛到 3」。
+9. §6.3 写 `npx ... init/audit`，与「无外部用户前不发 npm」冲突——已改为 clone 后本地运行，发布单列决策；`docs/plans/README.md` 行已存在，对应债务与 P0a 动作已删。
+
+**P0a 已闭合（本地，待 CI 验证）**：CI / `coverage-gate` / `windows-smoke` 跟随 `versions/CURRENT`、`engines >=22.15`、README/项目站/契约文档同步。P0a 余项见 `docs/plans/v1.3-p0a.md`。
+
+**残留判断风险**：竞争格局可能在一个月内再变（claude-mem 迭代很快）；本计划的对策是不追功能、只守「本地/中文/DSH/看得见」，每季度复核一次 §0.1，不把单次扫描当永久结论。
+
 ---
 
 ## 18. 开放问题
@@ -664,50 +770,61 @@ HMAC 要求 adapter 持有共享密钥，而共享密钥只能放 `MEMO_HOME`（
 6. **P5 套件的输入格式**：JSONL 导出 vs MCP 只读端点；优先 JSONL（可离线复现）。
 7. **多 profile 产品化**：P0b 只做路径收敛与隔离；是否值得做 UI 切换，等第二消费者。
 8. **中文分词**：当前汉字二元组足够；是否引入词典，等坏了再说。
+9. **战略分叉（2026-11-15 新增）**：A 个人观测台 + 治理工作台（本计划默认）；B 通用治理平台，对标 Mnemosyne/GateMem（单人维护不建议）；C 以 Mnemosyne 为内核或只读导入源，sedimem 专注 DSH/中文/UI。**需要用户拍板**；未拍板前按 A 执行，不写 B/C 的代码。
+10. **是否把 Mnemosyne 纳入 P2 对照/导入**：它已有 npm、SQLite、as-of 与回执；作为只读导入源可减少重复造轮，但会增加外部依赖与格式跟踪。触发条件 = 其导出格式稳定 ≥2 个版本，且 P1 已证明 pack 有日常使用。
 
 ---
 
 ## 19. 写盘范围（本计划若批准）
 
-**P0a**
+**P0a · v1.3**
 
 - `.github/workflows/ci.yml`
 - `tools/meta-check.mjs`（新增）、`tools/windows-smoke.mjs`、`tools/coverage-gate.mjs`
 - `tools/quality-check.mjs`（Q1 scope）
 - 根 `package.json`、`pnpm-workspace.yaml`
 - `plugin/dsh-sedimem/package.json`（workspace 依赖）
-- `README.md`、`docs/03-iterability-and-versioning.md`、`docs/07-quality-and-security.md`
-- `versions/v1.0/package.json`（engines）
+- `README.md`、`README.en.md`、`docs/index.html`、`docs/en/index.html`
+- `docs/00`、`docs/01`、`docs/03`、`docs/04`、`docs/06`、`docs/07`、`docs/08`、`docs/11`（doc-version / 路径）
+- `docs/plans/README.md`、`docs/plans/v1.3-p0a.md`（新增）
+- `versions/v1.3/package.json`（engines、version）、`versions/v1.3/CHANGELOG.md`、`versions/v1.2/FROZEN.md`
 
-**P0b**
+**P0b · v1.4**
 
-- `versions/v1.0/src/storage/lock.js`、`storage/jsonl-store.js`
-- `versions/v1.0/src/capture/queue.js`
-- `versions/v1.0/src/core/record.js`、`api/write-path.js`、`api/maintenance.js`
-- `versions/v1.0/src/api/search-path.js`（读预算 + hits 标记）
-- `versions/v1.0/src/render/inject.js`、`render/brief.js`、`render/tier0.js`
-- `versions/v1.0/src/hygiene/redact.js`、`quota.js`、`judge.js`
-- `versions/v1.0/src/web/server.js`、`web/api/write.js`、`web/api/read.js`、`web/static.js`
-- `versions/v1.0/src/config/paths.js`、`cli/commands/shared.js`、`cli/capture.js`、`cli/mcp.js`
-- `versions/v1.0/src/mcp/tools.js`、`mcp/session-tools.js`、`mcp/server.js`
-- `versions/v1.0/src/cli/serve.js`、`api/lifecycle.js`
-- `versions/v1.0/ui/api.js`（仅 cookie 兼容；如无需改动则不动）
-- `versions/v1.0/src/session/cli-support.js`、`session/transcript.js`
-- `versions/v1.0/src/cli/memo.js` + 新子命令（`trust`、`delete`、`verify-delete`、`adapter`、`migrate`）
-- `versions/v1.0/tests/**`（含 `tests/invariance/`、`tests/injection/`）
-- `tools/supply-check.mjs`（新增）、`tools/gen-compat.mjs`（新增）
+- `versions/v1.4/src/storage/lock.js`、`storage/jsonl-store.js`
+- `versions/v1.4/src/capture/queue.js`
+- `versions/v1.4/src/core/record.js`、`api/write-path.js`、`api/maintenance.js`
+- `versions/v1.4/src/api/search-path.js`（读预算 + hits 标记）
+- `versions/v1.4/src/render/inject.js`、`render/brief.js`、`render/tier0.js`
+- `versions/v1.4/src/hygiene/redact.js`、`quota.js`、`judge.js`
+- `versions/v1.4/src/web/server.js`、`web/api/write.js`、`web/api/read.js`、`web/static.js`
+- `versions/v1.4/src/config/paths.js`、`cli/commands/shared.js`、`cli/capture.js`、`cli/commands/ops.js`、`cli/commands/memory.js`
+- `versions/v1.4/src/mcp/tools.js`、`mcp/session-tools.js`、`mcp/server.js`、`cli/commands/mcp.js`（新增 `memo mcp` 开关）
+- `versions/v1.4/src/api/lifecycle.js`
+- `versions/v1.4/ui/api.js`（仅 cookie 兼容；如无需改动则不动）
+- `versions/v1.4/src/session/cli-support.js`、`session/transcript.js`、`session/ledger.js`
+- `versions/v1.4/src/capture/quarantine.js`（新增）
+- `versions/v1.4/src/cli/memo.js` + 新子命令（`trust`、`delete`、`verify-delete`、`quarantine`、`migrate`）
+- `versions/v1.4/tests/**`（含 `tests/invariance/`、`tests/injection/`）
+- `tools/supply-check.mjs`（新增）
 - `docs/02-data-model-and-contract.md`、`docs/12-data-map.md`（新增）、`docs/adr-*.md`
-- `packages/protocol/**`（最小：信封 schema + 错误码 + 版本）
 - `docs/plans/future-architecture.md`（本文件）
 
-**P1**
+**P1 · v2.0**
 
-- `versions/v1.0/src/api/pack.js`（新增）
-- `versions/v1.0/src/cli/init.js`、`cli/audit.js`、`cli/export.js`（新增）
-- `versions/v1.0/src/eval/`（基线实验）
-- `versions/v1.0/package.json`（bin 增 `mem`）
+- `versions/v2.0/src/api/pack.js`（新增；复用 `session/ledger-brief.js`）
+- `versions/v2.0/src/cli/init.js`、`cli/audit.js`、`cli/export.js`（新增）
+- `versions/v2.0/eval/`（基线实验；不是 `src/eval/`）
+- `versions/v2.0/ui/**`（注入回执视图）
+- `versions/v2.0/package.json`（bin 增 `mem`）
 
-**P2–P5**：`adapters/*`、`packages/protocol`、`packages/gateway`、`tools/gen-compat.mjs` 的扩展，按阶段另立 issue。
+**P2 · v2.1**
+
+- `versions/v2.1/src/cli/import-*.js`（新增：claude-mem / agents-md / git / ics / transcript）
+- `versions/v2.1/src/importers/*`（新增，只读）
+- `versions/v2.1/tests/importers/**`
+
+**P3–P5 · v2.2–v2.4**：`adapters/*`、`packages/protocol`、`packages/gateway`、`tools/gen-compat.mjs` 的扩展，按阶段另立 issue。
 
 ---
 

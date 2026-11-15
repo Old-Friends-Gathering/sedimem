@@ -5,6 +5,8 @@
 
 | 计划 | 对应需求 | 状态 | 覆盖版本 |
 |---|---|---|---|
+| [`v1.3-p0a.md`](v1.3-p0a.md) | P0a 地基：CI/文档/版本真值化（v1.3） | 进行中 | v1.3.0 |
+| [`future-architecture.md`](future-architecture.md) | m00378：基于 v1.2 重新调研后的未来架构（个人观测台 + 治理路线） | 已批准（A） | 自 v1.3 起（P0a 进行中） |
 | [`v0.2-web-ui-plan.md`](v0.2-web-ui-plan.md) | issue [#10](https://github.com/Old-Friends-Gathering/sedimem/issues/10) 只读 Web UI（设计见 [`08-web-ui.md`](../08-web-ui.md)） | 待执行 | v0.1.3 + v0.2.0 |
 
 ## 约定
