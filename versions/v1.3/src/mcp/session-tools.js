@@ -193,9 +193,9 @@ async function closeSessionTool(a, state) {
     const status = sessionStatus({ service: svc });
     const closedHandoff = path.join(MEMO_HOME, 'handoffs', `${sessionId}.md`);
     // 幂等：meta 已是 closed → 直接返回，不再晋升/落盘
-    if (status.meta && status.meta.status === 'closed') {
+    if (status.status === 'closed') {
       let mainScope = await mainScopeFor(state, scope, status.meta);
-      if (isSessionScope(mainScope)) mainScope = resolveParentScope(MEMO_HOME, scope, status.meta) || state.scope;
+      if (isSessionScope(mainScope)) mainScope = resolveParentScope(MEMO_HOME, scope, status.meta).parentScope || state.scope;
       if (isSessionScope(mainScope)) {
         const { resolveScope } = await import('../core/scope.js');
         mainScope = resolveScope({ cwd: process.cwd(), env: {} }).scope;

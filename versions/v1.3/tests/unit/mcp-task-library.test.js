@@ -144,6 +144,12 @@ test('切到任务库后 close 会恢复到主库，下一次写入不再撞 E_S
     assert.equal(w.isError, false, w.text);
     assert.match(w.text, /action=created/);
 
+    const again = await cli.tool('memory_session_close', { scope });
+    assert.equal(again.isError, false, again.text);
+    assert.match(again.text, /幂等/);
+    const g = await cli.tool('memory_scope', { action: 'get' });
+    assert.doesNotMatch(g.text, /session:/);
+
     const second = await cli.tool('memory_session_start', { title: '第二个任务库' });
     assert.equal(second.isError, false, second.text);
   });
