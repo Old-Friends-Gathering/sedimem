@@ -57,3 +57,17 @@ test('CLI --scope 生效：写进指定分库而不是 cwd 分库', async () => 
     await fsp.rm(memoHome, { recursive: true, force: true });
   }
 });
+
+test('CLI write 到未创建的任务库：fail-loud，不隐式造库', async () => {
+  const memoHome = await fsp.mkdtemp(path.join(os.tmpdir(), 'memo-cliscope-ghost-'));
+  try {
+    await assert.rejects(
+      memo(memoHome, ['write', '--scope', 'session:20990101-0000-ghost', '--agent', 'cli', '--kind', 'decision', '--text', '不应写入']),
+      (err) => /任务库 .* 不存在/.test(String(err.stderr ?? err.message)),
+    );
+    const items = await fsp.readdir(path.join(memoHome, 'items')).catch(() => []);
+    assert.ok(!items.some((f) => f.includes('ghost')), `不应产生 ghost 库文件：${items.join(',')}`);
+  } finally {
+    await fsp.rm(memoHome, { recursive: true, force: true });
+  }
+});

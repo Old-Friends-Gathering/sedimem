@@ -45,6 +45,10 @@ export async function getService(scope) {
   return svc;
 }
 
+export function dropService(scope) {
+  serviceCache.delete(scope);
+}
+
 export async function closeAllServices() {
   const all = [...serviceCache.values()];
   serviceCache.clear();
@@ -140,7 +144,8 @@ function resolveSessionScopeArg(a, state) {
   if (!isSessionScope(scope)) {
     throw ecode(
       'E_INVALID_ARG',
-      `目标 scope 必须是 session:<id>，当前是 ${JSON.stringify(scope)}；请先调用 memory_session_start 创建会话临时库`,
+      `目标 scope 必须是 session:<id>，当前是 ${JSON.stringify(scope)}；` +
+      '如果任务库已存在，请传 scope:"session:<id>"；没有则先调用 memory_session_start 创建。',
     );
   }
   return scope;
@@ -168,6 +173,18 @@ async function mainScopeFor(state, sessionScope, meta) {
 }
 
 /** memory_session_close 的业务（与 cli/session close 同一流程：晋升 → handoff → closed meta → tombstone） */
+/** close 后若当前客户端仍停在已关闭的任务库，恢复到 start 时的主库（避免下一次写入撞 E_SESSION_CLOSED）。 */
+async function restoreScopeAfterClose(state, closedScope, mainScope) {
+  if (!mainScope || state.scope !== closedScope) return;
+  state.scope = mainScope;
+  state.scopeSource = 'runtime(close-restore)';
+  try {
+    writeScopeOverride(MEMO_HOME, mainScope, state.client);
+  } catch {
+    /* 覆盖文件写失败不阻断 close；至少进程内 scope 已恢复 */
+  }
+}
+
 async function closeSessionTool(a, state) {
   const scope = resolveSessionScopeArg(a, state);
   const sessionId = scope.slice('session:'.length);
@@ -177,8 +194,15 @@ async function closeSessionTool(a, state) {
     const closedHandoff = path.join(MEMO_HOME, 'handoffs', `${sessionId}.md`);
     // 幂等：meta 已是 closed → 直接返回，不再晋升/落盘
     if (status.meta && status.meta.status === 'closed') {
+      let mainScope = await mainScopeFor(state, scope, status.meta);
+      if (isSessionScope(mainScope)) mainScope = resolveParentScope(MEMO_HOME, scope, status.meta) || state.scope;
+      if (isSessionScope(mainScope)) {
+        const { resolveScope } = await import('../core/scope.js');
+        mainScope = resolveScope({ cwd: process.cwd(), env: {} }).scope;
+      }
+      await restoreScopeAfterClose(state, scope, mainScope);
       return {
-        text: `session ${sessionId} 已关闭（幂等，无动作）`,
+        text: `任务库 ${sessionId} 已关闭（幂等，无动作）`,
         structured: {
           ok: true, scope, alreadyClosed: true,
           promoted: [], forgotten: 0,
@@ -191,8 +215,8 @@ async function closeSessionTool(a, state) {
     // 对抗 B1/B-02：晋升目标为空或仍是 session 型（session-in-session）→ 拒绝，与 CLI 对齐
     if (!mainScope || isSessionScope(mainScope)) {
       throw ecode('E_INVALID_ARG',
-        `session ${sessionId} 的晋升目标无效（${JSON.stringify(mainScope)}）；` +
-        `请用绑定主库（repo:/dir:）的服务执行 session start 后重试`);
+        `任务库 ${sessionId} 的晋升目标无效（${JSON.stringify(mainScope)}）；` +
+        `请用绑定主库（repo:/dir:）的服务创建任务库后重试`);
     }
     const main = await getService(mainScope); // 晋升目标主库（真实 service，可 write）
     const records = [...svc._records.values()].filter((r) => r.status === 'active');
@@ -269,10 +293,11 @@ async function closeSessionTool(a, state) {
       await svc.forget({ id: r.id, reason: 'session-closed' });
       forgotten++;
     }
+    await restoreScopeAfterClose(state, scope, mainScope);
     sessionOrigins.delete(scope);
 
     return {
-      text: `session ${sessionId} 已关闭：晋升 ${promoted.length} 条到主库（${mainScope}），tombstone ${forgotten} 条；交接文档 ${handoffPath}`,
+      text: `任务库 ${sessionId} 已关闭：晋升 ${promoted.length} 条到主库（${mainScope}），tombstone ${forgotten} 条；交接文档 ${handoffPath}`,
       structured: { ok: true, scope, alreadyClosed: false, promoted, forgotten, handoffPath },
     };
   } finally {
@@ -297,7 +322,20 @@ export function makeServiceFacade(state) {
  */
 export async function initConnScope(client) {
   const { resolveScope } = await import('../core/scope.js');
-  const st = initScopeStateFrom({ memoHome: MEMO_HOME, cwd: process.cwd(), env: process.env, resolveScope, client });
+  let st = initScopeStateFrom({ memoHome: MEMO_HOME, cwd: process.cwd(), env: process.env, resolveScope, client });
+  if (isSessionScope(st.scope)) {
+    const svc = await getService(st.scope);
+    const { status } = sessionStatus({ service: svc });
+    if (status !== 'open') {
+      // 旧版本 memory_scope use 允许切到任意/已关闭 session，覆盖文件可能残留；
+      // 启动时自愈回主库，避免默认写入继续落进不存在的任务库、且再也建不出新任务库。
+      dropService(st.scope);
+      const fallback = resolveScope({ cwd: process.cwd(), env: {} }).scope;
+      try { writeScopeOverride(MEMO_HOME, fallback, client); } catch { /* 覆盖文件写失败不阻断启动 */ }
+      process.stderr.write(`[memo-mcp] 忽略无效任务库 scope=${st.scope}（${status}），回退主库 ${fallback}\n`);
+      st = { scope: fallback, source: 'runtime(init-heal)' };
+    }
+  }
   process.stderr.write(
     `[memo-mcp] client=${clientKey(client)} scope=${st.scope}（来源：${st.source}）cwd=${process.cwd()} memoHome=${MEMO_HOME}\n` +
       (st.source === 'cwd'
@@ -316,7 +354,18 @@ export async function scopeToolHandler(a, ctx) {
   }
   const { resolveScope } = await import('../core/scope.js');
   const next = resolveUseTarget({ scope: a.scope, path: a.path, resolveScope });
-  await getService(next); // 先建好；建失败则不改状态（fail-loud）
+  const svc = await getService(next); // 先建好；建失败则不改状态（fail-loud）
+  if (isSessionScope(next)) {
+    const st = sessionStatus({ service: svc });
+    if (st.status === 'unknown') {
+      serviceCache.delete(next);
+      throw ecode('E_SESSION_NOT_FOUND',
+        `任务库 ${next} 不存在：先 memory_session_start({ title }) 创建，再切过去。`);
+    }
+    if (st.status === 'closed') {
+      throw ecode('E_SESSION_CLOSED', `任务库 ${next} 已关闭，不能再切过去；请用主库或新建任务库。`);
+    }
+  }
   ctx.scope = next;
   ctx.scopeSource = `runtime(${a.path ? 'path' : 'explicit'})`;
   const file = writeScopeOverride(MEMO_HOME, next, ctx.client);
@@ -331,11 +380,15 @@ export async function scopeToolHandler(a, ctx) {
 export const SESSION_TOOL_DEFS = [
   {
     name: 'memory_session_start',
-    description: '开始一个会话临时库（scope 形如 session:<id>）：写 meta 并返回 scope。close 时只晋升 decision/gotcha，其余随库丢弃。',
+    description: '创建一个任务库（= 临时记忆库，scope 形如 session:<id>）：写 meta 并返回 scope。close 时只晋升 decision/gotcha，其余随库丢弃。',
     inputSchema: {
       type: 'object',
       properties: {
-        title: { type: 'string', pattern: '^[\\s\\S]{1,120}$', description: '会话标题（必填，1..120 字）' },
+        title: {
+          type: 'string',
+          pattern: '^[\\s\\S]{1,120}$',
+          description: '任务库名称（必填，1..120 字；参数名是 title，不是 id/name/sessionId）',
+        },
         repo: { type: 'string', description: '可选：关联仓库标识/路径' },
       },
       required: ['title'],
@@ -356,19 +409,19 @@ export const SESSION_TOOL_DEFS = [
       });
       sessionOrigins.set(scope, state.scope); // 记住晋升目标（close 时回到 start 时的主库）
       const hint =
-        '这是临时库：close 时只晋升 decision/gotcha 到主库，其余记录会被 tombstone；' +
-        '后续 checkpoint/status/close 请带 scope 参数（或用 memory_scope 切到该临时库）。';
-      return { text: `session 已创建: ${scope}\n${hint}`, structured: { ok: true, scope, hint, meta } };
+        '这是任务库（临时库）：close 时只晋升 decision/gotcha 到主库，其余记录会被 tombstone；' +
+        'checkpoint/status/close 需带 scope:"' + scope + '"（或先切到该库）；memory_write 也可带 scope 一次性写入，不必切库。';
+      return { text: `任务库已创建: ${scope}\n${hint}`, structured: { ok: true, scope, hint, meta } };
     },
   },
   {
     name: 'memory_session_checkpoint',
-    description: '向会话临时库追加一条 8 段 checkpoint（intent/concepts/files/errorsAndFixes/pendingJobs/currentState/nextSteps/criticalContext）。' +
+    description: '向任务库（临时记忆库，session:<id>）追加一条 8 段 checkpoint（intent/concepts/files/errorsAndFixes/pendingJobs/currentState/nextSteps/criticalContext）。' +
       'checkpoint 与 fromSummary 至少给其一，都给时 checkpoint 优先。',
     inputSchema: {
       type: 'object',
       properties: {
-        scope: { type: 'string', description: 'session:<id>；缺省用服务器当前 scope（必须是 session:*）' },
+        scope: { type: 'string', description: '任务库 scope（session:<id>）；缺省用服务器当前 scope（必须是 session:*）' },
         checkpoint: {
           type: 'object',
           description: '8 段 checkpoint 对象；数组型五段（concepts/files/errorsAndFixes/pendingJobs/nextSteps），字符串型三段（intent/currentState/criticalContext）',
@@ -414,10 +467,10 @@ export const SESSION_TOOL_DEFS = [
   },
   {
     name: 'memory_session_status',
-    description: '查看会话临时库概况：meta / checkpoint 数 / 期间事实数 / 最后一次 checkpoint 时间。',
+    description: '查看任务库（临时记忆库，session:<id>）概况：meta / checkpoint 数 / 期间事实数 / 最后一次 checkpoint 时间。',
     inputSchema: {
       type: 'object',
-      properties: { scope: { type: 'string', description: 'session:<id>；缺省用服务器当前 scope（必须是 session:*）' } },
+      properties: { scope: { type: 'string', description: '任务库 scope（session:<id>）；缺省用服务器当前 scope（必须是 session:*）' } },
       additionalProperties: false,
     },
     handler: async (s, a, state) => {
@@ -426,7 +479,7 @@ export const SESSION_TOOL_DEFS = [
       try {
         const st = sessionStatus({ service: svc });
         return {
-          text: `session ${st.sessionId} status=${st.status} checkpoints=${st.checkpoints} facts=${st.facts} lastCheckpointAt=${st.lastCheckpointAt ?? '无'}`,
+          text: `任务库 ${st.sessionId} status=${st.status} checkpoints=${st.checkpoints} facts=${st.facts} lastCheckpointAt=${st.lastCheckpointAt ?? '无'}`,
           structured: {
             ok: true, scope, sessionId: st.sessionId, meta: st.meta,
             checkpoints: st.checkpoints, facts: st.facts,
@@ -440,17 +493,17 @@ export const SESSION_TOOL_DEFS = [
   },
   {
     name: 'memory_session_close',
-    description: '关闭会话临时库：白名单 decision/gotcha 晋升主库（tags 加 from-session:<id>），其余记录 tombstone，写交接文档。幂等：重复 close 返回 alreadyClosed。',
+    description: '关闭任务库（临时记忆库，session:<id>）：白名单 decision/gotcha 晋升主库（tags 加 from-session:<id>），其余记录 tombstone，写交接文档。幂等：重复 close 返回 alreadyClosed。',
     inputSchema: {
       type: 'object',
-      properties: { scope: { type: 'string', description: 'session:<id>；缺省用服务器当前 scope（必须是 session:*）' } },
+      properties: { scope: { type: 'string', description: '任务库 scope（session:<id>）；缺省用服务器当前 scope（必须是 session:*）' } },
       additionalProperties: false,
     },
     handler: async (s, a, state) => closeSessionTool(a, state),
   },
   {
     name: 'memory_session_sweep',
-    description: '兜底扫描僵尸会话临时库：只报告 startedAt 早于 olderThanMs 且仍 open 的候选，不删不改（自动关闭永远不做）。',
+    description: '兜底扫描僵尸任务库（临时记忆库）：只报告 startedAt 早于 olderThanMs 且仍 open 的候选，不删不改（自动关闭永远不做）。',
     inputSchema: {
       type: 'object',
       properties: {
@@ -463,7 +516,7 @@ export const SESSION_TOOL_DEFS = [
       const r = sweepSessions({ memoHome: MEMO_HOME, olderThanMs });
       return {
         text:
-          `扫描 ${r.scanned} 个 session scope，候选 ${r.candidates.length} 个（只报告，不删）\n` +
+          `扫描 ${r.scanned} 个任务库，候选 ${r.candidates.length} 个（只报告，不删）\n` +
           r.candidates.map((c) => `  ${c.scope}  开始于 ${c.startedAt}  ${c.title}`).join('\n'),
         structured: { ok: true, scanned: r.scanned, candidates: r.candidates },
       };

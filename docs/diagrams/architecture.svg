@@ -29,7 +29,7 @@
   <rect x="32" y="140" width="1096" height="104" rx="12" fill="#ffffff" stroke="#dfe3ea" stroke-width="1.2"/>
   <text class="lt" x="54" y="168">接口层 · 三个入口，一套语义</text>
   <text class="sub" x="54" y="186">MCP 是跨客户端唯一的缝；CLI 给人用；Web 只读、没有写端点</text>
-  <rect class="box" x="54" y="198" width="320" height="30" rx="7"/><text class="bt" x="68" y="218">MCP server · memory_*（10 个工具）</text>
+  <rect class="box" x="54" y="198" width="320" height="30" rx="7"/><text class="bt" x="68" y="218">MCP server · 17 个工具（记忆/任务库/账本）</text>
   <rect class="box" x="388" y="198" width="320" height="30" rx="7"/><text class="bt" x="402" y="218">CLI · write / search / brief / curate …</text>
   <rect class="box" x="722" y="198" width="384" height="30" rx="7"/><text class="bt" x="736" y="218">Web server · /api/* 只读 + ?scope=</text>
 

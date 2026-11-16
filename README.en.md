@@ -125,6 +125,17 @@ Measured cost (GLM-5.3-Flash): full rebuild of 33 records ≈1m50s, **<¥0.02**;
 
 A task's working state lives in a `session:*` store (fact writes forbidden). We key it by **task**, not by chat session: with multiple agents collaborating, one task spans several sessions and agents, so the task is the unit that gets handed off. On close, only decision/gotcha entries are promoted to the main store (tagged `from-session:<id>`); the rest is discarded, and a six-section handoff doc is written to `docs/handoffs/<id>.md`.
 
+**Align the words first.** "Task store" has four neighbours; MCP only recognises this table.
+
+| What you say | What it actually is | How to create / write |
+|---|---|---|
+| Task store / temporary memory / task context | `session:<id>`, task-scoped temporary memory; close promotes decision/gotcha | CLI `memo session start`; MCP `memory_session_start({title})` |
+| Memory scope | `repo:<name>` / `dir:<name>`, long-lived project facts | `MEMO_SCOPE`; MCP `memory_scope({action:"use", path})` |
+| Task board | DSH `task_board_*`, execution status only, no context | `task_board_create` |
+| Task ledger | `segments` inside a task store (folded transcript) | `memo session capture` |
+
+MCP default: when the user says "create a task store / create a task in the task store", call `memory_session_start({title})` first, then write directly with `memory_write({kind:"decision"|"gotcha"|"state", scope:"session:<id>"})` (no scope switch needed). Pass the same `scope` to `memory_session_checkpoint/status/close`; `close` restores the main scope automatically. Create `task_board_*` cards only for execution status; never create the task store as a `repo:`/`dir:` memory scope.
+
 ![Task store: start → checkpoint → close](docs/shots/diagrams/session.png)
 
 ```bash
@@ -272,7 +283,7 @@ Tool surface: 10 `memory_*` + 5 `memory_session_*`, identical across all three c
 
 ![Five gate layers: quality → security → coverage → docs-drift → pages-verify](docs/shots/diagrams/gates.png)
 
-Local scripts = CI scripts: 15 quality checks + 9 security checks + coverage (lines ≥ 85 / branches ≥ 70 / functions ≥ 90) + docs-drift + pages-verify, plus 753 tests and eval I1–I56.
+Local scripts = CI scripts: 15 quality checks + 9 security checks + coverage (lines ≥ 85 / branches ≥ 70 / functions ≥ 90) + docs-drift + pages-verify, plus 761 tests and eval I1–I56.
 
 ```bash
 node tools/quality-check.mjs && node tools/security-check.mjs && node tools/coverage-gate.mjs
@@ -294,12 +305,14 @@ node tools/quality-check.mjs && node tools/security-check.mjs && node tools/cove
 
 | Version | Theme | Status |
 |---|---|---|
-| **v1.0.2** | Three real fixes (thinking chain / rebuild / lazy load) + doc diagram updates | ✅ Current |
-| v1.0.1 | Graph usability + theme aligned with DSH | ✅ Shipped |
-| v1.0.0 | 12-module refactor + LLM summary layer + nine-page rebuild | ✅ Shipped |
+| **v1.3.1** | Task-library terminology & entry fix: MCP now says "task store = temporary memory = session:<id>"; `memory_write` accepts a one-shot `scope` | ✅ Current |
+| v1.3.0 | P0a foundation: CI follows `versions/CURRENT`, coverage/Windows smoke de-hardcoded, engines 22.15 | ✅ Shipped |
+| v1.2.x | Task context ledger (segments/brief/expand) + task page | ✅ Shipped |
+| v1.1.x | Task library management + UI rebuild | ✅ Shipped |
+| v1.0.x | Module refactor + LLM summary layer + nine-page rebuild | ✅ Shipped |
 | Earlier (v0.1–v0.6) | Core layer, semantic lane, pages-verify, etc. | 🔒 Frozen |
 
-`X.Y` gets a new directory; `X.Y.Z` patches in place. The pointer lives in `versions/CURRENT` (currently v1.0).
+`X.Y` gets a new directory; `X.Y.Z` patches in place. The pointer lives in `versions/CURRENT` (currently v1.3).
 
 ## FAQ
 

@@ -83,7 +83,9 @@ export function initScopeState({ memoHome, cwd = process.cwd(), env = process.en
 export function resolveUseTarget({ scope, path: p, resolveScope }) {
   if (scope != null) {
     if (!SCOPE_PATTERN.test(scope)) {
-      const e = new Error(`scope 需形如 repo:名字 / dir:名字（小写字母数字 . _ -，≤64），收到: ${scope}`);
+      const e = new Error(
+        `scope 需形如 repo:名字 / dir:名字 / session:<id>（小写字母数字 . _ -，≤64），收到: ${scope}`,
+      );
       e.code = 'E_INVALID_ARG';
       throw e;
     }
