@@ -217,6 +217,7 @@ class MemoryService {
 ### `src/cli/memo.js`
 ```
 memo write --text "..." [--kind fact] [--subject s] [--predicate p] [--agent dsh]
+  # --scope session:<id> 只写已创建的任务库；未 start 的任务库 → 用法错误（不隐式造库）
 memo search "..." [--limit 10] [--kind fact] [--as-of ISO] [--json]
 memo brief [--lines 80]
 memo get <id>
@@ -234,9 +235,14 @@ memo migrate dsh-memory [--db path]
 stdio JSON-RPC 2.0（**换行分隔**，非 Content-Length 分帧）。
 - `initialize` → `{protocolVersion: <客户端请求值，若不在支持列表则 '2025-06-18'>, capabilities:{tools:{}}, serverInfo:{name:'memo',version:'0.1.0'}, instructions: <见下>}`
 - 通知 `notifications/initialized` 忽略；`ping` 返回 `{}`。
-- `tools/list` → 10 个工具：`memory_write` / `memory_search` / `memory_brief` / `memory_get` / `memory_supersede` / `memory_forget` / `memory_curate` / `memory_stats` / `memory_dedupe_scan` / `memory_scope`（每个带 `inputSchema` JSON Schema，`additionalProperties:false`）。
+- `tools/list` → 17 个工具：
+  - 长期记忆 10 个：`memory_write` / `memory_search` / `memory_brief` / `memory_get` / `memory_supersede` / `memory_forget` / `memory_curate` / `memory_stats` / `memory_dedupe_scan` / `memory_scope`；
+  - 任务库 5 个：`memory_session_start` / `memory_session_checkpoint` / `memory_session_status` / `memory_session_close` / `memory_session_sweep`；
+  - 任务账本 2 个：`memory_session_brief` / `memory_session_segments`。
+  每个工具带 `inputSchema` JSON Schema，`additionalProperties:false`。
+- `memory_write.scope`（v1.3.1）：可选，只接受 `^session:[a-z0-9][a-z0-9._-]{0,63}$`；给了就写到该任务库且不切换当前 scope；任务库不存在 → `E_SESSION_NOT_FOUND`，`repo:`/`dir:` → `E_INVALID_ARGS`（schema fail-closed）。
 - `tools/call` → `{content:[{type:'text',text}], structuredContent?:{...}, isError?:true}`；业务错误用 `isError:true` 而非 JSON-RPC error；未知工具/方法 → JSON-RPC error `-32601`。
-- `instructions` 固定文本：`"memo 是本机跨 agent 记忆。需要历史事实先 memory_search；用户要求记住时用 memory_write；事实变更用 memory_supersede。"`
+- `instructions`：见 `src/mcp/tools.js` 的 `INSTRUCTIONS`，包含长期记忆入口、任务库词表（任务库 = 临时记忆库 = `session:<id>`）、记忆分库与任务看板的边界，以及「start → one-shot write → checkpoint/status/close」默认流程。
 
 ## 4. 质量门禁
 

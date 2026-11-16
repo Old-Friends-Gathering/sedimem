@@ -5,11 +5,17 @@
  * memory_* 工具的纯数据（name/description/inputSchema）与 handler 在此；会话工具在 session-tools.js。
  */
 import { readFileSync } from 'node:fs';
-import { scopeToolHandler, SESSION_TOOL_DEFS } from './session-tools.js';
+import { isSessionScope } from '../session/lifecycle.js';
+import { dropService, getService, scopeToolHandler, SESSION_TOOL_DEFS } from './session-tools.js';
+import { sessionStatus } from '../session/lifecycle.js';
 
 export const MAX_LINE_BYTES = 1024 * 1024; // 单行请求上限 1MB；超过按 Invalid Request 拒绝（见 rl.on('line')）
 export const INSTRUCTIONS =
   'memo 是本机跨 agent 记忆。需要历史事实先 memory_search；用户要求记住时用 memory_write；事实变更用 memory_supersede。' +
+  ' 术语（按用户口语）：任务库 = 临时记忆库 = 任务上下文库 = session:<id>；记忆分库 = repo:<name>/dir:<name>（项目长期事实，不是任务库）；' +
+  '任务看板 = task_board_*（只放执行状态，不放上下文）。用户说“创建任务库/在任务库创建任务”时默认：memory_session_start({title}) 建 session:<id> → ' +
+  'memory_write({kind:"decision"|"gotcha"|"state", scope:"session:<id>"}) 一次性写入（不必切库）→ checkpoint/status/close 带同一 scope（close 自动恢复主库）；需要看板再 task_board_create，卡片只写状态。' +
+  '不要建 repo:/dir: 分库当任务库。' +
   ' scope（记忆分库）按 server 进程启动时的 cwd 解析（向上找 .git → repo:<name>，否则 dir:<name>）；' +
   '如需固定分库请设置环境变量 MEMO_SCOPE（如 MEMO_SCOPE=repo:myrepo）后重启 server，避免不同目录启动导致静默分库。' +
   ' 写入时未显式给 agent/source 则记为 unknown。' +
@@ -24,8 +30,8 @@ export const INSTRUCTIONS =
   '裁决用 memory_curate(action="apply", decisions=[{ids:[pairs[].aId, pairs[].bId], decision:"a_wins|b_wins|merge|keep_both", note}])；' +
   '若走 memory_curate(action="export") 的批次，则改用 {pairIndex, decision, note} 并带 batchId。' +
   '同簇 merge 是**非破坏**的（败者 superseded 且真相层保留），所以宁判勿漏。这是本记忆系统自我迭代的主通道。' +
-  ' 会话临时库（memory_session_*）：开始一段可丢弃的工作前用 memory_session_start 建临时库，三条规则——' +
-  '①临时库只收 state/decision/gotcha（fact 禁止写入：close 时不会被晋升，写了就丢）；' +
+  ' 任务库/会话临时库（memory_session_*）：开始一段任务或可丢弃的工作前用 memory_session_start 建临时库，三条规则——' +
+  '①临时库只收 state/decision/gotcha（写 fact 会被拒，错误码 E_SCRATCH_KIND_FORBIDDEN）；' +
   '②memory_session_close 只把 decision/gotcha 晋升主库，其余记录随库 tombstone，并写交接文档；' +
   '③完全手动：不自动建库、不自动压缩、不自动关闭，checkpoint 由你按需追加。';
 
@@ -82,7 +88,7 @@ function normalizeSource(a) {
 const MEMORY_TOOL_DEFS = [
   {
     name: 'memory_write',
-    description: '写入一条记忆。返回 action（created/noop_duplicate/noop_same_value/supersede/disputed）。',
+    description: '写入一条记忆到当前 scope；也可用 scope:"session:<id>" 一次性写入任务库（不改变当前库）。返回 action（created/noop_duplicate/noop_same_value/supersede/disputed）。',
     inputSchema: {
       type: 'object',
       properties: {
@@ -98,18 +104,42 @@ const MEMORY_TOOL_DEFS = [
         confidence: { type: 'number', minimum: 0, maximum: 1 },
         tags: { type: 'array', items: { type: 'string' } },
         privacy: { type: 'string', enum: ['private', 'shared'] },
+        scope: {
+          type: 'string',
+          pattern: '^session:[a-z0-9][a-z0-9._-]{0,63}$',
+          description: '可选：只接受任务库 session:<id>；传了就写该任务库，不改变当前分库。长期事实仍写当前库。',
+        },
         agent: AGENT_ALIAS_PROPERTY,
         source: SOURCE_PROPERTY,
       },
       required: ['text'],
       additionalProperties: false,
     },
-    handler: (s, a) => {
+    handler: async (s, a, state) => {
       const source = normalizeSource(a);
-      const { agent, source: _s, ...rest } = a;
-      return s
-        .write({ ...rest, source })
-        .then((r) => ({ text: `action=${r.action} id=${r.record.id}${r.supersededId ? ` superseded=${r.supersededId}` : ''}`, structured: r }));
+      const { agent, source: _s, scope, ...rest } = a;
+      let svc = s;
+      if (!scope && state && isSessionScope(state.scope)) {
+        const cur = await getService(state.scope);
+        if (sessionStatus({ service: cur }).status === 'unknown') {
+          dropService(state.scope);
+          const e = new Error(`任务库 ${state.scope} 不存在：先 memory_session_start({ title }) 创建，再写。`);
+          e.code = 'E_SESSION_NOT_FOUND';
+          throw e;
+        }
+      }
+      if (scope) {
+        svc = await getService(scope);
+        const st = sessionStatus({ service: svc });
+        if (st.status === 'unknown') {
+          dropService(scope);
+          const e = new Error(`任务库 ${scope} 不存在：先 memory_session_start({ title }) 创建，再写。`);
+          e.code = 'E_SESSION_NOT_FOUND';
+          throw e;
+        }
+      }
+      const r = await svc.write({ ...rest, source });
+      return { text: `action=${r.action} id=${r.record.id}${r.supersededId ? ` superseded=${r.supersededId}` : ''}`, structured: r };
     },
   },
   {
@@ -303,16 +333,18 @@ const MEMORY_TOOL_DEFS = [
   {
     name: 'memory_scope',
     description:
-      '查看或切换记忆分库（scope）。本机多个客户端（DSH/Codex/Claude）默认按各自进程 cwd 解析分库，' +
+      '查看或切换记忆分库（scope）。分库是长期项目事实（repo:/dir:），不是任务库；任务库是 session:<id>，' +
+      '先用 memory_session_start 创建，再 use({scope:"session:<id>"}) 切过去。' +
+      '本机多个客户端（DSH/Codex/Claude）默认按各自进程 cwd 解析分库，' +
       '常驻进程（如 DSH 的 MCP server）cwd 固定，会导致「同一个项目被记到不同分库」。' +
       '当你要与其它客户端共享同一分库时：先 get 看当前值，再 use({path:"<项目根目录>"}) 对齐（解析规则与 cwd 自动解析完全一致）。' +
-      '选择按客户端持久化到 $MEMO_HOME/.scope.<client>.json，重启后本客户端仍生效；传 scope 可直接指定（形如 repo:名字 / dir:名字）。',
+      '选择按客户端持久化到 $MEMO_HOME/.scope.<client>.json，重启后本客户端仍生效；传 scope 可直接指定（repo:名字 / dir:名字 / session:<id>）。',
     inputSchema: {
       type: 'object',
       properties: {
         action: { type: 'string', enum: ['get', 'use'], description: 'get=查看当前 scope；use=切换' },
         path: { type: 'string', description: 'use 时可选：项目根目录（按与 cwd 相同的规则解析成 repo:/dir:）' },
-        scope: { type: 'string', description: 'use 时可选：显式 scope，形如 repo:my-project / dir:work' },
+        scope: { type: 'string', description: 'use 时可选：显式 scope，形如 repo:my-project / dir:work / session:<id>' },
       },
       required: ['action'],
       additionalProperties: false,

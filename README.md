@@ -120,6 +120,17 @@ memo llm status && memo llm test && memo derive --rebuild
 
 探索性工作先进 `session:*` 临时库（禁写 fact）；close 只把 decision/gotcha 晋升主库（带 `from-session:<id>` 标签），其余随库废弃，并生成六段交接文档 `docs/handoffs/<id>.md`。
 
+**先对齐词**：用户口语里的「任务库」有四个近邻，MCP 侧只认下面这张表；混用会写错库。
+
+| 你说的 | 实际是什么 | 怎么建 / 怎么写 |
+|---|---|---|
+| 任务库 / 临时记忆库 / 任务上下文库 | `session:<id>`，任务级临时记忆，close 晋升 decision/gotcha | `memo session start`；MCP `memory_session_start({title})` |
+| 记忆分库 | `repo:<name>` / `dir:<name>`，项目长期事实 | `MEMO_SCOPE`；MCP `memory_scope({action:"use", path})` |
+| 任务看板 | DSH `task_board_*`，只放执行状态，不放上下文 | `task_board_create` |
+| 任务账本 | 任务库里的 `segments`（会话转录折段） | `memo session capture` |
+
+MCP 的默认动作：用户说「创建任务库 / 在任务库创建任务」时，先 `memory_session_start({title})` 建 `session:<id>`，然后用 `memory_write({kind:"decision"|"gotcha"|"state", scope:"session:<id>"})` 一次性写入（不必切库）；`memory_session_checkpoint/status/close` 也带同一个 `scope`。需要看板再建 `task_board_*` 卡，卡片只写状态。只有连续多次写时才 `memory_scope({action:"use", scope:"session:<id>"})` 切过去；`close` 会自动把当前 scope 恢复到主库。**不要**把任务库建成 `repo:`/`dir:` 记忆分库。
+
 ![任务库：start → checkpoint → close](docs/shots/diagrams/session.png)
 
 ```bash
@@ -264,7 +275,7 @@ claude mcp add --scope user memo -e MEMO_HOME=$HOME/.memo -- \
 
 ![五层门禁：质量 → 安全 → 覆盖率 → docs-drift → pages-verify](docs/shots/diagrams/gates.png)
 
-本地脚本 = CI 脚本：质量 15 项 + 安全 9 项 + 覆盖率（lines ≥ 85 / branches ≥ 70 / functions ≥ 90）+ docs-drift + pages-verify，另含 753 tests 与 eval I1–I56。
+本地脚本 = CI 脚本：质量 15 项 + 安全 9 项 + 覆盖率（lines ≥ 85 / branches ≥ 70 / functions ≥ 90）+ docs-drift + pages-verify，另含 761 tests 与 eval I1–I56。
 
 ```bash
 node tools/quality-check.mjs && node tools/security-check.mjs && node tools/coverage-gate.mjs
@@ -286,8 +297,8 @@ node tools/quality-check.mjs && node tools/security-check.mjs && node tools/cove
 
 | 版本 | 主题 | 状态 |
 |---|---|---|
-| v1.0.2 | 三处真 fix（思考链/重建/懒加载）+ 文档改图为主 | ✅ 已发布 |
-| **v1.3.0** | P0a 地基：CI 跑 CURRENT、覆盖率/Windows 冒烟去硬编码、engines 22.15、文档与门禁对齐 | ✅ 当前 |
+| **v1.3.1** | 任务库术语与入口修复：MCP 统一「任务库=临时记忆库」、`memory_write` 支持 `scope`、`memory_scope` 补 session 示例 | ✅ 当前 |
+| v1.3.0 | P0a 地基：CI 跑 CURRENT、覆盖率/Windows 冒烟去硬编码、engines 22.15、文档与门禁对齐 | ✅ 已发布 |
 | v1.2.2 | 文档同步门禁 Q16 + README/项目站补「任务账本」章节与 CLI 速查 | ✅ 已发布 |
 | v1.2.1 | 任务账本补丁：简报可读性与预算、决策抽取精度、默认走 LLM | ✅ 已发布 |
 | v1.2.0 | 任务账本：会话转录折成可还原的段、简报、隔离与归档（`memo session capture/brief/expand`） | ✅ 已发布 |
@@ -295,11 +306,12 @@ node tools/quality-check.mjs && node tools/security-check.mjs && node tools/cove
 | v1.0.5 | 任务页/交接页可用性：两栏布局、checkpoint 八段、重复渲染与浅色主题修复 | 已发布 |
 | v1.0.4 | 任务库（`session:*`）在观测台可浏览：`SCOPE_PATTERN` 补上 `session` 前缀 | 已发布 |
 | v1.0.3 | 分库归属硬门（跨库写入 fail-loud）+ CI 门禁不再被 tee 吞 | 已发布 |
+| v1.0.2 | 三处真 fix（思考链/重建/懒加载）+ 文档改图为主 | ✅ 已发布 |
 | v1.0.1 | 图谱可用性 + 配色对齐 DSH | ✅ 已交付 |
 | v1.0.0 | 14 模块重构 + LLM 总结层 + 九页重做 | ✅ 已交付 |
 | 更早（v0.1–v0.6） | 核心层、语义道、pages-verify 等 | 🔒 冻结 |
 
-`X.Y` 换目录、`X.Y.Z` 同目录补丁；指针在 `versions/CURRENT`（当前 v1.0）。
+`X.Y` 换目录、`X.Y.Z` 同目录补丁；指针在 `versions/CURRENT`（当前 v1.3）。
 
 ## FAQ
 

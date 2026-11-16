@@ -2,8 +2,8 @@
 
 > doc-kind: contract
 > doc-version: 1.3
-> verified-at: 2026-11-14
-> verified-against: versions/CURRENT（v1.3 / 1.3.0）
+> verified-at: 2026-11-16
+> verified-against: versions/CURRENT（v1.3 / 1.3.1）
 
 本文件是**门禁的权威说明**：每一项指标怎么算、阈值多少、失败时怎么处理、谁能改阈值。
 脚本是实现，本文件是契约——两者不一致时以本文件为准，并提 issue 修脚本。
@@ -23,7 +23,7 @@ cd "$(cat versions/CURRENT)" && node eval/run.js   # 行为（I1–I56）
 
 | 项 | 指标 | 阈值 | 失败含义 |
 |---|---|---|---|
-| `test (22)` / `test (24)` | `node --test 'tests/**/*.test.js'` | **0 失败**（2026-11-14 实测 753 用例） | 行为回归，或测试自身有竞态（历史上 I8 就因此偶发红，已修根因） |
+| `test (22)` / `test (24)` | `node --test 'tests/**/*.test.js'` | **0 失败**（2026-11-16 实测 761 用例） | 行为回归，或测试自身有竞态（历史上 I8 就因此偶发红，已修根因） |
 | `eval (I1–I56)` | `eval/run.js` 退出码 | **全 PASS**（最近一次见 `eval/results/LATEST.json`） | 注入式行为契约破了：重复/冲突/过时/删除/投毒/配额/改写/并发/时区/遮蔽/裁决回路/中文改写等 56 条 |
 | `windows-smoke` | `node tools/windows-smoke.mjs`（`windows-latest`） | **全部 PASS** | Windows 真相层文件名 / 分库枚举 / `compact` / `nightly` 之一回归（见 §一.1） |
 | 关键指标 | `dupRatio` / `conflictRate` | `dupRatio = 0`；`conflictRate` 只允许由**真冲突用例**产生 | 冗余或冲突治理失效 |
@@ -53,9 +53,9 @@ cd "$(cat versions/CURRENT)" && node eval/run.js   # 行为（I1–I56）
 
 | 指标 | 当前基线 | 阈值 | 备注 |
 |---|---|---|---|
-| lines | 93.09% | **≥ 85%** | 未覆盖的主要是 MCP 协议边界与交互式分支 |
-| branches | 82.64% | **≥ 70%** | |
-| functions | 93.16% | **≥ 90%** | |
+| lines | 90.15% | **≥ 85%** | 未覆盖的主要是 MCP 协议边界与交互式分支 |
+| branches | 82.97% | **≥ 70%** | |
+| functions | 91.64% | **≥ 90%** | |
 
 统计方式：`npm run test:coverage`（排除 `src/cli/memo.js` 进程外壳，理由见 §七）。
 
@@ -153,12 +153,12 @@ Pages 构建是异步的（实测 2–5 分钟），脚本默认重试 20×15s�
   指标发生漂移就更新本文件（指标漂移本身就是信号，不要静默改阈值让数字好看）。
 - **禁止**：删除检查项、加 `// q-check-ignore` 式逃逸、把失败改成 warning 了事。
 
-## 七、当前基线（2026-11-15 实测，v1.3.0）
+## 七、当前基线（2026-11-16 实测，v1.3.1）
 
 | 门禁 | 结果 |
 |---|---|
-| 单元 + 注入式 | **753 tests pass**（`node --test 'tests/**/*.test.js'`） |
-| 评测 | **eval I1–I56 全 PASS**（`node eval/run.js`；最近一次结果归档于 `eval/results/LATEST.json`，2026-11-15T15:46Z，56/56 通过） |
+| 单元 + 注入式 | **761 tests pass**（`node --test 'tests/**/*.test.js'`） |
+| 评测 | **eval I1–I56 全 PASS**（`node eval/run.js`；最近一次结果归档于 `eval/results/LATEST.json`，2026-11-16T12:48Z，56/56 通过） |
 | 质量 | **15/15**（Q1–Q11 + Q13–Q16） |
 | 安全 | 9/9（含 S9：src/web 无写接口、只绑回环） |
 | 覆盖率 | 数值不落盘，跑 `node tools/coverage-gate.mjs` 实时采集（阈值 lines ≥ 85% / branches ≥ 70% / functions ≥ 90%）；eval 基线见 `eval/results/LATEST.json` |

@@ -1,5 +1,20 @@
 # CHANGELOG · v1.3
 
+## [1.3.1] — 2026-11-16
+
+### Fixed
+- **任务库术语与入口**：MCP INSTRUCTIONS 明确「任务库 = 临时记忆库 = `session:<id>`」，与记忆分库（`repo:` / `dir:`）、任务看板（`task_board_*`）区分；`memory_session_start` 描述改为「创建任务库」，并写明参数名是 `title`（不是 id/name/sessionId）；返回文案改为「任务库已创建」。
+- `memory_write` 支持 `scope:"session:<id>"` 一次性写入任务库，且不改变当前分库；任务库不存在时抛 `E_SESSION_NOT_FOUND` 并提示先 `memory_session_start`。
+- `memory_scope` 描述与错误文案补 `session:<id>`；`use` 到不存在/已关闭的任务库现在 fail-loud（不再隐式造库）；MCP 参数校验错误现在列出可用参数。
+- `memory_session_checkpoint/status/close/sweep` 描述统一称「任务库（临时记忆库）」；close 后若当前 scope 停在该任务库，自动恢复到 start 时的主库，长驻连接可以继续建下一个任务库。
+- `docs/02` MCP 契约补 17 个工具清单与 `memory_write.scope` 的 pattern/错误码；`docs/06` 增术语表与五步默认流程。
+
+### Added
+- `tests/unit/mcp-task-library.test.js`（7 例）+ `tests/unit/cli-scope.test.js`（1 例）：任务库术语在 INSTRUCTIONS/描述中；一次性 scope 写入且不切库；缺失任务库 fail-loud；参数错误提示可用参数；close 恢复主库后可继续建库。
+
+### Changed
+- tests 753 → 761；README 与项目站同步（时间线补 1.2.1/1.2.2/1.3.0/1.3.1）。
+
 ## [1.3.0] — 2026-11-15
 
 ### Added

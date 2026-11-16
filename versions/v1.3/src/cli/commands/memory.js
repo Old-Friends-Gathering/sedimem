@@ -8,10 +8,20 @@ import os from 'node:os';
 import {
   UsageError, requireOpt, serviceOpts, loadService, printJson, printRecord, parseAgent, parseNumber,
 } from './shared.js';
+import { isSessionScope, sessionStatus } from '../../session/lifecycle.js';
 
 export async function cmdWrite(opts, asJson) {
   const service = await loadService(serviceOpts());
   try {
+    const scope = serviceOpts().scope;
+    if (scope && isSessionScope(scope)) {
+      const st = sessionStatus({ service });
+      if (st.status !== 'open') {
+        throw new UsageError(
+          `任务库 ${scope} ${st.status === 'closed' ? '已关闭' : '不存在'}：先 memo session start --title "..." 创建，再写。`,
+        );
+      }
+    }
     const text = requireOpt(opts, 'text', 'memo write --text "..."');
     const result = await service.write({
       text,

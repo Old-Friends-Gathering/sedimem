@@ -2,10 +2,10 @@
 
 > doc-kind: manual
 > doc-version: 1.3
-> verified-at: 2026-11-14
-> verified-against: versions/CURRENT（v1.3 / 1.3.0）
+> verified-at: 2026-11-16
+> verified-against: versions/CURRENT（v1.3 / 1.3.1）
 
-> 当前版本 = **v0.6**（由仓库根的 `versions/CURRENT` 指向）。下文所有命令都从仓库根
+> 当前版本 = **v1.3.1**（由仓库根的 `versions/CURRENT` 指向 `v1.3`）。下文所有命令都从仓库根
 > 用 `cd versions/$(cat versions/CURRENT)` 进入当前版本目录后执行，**不写死任何 v0.x 路径**。
 > 安装位置与本次落地的真实路径见 §1；日常用法见 §2；每天/每周做什么见 §3；换机器怎么装见 §4；出问题查 §5。
 
@@ -506,6 +506,26 @@ node eval/bench-scale.mjs --n 100000 --backend sqlite
 
 > 为什么按「任务」而不是「会话」：多 agent 联合开发时，同一个任务会由多个 agent、多个会话接力完成，
 > 会话边界会切碎上下文；任务边界才是该交接、该晋升的单位。技术标识仍是 `session:`（兼容既有分库）。
+
+#### 17.1.1 术语与 MCP 默认动作（v1.3.1）
+
+| 用户口语 | 实际对象 | 边界 | MCP 入口 |
+|---|---|---|---|
+| 任务库 / 临时记忆库 / 任务上下文库 / 会话临时库 | `session:<id>` | 任务级；close 只晋升 decision/gotcha | `memory_session_start({title})` |
+| 记忆分库 | `repo:<name>` / `dir:<name>` | 项目长期事实 | `memory_scope({action:"use", path})` |
+| 任务看板 | DSH `task_board_*` | 只放执行状态，不放上下文 | `task_board_create` |
+| 任务账本 | 任务库的 `segments` | 过程，不晋升 | `memo session capture` |
+| 任务库生命周期 | checkpoint / status / close | 必须带 `scope:"session:<id>"`；close 晋升并恢复主库 | `memory_session_checkpoint/status/close` |
+
+用户说「创建任务库 / 在任务库创建任务」时，MCP 默认五步：
+
+1. `memory_session_start({ title: "任务名" })` 建 `session:<id>`；
+2. `memory_write({ kind: "decision" | "gotcha" | "state", text: "...", scope: "session:<id>" })` 一次性写入，**不必切库**；
+3. `memory_session_checkpoint / status / close` 也带同一个 `scope`；
+4. 需要看板时再 `task_board_create`，卡片只写状态；
+5. `memory_session_close({ scope })` 晋升 decision/gotcha 并生成交接文档；若之前切过库，close 会自动恢复到主库。
+
+`memory_write` 的 `scope` 只接受 `session:<id>`；传 `repo:`/`dir:` 会被拒，长期事实请走主库。
 
 ### 17.2 四个命令的真实输出
 

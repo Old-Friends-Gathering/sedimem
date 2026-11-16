@@ -51,16 +51,17 @@ function validateObject(path, schema, obj, errors) {
   // 这里仍保证「它确实是个对象」（validateValue 的 type 检查已先行）。
   if (!schema.properties && !schema.required) return;
   const props = schema.properties || {};
+  const names = Object.keys(props).join(', ') || '(无)';
   for (const key of Object.keys(obj)) {
     if (!(key in props)) {
-      errors.push(`未知参数: ${key}` + (path ? ` (在 ${path} 内)` : ''));
+      errors.push(`未知参数: ${key}（可用参数: ${names}）` + (path ? ` (在 ${path} 内)` : ''));
       continue;
     }
     validateValue(path ? `${path}.${key}` : key, props[key], obj[key], errors);
   }
   for (const req of schema.required || []) {
     if (!(req in obj)) {
-      errors.push(`缺少必填参数: ${req}` + (path ? ` (在 ${path} 内)` : ''));
+      errors.push(`缺少必填参数: ${req}（可用参数: ${names}）` + (path ? ` (在 ${path} 内)` : ''));
     }
   }
 }

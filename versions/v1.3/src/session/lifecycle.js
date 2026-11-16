@@ -140,8 +140,8 @@ export function assertSessionOpen(memoHome, scope) {
   const reg = readSessionRegistry(memoHome, scope);
   if (reg && reg.status === 'closed') {
     throw err('E_SESSION_CLOSED',
-      `session ${scope} 已关闭，不再接受写入；被 close 后写入的记录既不会晋升也不会被清理。` +
-      `请重新 session start 开新会话临时库。`);
+      `任务库 ${scope} 已关闭，不再接受写入；被 close 后写入的记录既不会晋升也不会被清理。` +
+      `请用 memory_session_start 新建任务库，或把当前 scope 切回主库。`);
   }
 }
 
