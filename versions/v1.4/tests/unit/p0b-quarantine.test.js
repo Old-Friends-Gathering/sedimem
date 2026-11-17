@@ -108,6 +108,8 @@ test('B5.3 过期引用不能被提升；reject 不落真相层', async () => {
   const svc = await createMemoryService({ memoHome, scope: SCOPE });
   try {
     const [row] = q.add({ uri: 'https://example.com/b', hash: 'h-b', quote: '过期引用', addedBy: 'alice' });
+    // ttl=0 时 `now - at > 0` 只有在下一毫秒才成立；CI 可能在同一毫秒内完成 add/accept。
+    await new Promise((r) => setTimeout(r, 5));
     const out = await q.accept([row.id], { service: svc, by: 'alice' });
     assert.deepEqual(out.accepted, []);
     assert.equal(out.skipped[0].reason, 'expired');
