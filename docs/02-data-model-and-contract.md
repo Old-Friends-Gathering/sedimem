@@ -432,7 +432,7 @@ await svc.exportRecords({ since, until, status = 'active', kind, limit = 2000 })
 
 - `src/web/*` 只允许 `import` `src/api/service.js`、`src/core/*`、`src/config/*`；**禁止** import `src/hygiene/*`、`src/storage/*`、`src/index/*`（关系与判定都在 service 内完成，Web 只做投影）。
 - 静态资源只从 `ui/` 读取；路径穿越（`..`、绝对路径、软链接）一律 404。
-- 服务只绑 `127.0.0.1`；无鉴权（用户决策 D1），因此**不得**提供任何写操作端点。
+- 服务只绑 `127.0.0.1`；无鉴权（用户决策 D1），因此**不得**提供任何写操作端点（v1.4 B4 起由 §3.24 取代：会话 token + Host/Origin 校验；写端点仍需 `--write`）。
 
 ## 3.10 第八轮裁决（2026-11-02，Web 只读层实现期冻结；原记作 v0.1.3，0.2.0 起归入 v0.2 线）
 
@@ -1109,7 +1109,7 @@ Q5 契约覆盖按「导出名必须出现在 docs/」判定，这里逐模块�
 **裁决 123（可还原 + 可归档）**：段必须带 `anchor{path,fromSeq,toSeq}`，`expand` 据此重读转录还原原文；
 `archive` 把整个 `sessions/<taskId>/` 移入 `archive/<taskId>-<ts>/` 并写事件，不做物理删除。
 
-## §3.24 v1.4 P0b：trust / taint、按来源删除与 profile 收敛（B2/B3）
+## §3.24 v1.4 P0b：trust / taint、按来源删除、profile 与 Web 鉴权（B2/B3/B4）
 
 本节是 v1.4 P0b 的编码契约；字段是**可选**的：旧记录没有 `trust`/`taint` 仍必须可读。
 
@@ -1194,3 +1194,64 @@ ADR 说明快照、幂等键与回滚方式。trust 的 pack 验收依赖 P1 的
   **绝不**静默回落到默认库——数据串库比启动失败更糟。
 - 不做物理迁移：已有 `~/.memo` 数据原地不动；`MEMO_PROFILE` 只影响解析结果。CLI 的
   `memo scope` 与所有 `loadService` 都复用该入口，`memoBaseHome`/`resolveMemoHome` 是唯一实现。
+### §3.24.6 Web 会话鉴权与文件权限（B4，裁决 124–129）
+
+P0b 计划见 [`plans/v1.4-p0b.md`](plans/v1.4-p0b.md) 的 B4 节；本节冻结实现层语义。
+取舍总纲：**浏览器面默认安全**（token + Host/Origin 强校验），**MCP stdio 默认维持可用**（opt-in 强制）。
+
+**裁决 124（会话 token 是运行时状态，不是代码常量）**
+
+- `memo serve` 每次启动生成 32 字节随机 token（`crypto.randomBytes(32).toString('base64url')`，43 字符），
+  写入 `$MEMO_HOME/web-token`（0600），覆盖上一次的值；不进 git、不写日志、不出现在页面 JS。
+- `createWebServer({ token })` 允许注入（测试/嵌入用），缺省走 `issueWebToken(memoHome)`；返回值带 `token`。
+- 缺失文件：`readWebToken` 返回 `null`；内容不匹配 `^[A-Za-z0-9_-]{16,128}$`：抛 `E_CORRUPT_TOKEN`。
+
+**裁决 125（浏览器面：cookie 是主要载体，Bearer 是脚本载体）**
+
+- `GET /`（以及任何 200 的 HTML 静态资源）响应
+  `Set-Cookie: memo_session=<token>; HttpOnly; SameSite=Strict; Path=/`，并带 `Cache-Control: no-store`。
+- **不设 `Secure`**：服务只跑 `http://127.0.0.1`，加 `Secure` 浏览器会直接丢弃 cookie（取舍，不是遗漏）。
+- 页面 JS 不读 token（`HttpOnly` 本就不可读）；页面内 `/api/*` 请求由浏览器自动带 cookie。
+- `/api/*` 同时接受 `Authorization: Bearer <token>`；两者都给时以 Bearer 为准。
+
+**裁决 126（Host / Origin 强校验）**
+
+- 每个请求先校验 Host：可解析、hostname 属于回环（`localhost` / `::1` / `[::1]` / `127.0.0.0/8`）、
+  且端口等于**实际监听端口**（`server.address().port`）；否则 403 `E_BAD_HOST`（DNS rebinding 防线）。
+- 写请求必须带 Origin，且与 Host 同源（scheme 固定为 http 回环）；**缺失 Origin 一律 403 `E_BAD_ORIGIN`**。
+  旧行为「没有 Origin 就放行」废止。
+- `/api/*` 鉴权在方法白名单**之前**：无 token 的 POST 得到 401 而不是 405，避免用状态码探测路由是否存在。
+- 非回环 `createWebServer({host})` 仍在构造期 `E_INVALID_ARG`（裁决 41 不变）。
+
+**裁决 127（MCP 默认信任本机 stdio；强制 token 是 opt-in）**
+
+- 背景：DSH / Codex / Claude 三端都直接 spawn `memo-mcp`，配置里没有 token；默认强制会让三端全挂。
+- 因此默认放行——stdio 的信任边界是「能写这个子进程 stdin 的同用户进程」；只有
+  `MEMO_MCP_TOKEN`（显式给值）或 `MEMO_MCP_REQUIRE_TOKEN=1` 才强制校验，token 取自环境变量或
+  `$MEMO_HOME/web-token`（与 Web 同一把）。
+- 强制模式下首帧 `initialize` 的 `params._meta` 可携带：`token`、
+  `headers.authorization: "Bearer <token>"`、或 `headers["x-memo-token"]`；
+  缺失/不匹配返回 JSON-RPC `-32001` + `E_MCP_UNAUTHORIZED: …`，且**在任何存储访问之前**拒绝。
+- 代价明说：默认不设防＝同用户任意进程都能连 MCP 读写记忆；要更严就设上面两个环境变量，
+  并同步改三端配置（文档不假装默认已经防住）。
+
+**裁决 128（文件权限：写时收窄，读时只告警）**
+
+- 新建 `$MEMO_HOME`、`items/`、锁目录一律 0700；`items/*.jsonl`、`events.jsonl`、`web-token`、
+  锁的 `owner.json`、分库覆盖文件 `.scope.<client>.json` 一律 0600（`open(..., 'w', 0o600)`，
+  不受 umask 影响）。
+- 启动自查 `inspectMemoPerms`：目录/文件 group/other 位非 0 → stderr 告警（`describePermIssues`），
+  **只告警不阻断**。理由：存量用户 `~/.memo` 普遍是 0755/0644，阻断等于升级后无法启动；
+  权限可自查可修，不值得用「拒绝启动」换安全。
+- Windows 不承诺 POSIX mode（`skipped: true`，不误报）；Time Machine / 云盘同步会把 0600 文件照样复制出去，
+  权限位只挡本机其它用户。不希望记忆进备份/云端的用户，应在 Time Machine 偏好或同步盘里**排除
+  `~/.memo`**（这是用户侧的排除动作，代码不做）。
+
+**裁决 129（v1.4 B4 导出登记）**
+
+| 模块 | 导出 | 职责 |
+|---|---|---|
+| `src/config/perms.js` | `MEMO_DIR_MODE` `MEMO_FILE_MODE` `isModePrivate` `ensureMemoDir` `inspectMemoPerms` `describePermIssues` | 0700/0600 常量、权限自查与告警文案 |
+| `src/config/web-token.js` | `WEB_TOKEN_FILE` `webTokenPath` `generateWebToken` `tokensEqual` `readWebToken` `issueWebToken` | 会话 token 的生成、落盘（0600）、读取与恒时比较 |
+| `src/web/auth.js` | `AUTH_COOKIE` `isLoopbackHost` `bearerTokenOf` `cookieTokenOf` `presentedToken` `sessionCookie` `assertHostAllowed` `assertSameOriginStrict` | Host/Origin 校验、cookie 下发、token 提取 |
+| `src/mcp/token-gate.js` | `MCP_TOKEN_ENV` `MCP_REQUIRE_ENV` `mcpPresentedToken` `createMcpTokenGate` `checkMcpToken` | MCP opt-in token 门禁（默认信任本机 stdio） |

@@ -3,6 +3,7 @@
  * serve / migrate / conflicts / backfill-vectors
  */
 import process from 'node:process';
+import path from 'node:path';
 import { UsageError, resolveMemoHome, serviceOpts, loadService, printJson, parseNumber } from './shared.js';
 
 /** memo serve：只读 Web 服务（W3）。SIGINT/SIGTERM 优雅关闭 exit 0；EADDRINUSE 清晰报错 exit 1。 */
@@ -27,8 +28,12 @@ export async function cmdServe(opts) {
     throw err;
   }
   process.stdout.write(`memo serve 已启动: ${web.url}\n`);
+  // B4：浏览器首次 GET / 会拿到 HttpOnly cookie；脚本要直连 API 时用这里的 token（不打印值，只打印位置）
+  process.stdout.write(`会话 token 文件: ${path.join(resolveMemoHome(), 'web-token')}（0600；API 用 Authorization: Bearer <token>）\n`);
   try {
-    const res = await fetch(new URL('api/summary', web.url));
+    const res = await fetch(new URL('api/summary', web.url), {
+      headers: { authorization: `Bearer ${web.token}` },
+    });
     const j = await res.json();
     process.stdout.write(`scope: ${j.scope}\nmemoHome: ${j.memoHome}\n`);
   } catch {

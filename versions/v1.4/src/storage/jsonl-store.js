@@ -4,6 +4,7 @@
 import path from 'node:path';
 import fsp from 'node:fs/promises';
 import { withLock } from './lock.js';
+import { MEMO_DIR_MODE, MEMO_FILE_MODE } from '../config/perms.js';
 import { itemsFileName, scopeFromItemsFileName } from '../config/paths.js';
 
 /**
@@ -64,8 +65,9 @@ export class JsonlStore {
    */
   async appendImmediate(record) {
     const line = JSON.stringify(record) + '\n';
-    await fsp.mkdir(this.itemsDir, { recursive: true });
-    await fsp.appendFile(this._scopePath(record.scope), line, 'utf8');
+    // B4：真相层文件一律 0600、目录 0700（新建时生效；已有文件的宽权限由启动自查告警）
+    await fsp.mkdir(this.itemsDir, { recursive: true, mode: MEMO_DIR_MODE });
+    await fsp.appendFile(this._scopePath(record.scope), line, { encoding: 'utf8', mode: MEMO_FILE_MODE });
   }
 
   /** items/<scope>.jsonl 当前字节大小（文件不存在 → 0）。 */
@@ -215,12 +217,13 @@ export class JsonlStore {
       const stamp = new Date().toISOString().replace(/[:.]/g, '-');
       const backupPath = `${file}.bak.${stamp}`;
       await fsp.copyFile(file, backupPath);
+      await fsp.chmod(backupPath, MEMO_FILE_MODE).catch(() => { /* Windows：chmod 不表达 ACL */ });
 
       // 原子替换：tmp → fsync → rename；任何异常都清掉 tmp 再抛原错
       const tmp = `${file}.tmp`;
       let fh;
       try {
-        fh = await fsp.open(tmp, 'w');
+        fh = await fsp.open(tmp, 'w', MEMO_FILE_MODE);
         for (const r of records2) {
           await fh.write(JSON.stringify(r) + '\n', 'utf8');
         }
@@ -251,8 +254,8 @@ export class JsonlStore {
   /** 追加事件，**不取锁**（调用方必须已持有 memoHome 的 scope 锁；裁决 13）。 */
   async appendEventImmediate(event) {
     const line = JSON.stringify({ ...event }) + '\n';
-    await fsp.mkdir(this.memoHome, { recursive: true });
-    await fsp.appendFile(this.eventsPath, line, 'utf8');
+    await fsp.mkdir(this.memoHome, { recursive: true, mode: MEMO_DIR_MODE });
+    await fsp.appendFile(this.eventsPath, line, { encoding: 'utf8', mode: MEMO_FILE_MODE });
   }
 
   /**

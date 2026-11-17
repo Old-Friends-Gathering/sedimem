@@ -11,6 +11,7 @@
 import path from 'node:path';
 import fsp from 'node:fs/promises';
 import { randomUUID } from 'node:crypto';
+import { MEMO_DIR_MODE, MEMO_FILE_MODE } from '../config/perms.js';
 
 const POLL_MS = 25;
 const HEARTBEAT_MS = 5000;
@@ -44,15 +45,15 @@ export async function withLock(memoHome, fn, { staleMs = 30000, timeoutMs = 1500
     err.code = 'E_INVALID_RECORD';
     throw err;
   }
-  await fsp.mkdir(memoHome, { recursive: true });
+  await fsp.mkdir(memoHome, { recursive: true, mode: MEMO_DIR_MODE });
   const lockPath = path.join(memoHome, '.lock');
   const start = Date.now();
   const nonce = randomUUID();
 
   for (;;) {
     try {
-      await fsp.mkdir(lockPath); // 原子排他：已存在则 EEXIST
-      await fsp.writeFile(path.join(lockPath, 'owner.json'), JSON.stringify({ pid: process.pid, nonce, at: Date.now() }));
+      await fsp.mkdir(lockPath, { mode: MEMO_DIR_MODE }); // 原子排他：已存在则 EEXIST
+      await fsp.writeFile(path.join(lockPath, 'owner.json'), JSON.stringify({ pid: process.pid, nonce, at: Date.now() }), { mode: MEMO_FILE_MODE });
       break; // 拿到锁
     } catch (e) {
       if (e.code !== 'EEXIST') throw e;

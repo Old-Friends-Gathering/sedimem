@@ -5,10 +5,11 @@
 //   POST /api/forget    {id, mode:"tombstone"|"purge", reason}
 // 安全纪律：
 //   1. 默认只读：未显式开启写模式 → 403 E_READONLY
-//   2. 防 CSRF：Origin/Referer 存在且 host 非 loopback 或端口与本服务不同 → 403 E_BAD_ORIGIN
+//   2. 防 CSRF（B4 收紧）：写请求必须带 Origin，且与 Host 同源；缺失/跨源 → 403 E_BAD_ORIGIN
 //   3. 请求体 ≤ 64KB（E_PAYLOAD_TOO_LARGE）；非法 JSON → 400 E_INVALID_JSON
 //   4. 编辑审计：每次成功写入追加一条 op=ui_edit 事件（绝不原地改真相层：编辑走 supersede）
 import { invalid, invalidArg, notFound } from '../../core/errors.js';
+import { assertSameOriginStrict } from '../auth.js';
 import { captureTask } from '../../session/capture.js';
 import { archiveTask } from '../../session/ledger.js';
 import { isSessionScope, listSessions, renameSession, removeSession } from '../../session/lifecycle.js';
@@ -26,37 +27,18 @@ function coded(code, message) {
   return err;
 }
 
-/** 回环地址判定（与 server.js 同规则：127.0.0.0/8、::1、localhost） */
-function isLoopbackHost(host) {
-  const h = String(host ?? '').trim().toLowerCase();
-  if (h === 'localhost') return true;
-  if (h === '::1' || h === '[::1]') return true;
-  const m = /^127\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/.exec(h);
-  return Boolean(m) && m.slice(1).every((n) => Number(n) <= 255);
-}
-
 /**
- * 防 CSRF：Origin / Referer 存在时，其 host 必须是 loopback 且端口与本服务一致。
- * 不带 Origin/Referer 的调用（curl / CLI / 同源测试 fetch）放行。
+ * 防 CSRF：**写请求必须带 Origin 且与 Host 同源**（B4 收紧，docs/02 §3.24）。
+ *
+ * 与旧实现的差别：旧版「没有 Origin/Referer 就放行」，而 curl/CLI 和 CSRF 页面都能做到
+ * 「不带 Origin」，等于没防护。现在缺 Origin 一律 403；命令行写库应直接用 `memo` CLI 或
+ * 带 Bearer + Origin 的脚本。
+ * 具体比较逻辑在 src/web/auth.js（Host 校验也复用同一份），这里只保留对外契约名。
  * @param {http.IncomingMessage} req
  * @param {number} serverPort 本服务实际监听端口
  */
 export function assertSameOrigin(req, serverPort) {
-  const raw = req.headers.origin ?? req.headers.referer;
-  if (!raw) return;
-  let parsed;
-  try {
-    parsed = new URL(String(raw));
-  } catch {
-    throw coded('E_BAD_ORIGIN', `Origin/Referer 无法解析: ${String(raw).slice(0, 100)}`);
-  }
-  if (!isLoopbackHost(parsed.hostname)) {
-    throw coded('E_BAD_ORIGIN', `非回环来源拒绝写操作: ${parsed.hostname}`);
-  }
-  const port = parsed.port === '' ? (parsed.protocol === 'https:' ? 443 : 80) : Number(parsed.port);
-  if (Number(serverPort) > 0 && port !== Number(serverPort)) {
-    throw coded('E_BAD_ORIGIN', `来源端口 ${port} 与本服务端口 ${serverPort} 不一致，拒绝写操作`);
-  }
+  return assertSameOriginStrict(req, serverPort);
 }
 
 /**
