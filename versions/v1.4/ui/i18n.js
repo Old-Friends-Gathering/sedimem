@@ -148,7 +148,8 @@ const PATTERNS = [
   [/^(\d{4}-\d{2}-\d{2}) 的变化$/, (m) => `Changes · ${m[1]}`],
   [/^(\d+) 段$/, (m) => `${m[1]} segments`],
   [/^簇 #(\d+) · (\d+) 条$/, (m) => `Cluster #${m[1]} · ${m[2]} records`],
-  [/^任务库 \((\d+)\)$/, (m) => `Task stores (${m[1]})`],
+  [/^任务库[（(](\d+)[）)]$/, (m) => `Task stores (${m[1]})`],
+  [/^· (\d+) 条记录 · (.+)$/, (m) => `· ${m[1]} records · ${m[2]}`],
   [/^(\d+) 条记录$/, (m) => `${m[1]} records`],
   [/^任务 (.+)$/, (m) => `Task ${m[1]}`],
   [/^上次写入是 (.+)（(\d+) 天前）。$/, (m) => `Last write was ${m[1]} (${m[2]} days ago).`],
@@ -177,11 +178,7 @@ export function tr(text, lang) {
     const m = key.match(re);
     if (m) return text.replace(key, fn(m));
   }
-  // 列表行把「N 条记录」「任务库（N）」嵌在一条文本里，做两个窄替换；只认这两种 UI 措辞。
-  let out = text;
-  if (out.includes('任务库')) out = out.replace(/任务库（(\d+)）/g, 'Task stores ($1)');
-  if (out.includes('条记录')) out = out.replace(/(\d+) 条记录/g, '$1 records');
-  return out;
+  return text;
 }
 
 function walk(node, lang, seen) {
