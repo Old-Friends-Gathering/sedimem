@@ -277,6 +277,10 @@ Tool surface: 10 `memory_*` + 5 `memory_session_*`, identical across all three c
 | `memo session expand --scope session:<id> --segment <segId> [--to-file]` | 按锚点还原原文（仅本地） |
 | `memo session archive --scope session:<id> [--yes]` | 归档整个任务目录 → archive/ |
 | `memo migrate dsh-memory [--db path]` | — |
+| `memo mcp [--surface core|all] [--session-tools]` | MCP server: default all (17 tools); `--surface core` keeps search/write/brief (3) |
+| `memo inject [--max-chars N] [--allow-untrusted] [--no-audit] [--json]` | Build one injection and audit it as `kind:"inject"` (T2 body withheld by default) |
+| `memo audit verify|anchor [--git] [--json]` | Verify the events.jsonl hash chain / write a local anchor (not tamper-proof vs same UID; no push) |
+| `memo quarantine list|accept|reject [--ids a,b] [--by who] [--json]` | Quarantine stores references only; accept is human-only |
 | `memo serve [--port N] [--no-ui]` | 只读 Web UI/API（默认 127.0.0.1:7788；--no-ui 只提供 API） |
 
 </details>

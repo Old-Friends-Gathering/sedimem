@@ -4,6 +4,7 @@
 import path from 'node:path';
 import fsp from 'node:fs/promises';
 import { withLock } from './lock.js';
+import { readAuditHead, withAuditFields, verifyEventChain } from './audit.js';
 import { itemsFileName, scopeFromItemsFileName } from '../config/paths.js';
 
 /**
@@ -243,16 +244,26 @@ export class JsonlStore {
     });
   }
 
-  /** 审计事件：{ts, op, scope, id, detail} → events.jsonl */
+  /**
+   * 审计事件追加（B5）：`{ts, op, scope, id, detail}` → events.jsonl，
+   * 并补上 kind/seq/prevHash/hash 形成本地可校验的链（docs/02 §3.24）。
+   */
   async appendEvent(event) {
     await withLock(this.memoHome, () => this.appendEventImmediate(event));
   }
 
   /** 追加事件，**不取锁**（调用方必须已持有 memoHome 的 scope 锁；裁决 13）。 */
   async appendEventImmediate(event) {
-    const line = JSON.stringify({ ...event }) + '\n';
     await fsp.mkdir(this.memoHome, { recursive: true });
+    const prev = await readAuditHead(this.eventsPath);
+    const line = JSON.stringify(withAuditFields(event, prev)) + '\n';
     await fsp.appendFile(this.eventsPath, line, 'utf8');
+  }
+
+  /** 读全部事件并按链校验（B5；不写盘）。 */
+  async verifyAudit() {
+    const events = await this.readEvents();
+    return verifyEventChain(events);
   }
 
   /**

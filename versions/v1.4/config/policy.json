@@ -58,7 +58,10 @@
       "model": "",
       "timeoutMs": 3000,
       "dim": 0
-    }
+    },
+    "snippetChars": 200,
+    "sessionMaxItems": 200,
+    "sessionMaxBytes": 204800
   },
   "curate": {
     "batchLimit": 20,
@@ -114,7 +117,9 @@
     "maxItems": 50,
     "maxLineChars": 400,
     "inboxDir": "inbox",
-    "maxQueueBytes": 4194304
+    "maxQueueBytes": 4194304,
+    "quarantineTtlMs": 7776000000,
+    "quarantineMaxQuoteChars": 200
   },
   "write": {
     "titleRequiredKinds": [

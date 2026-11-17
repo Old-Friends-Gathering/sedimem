@@ -158,10 +158,18 @@ const MEMORY_TOOL_DEFS = [
       additionalProperties: false,
     },
     handler: (s, a) =>
-      s.search(a.query, { limit: a.limit, kind: a.kind, asOf: a.asOf, includeDisputed: a.includeDisputed }).then((r) => ({
-        text: r.items.map((i) => `[${i.record.kind}] ${i.record.text} (id=${i.record.id}, score=${i.score.toFixed(3)})`).join('\n') || '(无结果)',
-        structured: r,
-      })),
+      s.search(a.query, { limit: a.limit, kind: a.kind, asOf: a.asOf, includeDisputed: a.includeDisputed }).then((r) => {
+        // B6 读预算：正文已是 ≤snippetChars 的片段；截断要显式告诉模型，别让它以为记忆只有这么短。
+        const lines = r.items.map((i) => {
+          const mark = i.record.snippetTruncated ? ' [snippet]' : '';
+          return `[${i.record.kind}] ${i.record.text} (id=${i.record.id}, score=${i.score.toFixed(3)})${mark}`;
+        });
+        const budget = r.readBudget;
+        if (budget?.truncated) {
+          lines.push(`(会话读预算已满：${budget.truncatedReason}；本次返回 ${budget.returned} 条，共命中 ${r.total} 条)`);
+        }
+        return { text: lines.join('\n') || '(无结果)', structured: r };
+      }),
   },
   {
     name: 'memory_brief',
@@ -182,15 +190,17 @@ const MEMORY_TOOL_DEFS = [
       required: ['id'],
       additionalProperties: false,
     },
-    handler: (s, a) =>
-      s.get(a.id).then((record) => {
-        if (!record) {
-          const e = new Error(`E_NOT_FOUND: ${a.id}`);
-          e.code = 'E_NOT_FOUND';
-          throw e;
-        }
-        return { text: JSON.stringify(record, null, 2), structured: record };
-      }),
+    handler: async (s, a) => {
+      const record = await s.get(a.id);
+      if (!record) {
+        const e = new Error(`E_NOT_FOUND: ${a.id}`);
+        e.code = 'E_NOT_FOUND';
+        throw e;
+      }
+      // B5 读取审计：kind:'read' 进 events.jsonl，不进 items（不含被读内容）。
+      await s._event('read', record.id, { surface: 'mcp', recordId: record.id });
+      return { text: JSON.stringify(record, null, 2), structured: record };
+    },
   },
   {
     name: 'memory_supersede',
@@ -355,3 +365,23 @@ const MEMORY_TOOL_DEFS = [
 
 export const TOOL_DEFS = [...MEMORY_TOOL_DEFS, ...SESSION_TOOL_DEFS];
 export const TOOLS_BY_NAME = new Map(TOOL_DEFS.map((t) => [t.name, t]));
+
+/**
+ * core 工具面（B6）：只保留 3 个最小闭环工具。
+ * 为什么是这三个：search（读）、write（写）、brief（冷启动上下文）——
+ * 其余工具都能由这三个加 CLI 完成；core 是给「上下文很贵」的客户端的显式选项，
+ * 默认仍是 all，避免现有客户端升级后突然少工具。
+ */
+export const CORE_TOOL_NAMES = Object.freeze(['memory_search', 'memory_write', 'memory_brief']);
+
+/**
+ * 按工具面解析可暴露的工具列表。
+ * @param {'core'|'all'} surface
+ * @param {{sessionTools?: boolean}} [opts] core 下是否额外挂 7 个会话工具
+ * @returns {object[]}
+ */
+export function toolsForSurface(surface = 'all', { sessionTools = false } = {}) {
+  if (surface !== 'core') return [...TOOL_DEFS];
+  const core = MEMORY_TOOL_DEFS.filter((t) => CORE_TOOL_NAMES.includes(t.name));
+  return sessionTools ? [...core, ...SESSION_TOOL_DEFS] : core;
+}

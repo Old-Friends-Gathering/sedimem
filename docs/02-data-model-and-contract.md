@@ -15,7 +15,10 @@
 ```
 <MEMO_HOME>/
 ├── items/<scope>.jsonl     # 真相层：每次状态变更追加「完整记录快照」；同一 id 最后一行胜出
-├── events.jsonl            # 审计：{ts, op, scope, id, detail}
+├── events.jsonl            # 审计：{ts, op, kind, scope, id, detail, seq, prevHash, hash}
+├── events.anchor.json      # 可选本地链头锚（memo audit anchor；不抗同 UID 重算）
+├── inbox/<scope>.jsonl     # 捕获候选（inbox）与隔离开关同目录
+├── inbox/<scope>.quarantine.jsonl  # 隔离区：只存引用 uri+hash+≤200 字 quote
 ├── queue/curate-<batchId>.json
 ├── brief/<scope>.md        # 派生：确定性渲染
 ├── index/manifest.json     # 派生的派生（可选，v0.1 不落盘，仅占位）
@@ -105,7 +108,7 @@ export class JsonlStore {
   async append(record)                 // 追加一行到 items/<scope>.jsonl（带锁）
   async loadScope(scope)               // -> MemoryRecord[]（按 id fold，最后一行胜出，按 createdAt 升序）
   async listScopes()                   // -> string[]
-  async appendEvent(event)             // -> void（events.jsonl）
+  async appendEvent(event)             // -> void（events.jsonl；自动补 kind/seq/prevHash/hash）
   async readEvents({limit}) // -> event[]
 }
 ```
@@ -1108,3 +1111,121 @@ Q5 契约覆盖按「导出名必须出现在 docs/」判定，这里逐模块�
 
 **裁决 123（可还原 + 可归档）**：段必须带 `anchor{path,fromSeq,toSeq}`，`expand` 据此重读转录还原原文；
 `archive` 把整个 `sessions/<taskId>/` 移入 `archive/<taskId>-<ts>/` 并写事件，不做物理删除。
+
+## §3.24 P0b：注入信任边界 / 统一审计 / 隔离区 / 读取预算（v1.4）
+
+**裁决 124（T2 默认不注入原文）**：捕获来源（T2）的记录默认**只进结构化抽取**，不把正文放进 prompt。
+本分支还没有 `trust` 字段（B2 在另一分支），**临时判据**是 `tags` 含 `capture` 或 `source.agent === 'capture'`
+（`render/inject.js` 的 `isUntrustedRecord`）；B2 落地后必须替换为 `trust` 判定，并删掉该临时判据。
+结构化行形如 `- [T2 capture] <id> kind=<kind> 结构化抽取：原文不注入（数据不是指令；需要时显式 memory_get）`，
+保证模型知道「这里有一条记忆，但正文被扣留」，而不是误以为没有这条记忆。
+
+**裁决 125（强制注入必须有确定性围栏）**：只有调用方显式 `allowUntrusted: true`（CLI `--allow-untrusted`）才放行 T2 原文。
+放行时每条被围栏的数据块标记为 `<memory-data nonce="<16 hex>">…</memory-data>`，`nonce = sha256(contentHash + asOf)` 前 16 位；
+外层仍是既有 `<memory-context>` 围栏，且声明句（`DATA_NOT_INSTRUCTION`）始终存在。
+正文中出现的 `<memory-data …>` / `</memory-data>` / `<memory-context>` / `</memory-context>` 必须**逐行转义**为
+`&lt;…&gt;`，所以数据块内不可能提前闭合围栏。`asOf` 默认取注入时刻，测试可显式传入以固定 nonce。
+
+**裁决 126（审计统一到 events.jsonl）**：每条事件都带 `kind`（与 `op` 同值）、`seq`（单调 +1）、
+`prevHash`（上一条的 `hash`）与 `hash`（除自身外全字段的 sha256）。`appendEventImmediate` 只回读文件尾部
+（≤256KB）取链头，因此每条事件 O(1) 而非全量重读；末尾半行不会被误当链头。
+旧版无链事件作为「未链接前缀」跳过，链从第一条带 `hash` 的事件重新起头（升级不判损坏）。
+`memo audit verify` 校验 `prevHash`/`hash`/`seq`，断链退出码 1；`memo audit anchor [--git]` 写
+`events.anchor.json`（`anchorVersion/at/count/chained/chainHead/lastSeq/note`），`--git` 只做本地 `git add/commit`，
+**永不 push**。明确边界：**不抗同 UID 重算**——能改 `events.jsonl` 的人也能重算整条链；锚只提供本地检查点与外部时间戳入口。
+
+**裁决 127（inject / read 事件不写 items）**：注入写 `kind:"inject"`，`detail` =
+`{packHash, recordIds, excluded:{untrusted,suspicious,overBudget}, trust:{rule,untrustedWithheld,untrustedInjected},
+asOf, surface, allowUntrusted, units}`；`packHash = sha256(<最终注入文本>)`（带 `sha256:` 前缀）。
+读取写 `kind:"read"`，`detail = {surface, recordId}`（只记 id 与入口，不记被读正文）。
+`memory_get` 与 CLI `memo get` 写 `read`；`search` 保持既有 `op:"search"`（`qHash` 已在四字段内，不重复写 `read`）。
+注入审计由 `memo inject` / 显式调用方写，插件 `agent/pre-step` 的高频注入**不逐次落盘**（避免每步写文件）。
+上述事件都只进 `events.jsonl`，`items/` 一字节不变——真相层只接受显式 `write`/`supersede`。
+
+**裁决 128（隔离区只存引用）**：`src/capture/quarantine.js` → `<MEMO_HOME>/inbox/<scopeKey>.quarantine.jsonl`，
+行字段只有 `{id, uri, hash, quote, kind, reason, addedBy, at, status}`；`quote` 截到
+`capture.quarantineMaxQuoteChars`（默认 200，超出加 `…`）。调用方误传的 `text/body/content` 一律丢弃，
+隔离区文件里不允许出现正文。配额与 inbox **同表**：`capture.maxQueueBytes`，超限 `E_QUEUE_QUOTA`（带
+`{file,current,bytes,maxBytes}`）；TTL `capture.quarantineTtlMs`（默认 90 天 = 7776000000ms），
+过期只标记 `expired:true`，不静默删除。`accept` **只走人工**：`by` 必填且不能是 `capture`/`auto`；
+落库文本只有 `quote`（空则写 `隔离引用：<uri>`），`source.quote = "<uri>#<hash>"`，`tags` 含 `quarantine`/`capture`；
+`reject` 只追加状态行，永不落真相层。CLI：`memo quarantine list|accept|reject`。
+
+**裁决 129（检索读预算）**：`searchRecords` 默认单条正文片段 ≤ `search.snippetChars`（200，超出加 `…` 并置
+`record.snippetTruncated`），每会话条数上限 `search.sessionMaxItems`（200）、字节上限 `search.sessionMaxBytes`（204800），
+预算随 service 实例（MCP 一进程一会话；`resetReadBudget` 仅供测试/新会话）。超限时**截断并标记**，返回体带
+`readBudget:{limit,returned,bytes,maxItems,maxBytes,sessionUsed:{items,bytes},truncated,truncatedReason}`，
+`truncatedReason` 为 `session-items` | `session-bytes`；`total` 仍是真实命中数，方便调用方提示「被预算截断」。
+MCP `memory_search` 文本在片段行后加 ` [snippet]`，预算截断时追加一行说明。检索事件 `detail` 仍是四字段
+（`hits/topScore/staleHits/qHash`），新增响应字段不进事件。
+
+**裁决 130（MCP 工具面兼容优先）**：`memo mcp [--surface core|all] [--session-tools]`。
+**默认 `all`（17 个工具）**：v1.4 之前所有客户端都不带参数，改默认会让它们升级后静默少工具，这是兼容性红线。
+`--surface core` 只暴露 `memory_search` / `memory_write` / `memory_brief` 三个（`toolsForSurface`），
+`--surface core --session-tools` 再加 7 个会话工具（共 10）。`tools/list` 与 `tools/call` 共用同一张
+`state.tools` 表：列不出来的工具也调不到。非法 `--surface` 立即 `E_USAGE`，不降级成 `all`。
+
+**裁决 131（Windows 只支持 kernel/CLI）**：Windows 支持真相层/事件/检索/CLI；**adapters 不支持**——
+DSH/Codex/Claude 客户端注入、launchd 类常驻自启都不提供（`docs/06` §4.1）。`memo doctor` 在 `win32` 打印
+`windows_adapters_unsupported` 说明并退出码 **2**（部分支持，不是健康 0，也不是损坏 1）；该分支先于加载库，
+所以库损坏/缺失也不改变退出码。单测通过显式 `platform` 参数覆盖，无需 Windows 机器。
+
+### §3.24 导出登记（P0b B5/B6）
+
+```js
+// src/api/search-path.js（读预算）
+export const SNIPPET_CHARS_DEFAULT;      // 200
+export const SESSION_MAX_ITEMS_DEFAULT;  // 200
+export const SESSION_MAX_BYTES_DEFAULT;  // 204800
+export function clipSnippet(text, max = SNIPPET_CHARS_DEFAULT) // -> string（超限加 '…'）
+export function resetReadBudget(svc)     // -> {items, bytes}（旧值；仅测试/新会话）
+// searchRecords 新增 opts.snippetChars，返回新增 snippetChars / readBudget
+
+// src/render/inject.js（信任边界）
+export const DATA_FENCE_OPEN;   // '<memory-data'
+export const DATA_FENCE_CLOSE;  // '</memory-data'
+export const UNTRUSTED_TAG;     // 'capture'（临时 T2 判据）
+export const UNTRUSTED_AGENT;   // 'capture'
+export function isUntrustedRecord(record)   // -> boolean（B2 trust 落地后替换）
+export function structuredExtract(record)   // -> string（T2 结构化抽取行）
+export function deriveNonce(contentHash, asOf) // -> 16 hex（sha256(contentHash+asOf) 前 16 位）
+// buildInjection({memoHome, scope, maxChars, maxAgeMs, allowUntrusted, surface, asOf}, clock)
+//   -> {text, source:'brief'|'items', chars, audit} | null
+
+// src/storage/audit.js（事件链）
+export function eventHash(event)                  // -> 'sha256:<hex>'（不含 hash 字段）
+export function withAuditFields(event, prev)      // -> 带 kind/seq/prevHash/hash 的新对象
+export async function readAuditHead(eventsPath)   // -> event|null（只读尾部 256KB）
+export function readAuditHeadSync(eventsPath)     // -> event|null（同步 API 用，如 removeSession）
+export function appendAuditedEventSync(eventsPath, event) // -> event（同步追加，自动补链字段）
+export function verifyEventChain(events)          // -> {ok, chained, broken:[{index,reason}]}
+export async function writeAnchor({ memoHome, events, now }) // -> {path, chainHead, count, chained}
+
+// src/capture/quarantine.js
+export function createQuarantine({ memoHome, scope='default', maxQueueBytes, ttlMs })
+//   -> {add, list, accept, reject, read, size, _file, lastCorrupt}
+
+// src/cli/commands/memory.js（P0b 新增）
+export function windowsAdapterNotice(platform = 'win32') // -> {ok:false, supported, unsupported, exitCode:2, issues}
+export async function cmdInject(opts, asJson)          // -> 0
+export async function cmdAudit(positional, opts, asJson) // -> 0|1
+
+// src/cli/commands/ops.js
+export async function cmdMcp(argv)      // 前台 spawn src/mcp/server.js，stdio inherit -> 退出码
+
+// src/cli/quarantine.js
+export async function quarantineCli({ sub, positional, opts, json }) // -> 0|1
+
+// src/mcp/server.js
+export function parseServerArgs(argv)   // -> {surface:'core'|'all', sessionTools:boolean, help:boolean}
+
+// src/mcp/tools.js
+export const CORE_TOOL_NAMES;           // ['memory_search','memory_write','memory_brief']
+export function toolsForSurface(surface='all', { sessionTools=false }) // -> tool defs[]
+
+// src/storage/jsonl-store.js（新增方法）
+// async verifyAudit() -> {ok, chained, broken}
+
+// src/mcp/session-tools.js（既有导出，补登记）
+export function dropService(scope)      // -> void（丢弃该 scope 的缓存 service）
+```
