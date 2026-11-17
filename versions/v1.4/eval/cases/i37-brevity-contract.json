@@ -1,0 +1,10 @@
+{
+  "id": "I37",
+  "name": "写侧粒度契约",
+  "expects": [
+    "超软线只警告并打 long-form",
+    "超硬线上限报错不再截断",
+    "缺 title 默认警告、titleEnforce 时拒绝",
+    "brief 行首用 title"
+  ]
+}

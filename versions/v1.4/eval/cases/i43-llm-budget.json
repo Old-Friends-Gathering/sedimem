@@ -1,0 +1,8 @@
+{
+  "id": "I43",
+  "name": "LLM 日预算",
+  "expects": [
+    "超限 deriveStatus=budget-exceeded",
+    "写入不受影响"
+  ]
+}

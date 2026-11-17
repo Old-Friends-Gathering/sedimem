@@ -1,0 +1,10 @@
+{
+  "id": "I3",
+  "name": "stale",
+  "desc": "写入与既有 active 矛盾但值不可比较的旧结论，期望 disputed",
+  "subject": "toolchain.node",
+  "predicate": "version",
+  "first": { "value": "v18", "text": "推荐用 Node 18" },
+  "second": { "value": "v16", "text": "推荐用 Node 16" },
+  "query": "Node 推荐"
+}

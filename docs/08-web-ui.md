@@ -1,9 +1,9 @@
 # 08 · Web UI（记忆观察台）—— v0.6 现状
 
 > doc-kind: contract
-> doc-version: 1.3
-> verified-at: 2026-11-14
-> verified-against: versions/CURRENT（v1.3 / 1.3.0）
+> doc-version: 1.4
+> verified-at: 2026-11-17
+> verified-against: versions/CURRENT（v1.4 / 1.4.0）
 
 > 本文件是 Web UI 的**设计契约**，描述 v0.6 的现状：页面规格、只读 HTTP 接口、图谱语义、
 > 安全边界、门禁增项。§1–§11 为 v0.2 定稿的核心契约（至今有效，实现与本文件不一致时以本文件为准，
@@ -26,6 +26,12 @@
 | **卫生**（Hygiene） | 库在**变健康还是变脏**？待裁决多少、合并了多少、冗余率/冲突率走势 | `metrics/` + `dedupeScan` + `doctor` |
 
 设计顺序原则：**先「今天变了什么」，再「长什么样」，最后「健康度」**。因为前者是日常高频，后者是每周一次。
+
+### 1.1 英文界面（v1.4）
+
+`?lang=en` 或 `localStorage["sedimem.lang"]="en"` 时，`ui/i18n.js` 在渲染后翻译**界面文案**（导航、页标题、按钮、统计卡、任务库与图谱工具栏、空态）；用户记录正文不翻译。词表未覆盖的文案保持中文——这是「中文优先、英文可选」的边界，不是完整 i18n 框架。
+
+英文项目站与英文 README 必须引用 `*-en.png` 视觉资产；`tests/unit/ui-i18n.test.js` 同时断言两版 README 含项目站链接。
 
 ## 2. 硬约束（不可协商）
 

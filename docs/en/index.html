@@ -113,13 +113,13 @@ footer a:hover{text-decoration:underline}
   <h1>sedimem<span class="dot">.</span></h1>
   <p class="subtitle">Local-first personal AI memory: an append-only truth layer; everything else is rebuildable.</p>
   <div class="pills">
-    <span class="pill"><b>761</b>tests</span>
+    <span class="pill"><b>765</b>tests</span>
     <span class="pill"><b>0</b>runtime deps</span>
     <span class="pill"><b>12</b>modules</span>
-    <span class="pill"><b>v1.3.1</b>current</span>
+    <span class="pill"><b>v1.4.0</b>current</span>
   </div>
   <figure>
-    <img src="../shots/hero.png" alt="sedimem hero banner"
+    <img src="../shots/hero-en.png" alt="sedimem hero banner"
          width="3200" height="840" loading="lazy"
          style="aspect-ratio:3200/840">
     <figcaption>The truth layer ~/.memo/items is append-only; indexes, views and derivations can all be rebuilt.</figcaption>
@@ -130,7 +130,7 @@ footer a:hover{text-decoration:underline}
 <section>
   <h2>System Architecture</h2>
   <figure>
-    <img src="../shots/diagrams/master-arch.png" alt="Full architecture: clients → interface layer → MemoryService → 14 modules → data layer"
+    <img src="../shots/diagrams/master-arch-en.png" alt="Full architecture: clients → interface layer → MemoryService → 14 modules → data layer"
          width="3520" height="1440" loading="lazy"
          style="aspect-ratio:3520/1440">
     <figcaption>Clients → interface layer → MemoryService → 14 modules → data layer; ①②③ mark the main paths.</figcaption>
@@ -141,7 +141,7 @@ footer a:hover{text-decoration:underline}
 <section>
   <h2>Four Write Gates</h2>
   <figure>
-    <img src="../shots/diagrams/write.png" alt="Four write gates"
+    <img src="../shots/diagrams/write-en.png" alt="Four write gates"
          width="3200" height="1120" loading="lazy"
          style="aspect-ratio:3200/1120">
     <figcaption>schema → sanitization → dedupe (Dice 0.15 recall / 0.85 match) → conflict ruling (superseded / disputed).</figcaption>
@@ -152,7 +152,7 @@ footer a:hover{text-decoration:underline}
 <section>
   <h2>Dual-Channel Read</h2>
   <figure>
-    <img src="../shots/diagrams/read.png" alt="Read path: BM25 ± semantic → RRF → basis/degraded"
+    <img src="../shots/diagrams/read-en.png" alt="Read path: BM25 ± semantic → RRF → basis/degraded"
          width="3200" height="1120" loading="lazy"
          style="aspect-ratio:3200/1120">
     <figcaption>BM25 ± semantic → RRF fusion (k=60); every result carries a basis, degrading to "degraded" when semantics are unavailable.</figcaption>
@@ -163,7 +163,7 @@ footer a:hover{text-decoration:underline}
 <section>
   <h2>LLM Derivation</h2>
   <figure>
-    <img src="../shots/diagrams/llm.png" alt="LLM derivation layer: outbox → sidecar"
+    <img src="../shots/diagrams/llm-en.png" alt="LLM derivation layer: outbox → sidecar"
          width="3200" height="1120" loading="lazy"
          style="aspect-ratio:3200/1120">
     <figcaption>Off by default: write → outbox → LlmPort → derived sidecar. Full rebuild of 33 records ≈1m50s, &lt;¥0.02.</figcaption>
@@ -174,7 +174,7 @@ footer a:hover{text-decoration:underline}
 <section>
   <h2>Task Store</h2>
   <figure>
-    <img src="../shots/diagrams/session.png" alt="Task store lifecycle"
+    <img src="../shots/diagrams/session-en.png" alt="Task store lifecycle"
          width="3200" height="1120" loading="lazy"
          style="aspect-ratio:3200/1120">
     <figcaption>Keyed by task, not by chat session — multiple agents can hand off one task. <code class="inline">session:*</code> forbids facts; close promotes only decision / gotcha, plus a handoff markdown.</figcaption>
@@ -190,7 +190,7 @@ footer a:hover{text-decoration:underline}
 <section>
   <h2>Task Ledger</h2>
   <figure>
-    <img src="../shots/ui-ledger-wide.png" alt="Task ledger: segments, brief, capture"
+    <img src="../shots/ui-session-en.png" alt="Task page: one temporary memory store per task"
          width="1440" height="820" loading="lazy"
          style="aspect-ratio:1440/820">
     <figcaption>The transcript is folded into <b>replayable segments</b> — nothing lost when the session closes, original text restorable by anchor. Segments never enter the truth layer; text is redacted and injection-like segments are quarantined.</figcaption>
@@ -210,10 +210,10 @@ footer a:hover{text-decoration:underline}
 <section>
   <h2>Five-Layer Gates</h2>
   <figure>
-    <img src="../shots/diagrams/gates.png" alt="Five-layer quality gates"
+    <img src="../shots/diagrams/gates-en.png" alt="Five-layer quality gates"
          width="3200" height="1120" loading="lazy"
          style="aspect-ratio:3200/1120">
-    <figcaption>Quality 15 + security 9 + coverage + docs-drift + pages-verify; 761 tests, eval I1–I56.</figcaption>
+    <figcaption>Quality 15 + security 9 + coverage + docs-drift + pages-verify; 765 tests, eval I1–I56.</figcaption>
   </figure>
 </section>
 
@@ -222,15 +222,15 @@ footer a:hover{text-decoration:underline}
   <h2>Memory Center</h2>
   <div class="shot-grid">
     <figure>
-      <img src="../shots/ui-today.png" alt="Today page" loading="lazy" style="aspect-ratio:1440/900">
+      <img src="../shots/ui-today-en.png" alt="Today page" loading="lazy" style="aspect-ratio:1440/900">
       <figcaption>Today: four change cards + timeline.</figcaption>
     </figure>
     <figure>
-      <img src="../shots/ui-graph.png" alt="Graph page" loading="lazy" style="aspect-ratio:1440/900">
+      <img src="../shots/ui-graph-en.png" alt="Graph page" loading="lazy" style="aspect-ratio:1440/900">
       <figcaption>Graph: kind filter + force layout.</figcaption>
     </figure>
     <figure>
-      <img src="../shots/ui-hygiene.png" alt="Hygiene page" loading="lazy" style="aspect-ratio:1440/900">
+      <img src="../shots/ui-hygiene-en.png" alt="Hygiene page" loading="lazy" style="aspect-ratio:1440/900">
       <figcaption>Hygiene: pending curation clusters + trends.</figcaption>
     </figure>
   </div>
@@ -249,19 +249,19 @@ footer a:hover{text-decoration:underline}
         serverName: memo
         transport: stdio
         command: /opt/homebrew/bin/node
-        args: ['/ABS/PATH/versions/v1.3/src/mcp/server.js']
+        args: ['/ABS/PATH/versions/v1.4/src/mcp/server.js']
         env: { MEMO_HOME: '$HOME/.memo' }
         toolCallTimeoutMs: 15000</code></pre>
 <pre><code># Codex CLI: ~/.codex/config.toml
 [mcp_servers.memo]
 command = "/opt/homebrew/bin/node"
-args = ["/ABS/PATH/versions/v1.3/src/mcp/server.js"]
+args = ["/ABS/PATH/versions/v1.4/src/mcp/server.js"]
 enabled = true
 [mcp_servers.memo.env]
 MEMO_HOME = "$HOME/.memo"</code></pre>
 <pre><code># Claude Code
 claude mcp add --scope user memo -e MEMO_HOME=$HOME/.memo -- \
-  /opt/homebrew/bin/node /ABS/PATH/versions/v1.3/src/mcp/server.js</code></pre>
+  /opt/homebrew/bin/node /ABS/PATH/versions/v1.4/src/mcp/server.js</code></pre>
 </section>
 
 <!-- Version timeline -->
@@ -285,9 +285,10 @@ claude mcp add --scope user memo -e MEMO_HOME=$HOME/.memo -- \
   <li><b>v1.2.1</b> Brief readability / decision precision / capture default LLM</li>
   <li><b>v1.2.2</b> Q16 release-surface coverage + ledger docs</li>
   <li><b>v1.3.0</b> P0a foundation: CI/gates/docs follow CURRENT</li>
-  <li><b>v1.3.1</b> Task-library terminology &amp; MCP entry fix (one-shot <code>session:</code>)</li>
+  <li><b>v1.3.1</b> Task-store terminology &amp; MCP entry fix (one-shot <code>session:</code>)</li>
+  <li><b>v1.4.0</b> P0b start: English README/site (English diagrams + <code>?lang=en</code> UI) and site links</li>
 </ol>
-<p class="cap">Rule: <code>X.Y</code> gets a new directory (currently <code>versions/v1.3</code>), <code>X.Y.Z</code> patches in place; current version <b>v1.3.1</b>.</p>
+<p class="cap">Rule: <code>X.Y</code> gets a new directory (currently <code>versions/v1.4</code>), <code>X.Y.Z</code> patches in place; current version <b>v1.4.0</b>.</p>
 </section>
 
 <div class="langfoot"><a href="../index.html">中文</a> · English</div>
@@ -295,7 +296,7 @@ claude mcp add --scope user memo -e MEMO_HOME=$HOME/.memo -- \
 <footer>
   <a href="https://github.com/Old-Friends-Gathering/sedimem">GitHub: Old-Friends-Gathering/sedimem</a>
   <span>License: MIT</span>
-  <span>Updated: 2026-11-16</span>
+  <span>Updated: 2026-11-17</span>
   <p class="cap" style="opacity:.72">Diagrams are annotated in Chinese for now; English-annotated versions are tracked in issue #174.</p>
 </footer>
 <p style="text-align:center;margin-top:8px">This is the English version; the Chinese page is authoritative.</p>

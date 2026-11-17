@@ -1,0 +1,13 @@
+{
+  "id": "I8",
+  "name": "concurrent",
+  "desc": "spawn 10 个 node 子进程同时写同一文本 → 最终 active=1、dupRatio=0、items.jsonl 无坏行（裁决 13：读-判-写同一把 scope 锁）",
+  "processes": 10,
+  "write": {
+    "text": "跨进程并发写入的同一条事实：构建产物目录是 dist/",
+    "subject": "build.concurrent",
+    "predicate": "output.dir",
+    "value": "dist/"
+  },
+  "query": "并发 构建产物"
+}

@@ -1,0 +1,12 @@
+{
+  "id": "I24",
+  "name": "label-and-title",
+  "desc": "title 必须进 label 与 brief 行首；图谱同 subject 聚合为单节点，count 之和等于记录数（裁决 59/60）",
+  "records": 5,
+  "titled": "观察台端口 7788",
+  "expect": {
+    "graphNodesForSubject": 1,
+    "countSumEqualsRecords": true,
+    "briefHasTitle": true
+  }
+}

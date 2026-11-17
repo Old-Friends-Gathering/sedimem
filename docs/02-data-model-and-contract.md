@@ -1,11 +1,11 @@
 # 02 · 数据模型与实现契约（唯一权威）
 
 > doc-kind: contract
-> doc-version: 1.3
+> doc-version: 1.4
 > verified-at: 2026-11-15
-> verified-against: versions/CURRENT（v1.3 / 1.3.0）
+> verified-against: versions/CURRENT（v1.4 / 1.4.0）
 
-> 本文件是 v1.3 的**编码契约**。任何实现不得偏离导出的名字与签名；如需变更，先改本文件 + 写 ADR（`docs/adr-*.md`）。
+> 本文件是 v1.4 的**编码契约**。任何实现不得偏离导出的名字与签名；如需变更，先改本文件 + 写 ADR（`docs/adr-*.md`）。
 
 技术基线：**Node ≥ 22.15，ESM，零第三方运行时依赖**，只用 `node:fs` / `node:path` / `node:crypto` / `node:os` / `node:process` / `node:test`。
 目录根：`MEMO_HOME`（默认 `~/.memo`）。
@@ -977,7 +977,7 @@ v1.0 是重构版本，**行为不改，只改结构与文档**。以下五条�
    `E_SCOPE_MISMATCH`（跨库写入 fail-loud，不允许静默写歪）。
 2. `forgetRecord` / `supersedeRecord` 打快照时显式把 `scope` 归一到 `svc.scope`
    —— 这是对遗留行的自愈，不改变记录的语义与 id。
-3. 由 `versions/v1.3/tests/unit/legacy-scope.test.js` 的 I1/I2/I3 守住；
+3. 由 `versions/v1.4/tests/unit/legacy-scope.test.js` 的 I1/I2/I3 守住；
    修数据用 `items/<scope>.jsonl` 的显式迁移，不允许靠「再 forget 一次」蒙混。
 
 ## §3.19 v1.0 LLM 派生层契约（裁决 83–88）与导出登记
@@ -1086,7 +1086,7 @@ Q5 契约覆盖按「导出名必须出现在 docs/」判定，这里逐模块�
 
 ## §3.23 任务账本（v1.2，裁决 118–123）
 
-完整契约见 [`versions/v1.3/docs/SEGMENT-SPEC.md`](../versions/v1.3/docs/SEGMENT-SPEC.md)（磁盘布局、段字段、导出签名、错误码）。
+完整契约见 [`versions/v1.4/docs/SEGMENT-SPEC.md`](../versions/v1.4/docs/SEGMENT-SPEC.md)（磁盘布局、段字段、导出签名、错误码）。
 这里只固化六条不可协商的裁决：
 
 **裁决 118（账本不是 record）**：段存 `$MEMO_HOME/sessions/<taskId>/segments.jsonl`，**永不写进** `items/<scope>.jsonl`。
