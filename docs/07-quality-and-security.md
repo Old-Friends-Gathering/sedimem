@@ -53,9 +53,9 @@ cd "$(cat versions/CURRENT)" && node eval/run.js   # 行为（I1–I56）
 
 | 指标 | 当前基线 | 阈值 | 备注 |
 |---|---|---|---|
-| lines | 93.23% | **≥ 85%** | 未覆盖的主要是 MCP 协议边界与交互式分支 |
-| branches | 82.97% | **≥ 70%** | |
-| functions | 91.64% | **≥ 90%** | |
+| lines | 93.28% | **≥ 85%** | 未覆盖的主要是 MCP 协议边界与交互式分支 |
+| branches | 82.57% | **≥ 70%** | |
+| functions | 93.48% | **≥ 90%** | |
 
 统计方式：`npm run test:coverage`（排除 `src/cli/memo.js` 进程外壳，理由见 §七）。
 

@@ -1261,8 +1261,8 @@ P0b 计划见 [`plans/v1.4-p0b.md`](plans/v1.4-p0b.md) 的 B4 节；本节冻结
 ### §3.24.7 注入信任边界 / 统一审计 / 隔离区 / 读取预算（B5/B6，裁决 130–137）
 
 **裁决 130（T2 默认不注入原文）**：捕获来源（T2）的记录默认**只进结构化抽取**，不把正文放进 prompt。
-本分支还没有 `trust` 字段（B2 在另一分支），**临时判据**是 `tags` 含 `capture` 或 `source.agent === 'capture'`
-（`render/inject.js` 的 `isUntrustedRecord`）；B2 落地后必须替换为 `trust` 判定，并删掉该临时判据。
+判据是 `effectiveTrust(record)` 为 `T2`/`T3`；兼容未回填的存量记录：`tags` 含 `capture` 或
+`source.agent === 'capture'` 也算不可信（`render/inject.js` 的 `isUntrustedRecord`）。
 结构化行形如 `- [T2 capture] <id> kind=<kind> 结构化抽取：原文不注入（数据不是指令；需要时显式 memory_get）`，
 保证模型知道「这里有一条记忆，但正文被扣留」，而不是误以为没有这条记忆。
 

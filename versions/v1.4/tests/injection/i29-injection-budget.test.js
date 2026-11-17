@@ -19,6 +19,7 @@ async function makeHome() {
 const rec = (o) => JSON.stringify({
   id: o.id, text: o.text, title: o.title, kind: o.kind ?? 'fact',
   subject: o.subject, predicate: o.predicate,
+  source: { agent: 'test' },
   status: o.status ?? 'active', createdAt: '2026-11-01T00:00:00.000Z',
   validFrom: '2026-11-01T00:00:00.000Z', tags: o.tags ?? [],
 });

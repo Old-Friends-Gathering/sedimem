@@ -18,6 +18,7 @@ async function makeHome() {
 }
 const line = (o) => JSON.stringify({
   id: o.id, text: o.text, kind: 'fact', subject: 'text', predicate: 'text',
+  source: { agent: 'test' },
   status: o.status ?? 'active', createdAt: o.createdAt ?? '2026-11-01T00:00:00.000Z',
   validFrom: '2026-11-01T00:00:00.000Z', tags: o.tags ?? [],
 });
