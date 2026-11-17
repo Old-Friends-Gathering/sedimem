@@ -115,6 +115,20 @@ test('capture 队列：add → list(pending) → accept 入库（active 增加�
   }
 });
 
+test('capture 队列：超过字节配额 fail-loud，不写半行', () => {
+  const memoHome = tmpMemoHome();
+  try {
+    const queue = createCaptureQueue({ memoHome, scope: SCOPE, maxQueueBytes: 200 });
+    assert.throws(
+      () => queue.add([{ text: 'x'.repeat(300), kind: 'fact' }]),
+      (err) => err.code === 'E_QUEUE_QUOTA',
+    );
+    assert.equal(queue.size(), 0);
+  } finally {
+    rmSync(memoHome, { recursive: true, force: true });
+  }
+});
+
 test('accept bug 候选回落 gotcha；重复 accept 幂等', async () => {
   const memoHome = tmpMemoHome();
   try {

@@ -81,7 +81,7 @@ const DICT = {
   '本地优先的个人记忆系统：真相层只追加、永不改写，索引/视图/派生全部可重建。DSH / Codex / Claude 三端共用同一个 MCP server。':
     'A local-first personal memory system: the truth layer is append-only, indexes/views/derived data are all rebuildable. DSH / Codex / Claude share one MCP server.',
   '0 运行时依赖': '0 runtime deps',
-  '648 tests · I1–I50': '765 tests · I1–I56',
+  '648 tests · I1–I50': '768 tests · I1–I56',
   'as-of 回查任意时点': 'as-of rewind',
   'MIT · 数据只在': 'MIT · data stays in',
   '运行时依赖': 'runtime deps',

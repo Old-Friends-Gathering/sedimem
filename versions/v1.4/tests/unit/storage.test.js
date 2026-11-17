@@ -5,6 +5,8 @@ import { mkdtempSync, rmSync, readFileSync, writeFileSync, appendFileSync, utime
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { setTimeout as sleep } from 'node:timers/promises';
+import { spawn } from 'node:child_process';
+import { mkdirSync } from 'node:fs';
 
 import { withLock } from '../../src/storage/lock.js';
 import { JsonlStore } from '../../src/storage/jsonl-store.js';
@@ -62,6 +64,47 @@ describe('storage/lock', () => {
       const out = await withLock(home, async () => 'ok', { staleMs: 30000 });
       assert.equal(out, 'ok', '陈旧锁应被破除并正常执行');
     } finally {
+      rmSync(home, { recursive: true, force: true });
+    }
+  });
+
+  test('陈旧 mtime 但 owner pid 仍存活 → 不接管，等待超时', async () => {
+    const home = mkdtempSync(join(tmpdir(), 'memo-'));
+    try {
+      const lockPath = join(home, '.lock');
+      mkdirSync(lockPath);
+      writeFileSync(join(lockPath, 'owner.json'), JSON.stringify({ pid: process.pid, nonce: 'x', at: Date.now() }));
+      const old = new Date(Date.now() - 60000);
+      utimesSync(lockPath, old, old);
+      await assert.rejects(
+        withLock(home, async () => 'should-not-run', { staleMs: 50, timeoutMs: 200 }),
+        (err) => err.code === 'E_LOCK_TIMEOUT',
+      );
+    } finally {
+      rmSync(home, { recursive: true, force: true });
+    }
+  });
+
+  test('持有者被 kill -9：owner pid 不存活后锁可恢复', async () => {
+    const home = mkdtempSync(join(tmpdir(), 'memo-'));
+    const lockUrl = new URL('../../src/storage/lock.js', import.meta.url).href;
+    const script = `import { withLock } from ${JSON.stringify(lockUrl)};\n`
+      + `await withLock(${JSON.stringify(home)}, async () => { console.log('LOCKED'); await new Promise(() => {}); });\n`;
+    const child = spawn(process.execPath, ['--input-type=module', '-e', script], { stdio: ['ignore', 'pipe', 'inherit'] });
+    try {
+      await new Promise((resolve, reject) => {
+        const timer = setTimeout(() => reject(new Error('child did not acquire lock')), 5000);
+        child.stdout.on('data', (d) => {
+          if (String(d).includes('LOCKED')) { clearTimeout(timer); resolve(); }
+        });
+      });
+      child.kill('SIGKILL');
+      await new Promise((r) => child.once('exit', r));
+      await sleep(120);
+      const out = await withLock(home, async () => 'recovered', { staleMs: 50, timeoutMs: 3000 });
+      assert.equal(out, 'recovered');
+    } finally {
+      child.kill('SIGKILL');
       rmSync(home, { recursive: true, force: true });
     }
   });

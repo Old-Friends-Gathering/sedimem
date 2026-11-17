@@ -4,7 +4,7 @@
 
 import { randomUUID } from 'node:crypto';
 import {
-  mkdirSync, readFileSync, writeFileSync, existsSync, rmdirSync, statSync, renameSync,
+  mkdirSync, readFileSync, appendFileSync, existsSync, rmdirSync, statSync, renameSync,
 } from 'node:fs';
 import path from 'node:path';
 import { scopeKeyOf } from '../config/paths.js';
@@ -19,7 +19,7 @@ const KIND_FALLBACK = { bug: 'gotcha' };
  * @param {{memoHome: string, scope?: string}} args
  * @returns {{add: Function, list: Function, accept: Function, reject: Function, read: Function, size: Function}}
  */
-export function createCaptureQueue({ memoHome, scope = 'default' } = {}) {
+export function createCaptureQueue({ memoHome, scope = 'default', maxQueueBytes: maxBytes } = {}) {
   if (!memoHome || typeof memoHome !== 'string') {
     const err = new Error('createCaptureQueue: memoHome is required');
     err.code = 'E_INVALID_ARG';
@@ -28,6 +28,7 @@ export function createCaptureQueue({ memoHome, scope = 'default' } = {}) {
   const inboxDir = path.join(memoHome, 'inbox');
   const file = path.join(inboxDir, `${scopeKeyOf(scope)}.jsonl`);
   const lockDir = path.join(inboxDir, `.lock-${scopeKeyOf(scope)}`);
+  const maxQueueBytes = maxBytes ?? defaultPolicy.capture?.maxQueueBytes ?? 4 * 1024 * 1024;
   /** 最近一次读取遇到的坏行数（doctor/排障用；坏行不阻断队列，对抗审核 S-3） */
   let lastCorrupt = 0;
 
@@ -94,17 +95,19 @@ export function createCaptureQueue({ memoHome, scope = 'default' } = {}) {
   /** 无锁追加（调用方**必须**已持锁）；写临时文件再 rename，读者永不见半行。 */
   function appendRaw(rows) {
     if (rows.length === 0) return;
-    {
-      mkdirSync(inboxDir, { recursive: true });
-      const lines = rows.map((r) => JSON.stringify(r)).join('\n');
-      const prev = existsSync(file) ? readFileSync(file, 'utf8') : '';
-      const next = prev === ''
-        ? `${lines}\n`
-        : `${prev.replace(/\n*$/, '\n')}${lines}\n`;
-      const tmp = `${file}.tmp-${process.pid}-${randomUUID().slice(0, 8)}`;
-      writeFileSync(tmp, next);
-      renameSync(tmp, file);
+    mkdirSync(inboxDir, { recursive: true });
+    const payload = `${rows.map((r) => JSON.stringify(r)).join('\n')}\n`;
+    const bytes = Buffer.byteLength(payload);
+    const current = existsSync(file) ? statSync(file).size : 0;
+    if (current + bytes > maxQueueBytes) {
+      // 配额按字节而不是条数：一条 2 MB 的粘贴正文能把「50 条」撑爆。
+      const err = new Error(`capture queue: 写入 ${bytes} 字节会超过上限 ${maxQueueBytes}（当前 ${current}）`);
+      err.code = 'E_QUEUE_QUOTA';
+      err.detail = { file, current, bytes, maxQueueBytes };
+      throw err;
     }
+    // O_APPEND 追加，不整文件重读重写；锁保证同一时刻只有本进程写。读者仍按「同 id 最后一行胜出」折叠。
+    appendFileSync(file, payload);
   }
 
   /** 追加若干行（自带锁；锁内调用要用 appendRaw，同步锁不可重入）。 */

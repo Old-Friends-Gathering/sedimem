@@ -113,7 +113,8 @@
   "capture": {
     "maxItems": 50,
     "maxLineChars": 400,
-    "inboxDir": "inbox"
+    "inboxDir": "inbox",
+    "maxQueueBytes": 4194304
   },
   "write": {
     "titleRequiredKinds": [
