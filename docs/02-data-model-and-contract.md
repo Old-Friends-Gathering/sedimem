@@ -873,7 +873,7 @@ v0.4 的取舍依据是竞品调研（`docs/research/competitive-dsh-plugins-202
 | 67 | **注入只信「当前版本 + 干净内容」**：items 兜底必须按 id 折叠取最后一行（历史补丁行不是独立事实）；`suspicious`（tag 或占位串）永不注入；正文里的围栏标记必须转义；预算连围栏都放不下时不注入 | `src/render/inject.js` 的 `neutraliseFence/assemble/buildFromItems` | `i32-injection-hardening` |
 | 68 | **自由文本不构成 slot 分歧**：`subject`/`predicate` 都是默认 `text` 的记录只能经 `dedupeScan` + Agent 裁决处理；`/api/conflicts` 与 `resolveConflicts` 都必须拒绝把它当 slot | `src/hygiene/conflict.js: isUnstructured`、`src/views/conflicts.js` | `i33-conflicts-scope` |
 | 69 | **派生结构要自我修复**：向量行带 `model`/`dim`，加载时不匹配即跳过并清理重写文件；`IndexPort.add` 必须同时接受 `add(record)` 与 `add(id, record)`；`curateApply` 拒绝 `tombstoned` 记录（裁决不能撤销删除） | `src/index/vector-index.js`、`src/index/hybrid-index.js`、`src/api/maintenance.js: applyIdsDecision` | `i35`、`i36` |
-| 70 | **队列是并发安全的状态流**：inbox 写入在同步互斥锁内（`mkdir` 原子排他、陈旧锁 10s 接管、5s 超时），追加用 `O_APPEND`（不整文件重读重写），并按 `capture.maxQueueBytes` 做字节配额（超限 `E_QUEUE_QUOTA`）；单行坏 JSON 不得阻断 add/list/accept，坏行数经 `lastCorrupt` 暴露 | `src/capture/queue.js` | `i34-capture-queue-safety` |
+| 70 | **队列是并发安全的状态流**：inbox 写入在 `<memoHome>/.lock` 同步互斥锁内（同一 owner.json/pid 判据，陈旧锁 10s 接管、5s 超时），追加用 `O_APPEND`（不整文件重读重写），并按 `capture.maxQueueBytes` 做字节配额（超限 `E_QUEUE_QUOTA`）；单行坏 JSON 不得阻断 add/list/accept，坏行数经 `lastCorrupt` 暴露 | `src/capture/queue.js` | `i34-capture-queue-safety` |
 
 ### 3.17 第十五轮裁决（v0.6：写侧粒度 + 会话库 + 分库粘性，71–76）
 

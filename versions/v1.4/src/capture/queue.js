@@ -4,7 +4,7 @@
 
 import { randomUUID } from 'node:crypto';
 import {
-  mkdirSync, readFileSync, appendFileSync, existsSync, rmdirSync, statSync, renameSync,
+  mkdirSync, readFileSync, appendFileSync, existsSync, statSync, renameSync, rmSync, writeFileSync,
 } from 'node:fs';
 import path from 'node:path';
 import { scopeKeyOf } from '../config/paths.js';
@@ -27,27 +27,46 @@ export function createCaptureQueue({ memoHome, scope = 'default', maxQueueBytes:
   }
   const inboxDir = path.join(memoHome, 'inbox');
   const file = path.join(inboxDir, `${scopeKeyOf(scope)}.jsonl`);
-  const lockDir = path.join(inboxDir, `.lock-${scopeKeyOf(scope)}`);
+  const lockDir = path.join(memoHome, '.lock');
+  const lockOwnerFile = path.join(lockDir, 'owner.json');
   const maxQueueBytes = maxBytes ?? defaultPolicy.capture?.maxQueueBytes ?? 4 * 1024 * 1024;
   /** 最近一次读取遇到的坏行数（doctor/排障用；坏行不阻断队列，对抗审核 S-3） */
   let lastCorrupt = 0;
 
   /** 取同步互斥锁（mkdir 的 EEXIST 是原子排他；>10s 视为陈旧并接管）。 */
+  function pidAlive(pid) {
+    if (!Number.isInteger(pid) || pid <= 0) return false;
+    try { process.kill(pid, 0); return true; } catch (e) { return e.code === 'EPERM'; }
+  }
+
+  function ownerOf() {
+    try { return JSON.parse(readFileSync(lockOwnerFile, 'utf8')); } catch { return null; }
+  }
+
+  /**
+   * 同步数据锁：与 storage/lock.js 共用 `<memoHome>/.lock`，写同样的 owner.json。
+   * 队列操作是毫秒级，不单独心跳；异步 withLock 看到 pid 存活不会误接管。
+   */
   function withLockSync(fn) {
     mkdirSync(inboxDir, { recursive: true });
+    mkdirSync(memoHome, { recursive: true });
+    const nonce = randomUUID();
     const deadline = Date.now() + 5000;
     for (;;) {
       try {
         mkdirSync(lockDir);
+        writeFileSync(lockOwnerFile, JSON.stringify({ pid: process.pid, nonce, at: Date.now() }));
         break;
       } catch (e) {
         if (e.code !== 'EEXIST') throw e;
-        try {
-          if (Date.now() - statSync(lockDir).mtimeMs > 10000) {
-            rmdirSync(lockDir); // 陈旧锁（进程崩了）→ 接管
-            continue;
-          }
-        } catch { /* 锁刚被释放，重试 */ }
+        const st = (() => { try { return statSync(lockDir); } catch { return null; } })();
+        const owner = ownerOf();
+        const stale = st && Date.now() - st.mtimeMs > 10000 && (!owner || !pidAlive(owner.pid));
+        if (stale) {
+          const grave = `${lockDir}.stale-${process.pid}-${nonce.slice(0, 8)}`;
+          try { renameSync(lockDir, grave); rmSync(grave, { recursive: true, force: true }); } catch { /* 被抢 */ }
+          continue;
+        }
         if (Date.now() > deadline) {
           const err = new Error(`capture queue: 取锁超时（${lockDir}）`);
           err.code = 'E_LOCK_TIMEOUT';
@@ -61,7 +80,11 @@ export function createCaptureQueue({ memoHome, scope = 'default', maxQueueBytes:
     try {
       return fn();
     } finally {
-      try { rmdirSync(lockDir); } catch { /* 已被剥夺或未创建 */ }
+      // 只删自己持有的锁：避免接管后把下一个持有者的锁删掉。
+      try {
+        const owner = ownerOf();
+        if (owner?.nonce === nonce) rmSync(lockDir, { recursive: true, force: true });
+      } catch { /* 已被剥夺 */ }
     }
   }
 
