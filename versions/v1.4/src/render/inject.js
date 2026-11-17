@@ -217,9 +217,6 @@ export async function buildInjection(
     // kind 一起进 key：不同 kind 可以复用同一句标题，只按标题配对会把 T2 错认成可信记录。
     if (h !== '') heads.set(`${r.kind ?? 'unknown'}\u0000${neutraliseFence(h)}`, r);
   }
-  const untrusted = records.filter((r) => isUntrustedRecord(r)
-    && !(Array.isArray(r.tags) && r.tags.includes('suspicious')));
-
   /** 生成一条记录对应的「单元」（T2 按 allowUntrusted 决定结构化还是围栏原文）。 */
   function unitFor(r, line) {
     if (!isUntrustedRecord(r)) return typeof line === 'string' ? line : null;

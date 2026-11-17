@@ -121,7 +121,8 @@ export function createCaptureQueue({ memoHome, scope = 'default', maxQueueBytes:
     mkdirSync(inboxDir, { recursive: true });
     const payload = `${rows.map((r) => JSON.stringify(r)).join('\n')}\n`;
     const bytes = Buffer.byteLength(payload);
-    const current = existsSync(file) ? statSync(file).size : 0;
+    let current = 0;
+    try { current = statSync(file).size; } catch (e) { if (e.code !== 'ENOENT') throw e; }
     if (current + bytes > maxQueueBytes) {
       // 配额按字节而不是条数：一条 2 MB 的粘贴正文能把「50 条」撑爆。
       const err = new Error(`capture queue: 写入 ${bytes} 字节会超过上限 ${maxQueueBytes}（当前 ${current}）`);

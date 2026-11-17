@@ -113,7 +113,8 @@ export function createQuarantine({ memoHome, scope = 'default', maxQueueBytes, t
       mkdirSync(inboxDir, { recursive: true });
       const payload = `${rows.map((r) => JSON.stringify(r)).join('\n')}\n`;
       const bytes = Buffer.byteLength(payload, 'utf8');
-      const current = existsSync(file) ? statSync(file).size : 0;
+      let current = 0;
+      try { current = statSync(file).size; } catch (e) { if (e.code !== 'ENOENT') throw e; }
       if (current + bytes > maxBytes) {
         const err = new Error(`quarantine: 写入 ${bytes} 字节会超过上限 ${maxBytes}（当前 ${current}）`);
         err.code = 'E_QUEUE_QUOTA';

@@ -44,7 +44,6 @@ const DICT = {
   '读会话': 'read transcript',
   '交接文档': 'handoff doc',
   'LLM · llm（默认关）': 'LLM · llm (off by default)',
-  '可插拔': 'pluggable',
   '出队': 'drain',
   '标题摘要': 'title / summary',
   '底座 · storage / core': 'Base · storage / core',
@@ -164,8 +163,6 @@ const DICT = {
   '超时/额度/输出不可解析 → 记': 'Timeout / quota / unparsable output → record',
   '，标题回落原文，写入链路零影响': ', title falls back to source text; writes are unaffected',
   '成本量级': 'Cost scale',
-  '33 条记忆全量重建 ≈ 1 分 50 秒、< ¥0.02（GLM-5.3-Flash）':
-    'Full rebuild of 33 memories ≈ 1m50s, < ¥0.02 (GLM-5.3-Flash)',
   '三步开启': 'Enable in three steps',
   '写 key 到 ~/.config/sedimem/llm-key（chmod 600）': 'Write key to ~/.config/sedimem/llm-key (chmod 600)',
   'policy.llm.thinking 默认 disabled：GLM-4.5+ 的思考链会吃掉 max_tokens，content 变成空串（v1.0.1 修）':
@@ -271,6 +268,10 @@ const DICT = {
   '质量 15 项': '15 quality checks',
   '（低于阈值直接 fail，不看人）': ' (fail below, no exceptions)',
   'CI 上的 11 个 job': 'CI jobs',
+  '<!-- A 客户端 -->': '<!-- A clients -->',
+  '<!-- B 接口层 -->': '<!-- B interface -->',
+  '<!-- C 核心 -->': '<!-- C core -->',
+  '<!-- D 数据 -->': '<!-- D data -->',
 };
 
 const CJK = /[\u4e00-\u9fff]/;
@@ -286,7 +287,7 @@ export function dictFor(lang) {
 
 export function translateHtml(html, lang = 'zh') {
   if (lang !== 'en') return html;
-  let out = html.replace(/<!--[\s\S]*?-->/g, '');
+  let out = html;
   for (const [zh, en] of dictFor(lang)) {
     if (out.includes(zh)) out = out.split(zh).join(en);
   }

@@ -16,7 +16,6 @@ const DICT = {
   '编辑': 'Edit',
   '导入': 'Import',
   '任务': 'Tasks',
-  '交接': 'Handoffs',
   '设置': 'Settings',
   '只读优先 · 编辑需': 'Read-only first · editing needs',
   '分库': 'Scope',
@@ -43,7 +42,6 @@ const DICT = {
   '命中': 'Hit',
   '今天没有写入。': 'No writes today.',
   '这个分库在这一天是安静的。': 'This scope was quiet on this day.',
-  '加载失败 ·': 'Load failed ·',
   '清理': 'Cleanup',
   '人工显式取代': 'Explicit manual supersede',
   '新事实：无相同内容，也无同槽记录': 'New fact: no identical content and no same-slot record',
@@ -52,7 +50,6 @@ const DICT = {
   '同槽已有完全相同的事实': 'The same slot already has an identical fact',
 
   // 搜索
-  '搜索记忆': 'Search memory',
   '词法检索（语义道启用时自动融合）；结果按相关度排序，跟随顶栏分库。':
     'Lexical search (fused with the semantic lane when enabled); results ranked by relevance, following the top-bar scope.',
   '输入关键词，回车搜索': 'Type a keyword and press Enter',

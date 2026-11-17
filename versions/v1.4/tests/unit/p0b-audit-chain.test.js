@@ -100,7 +100,7 @@ test('B5.4 锚文件写链头；memo audit verify 退出码 0/1 可判', async (
   try {
     await svc.write({ kind: 'fact', text: '锚定探针', source: { agent: 'test' } });
     const events = readEvents(memoHome);
-    const anchor = await writeAnchor({ memoHome, events });
+    await writeAnchor({ memoHome, events });
     assert.ok(existsSync(join(memoHome, 'events.anchor.json')));
     const disk = JSON.parse(readFileSync(join(memoHome, 'events.anchor.json'), 'utf8'));
     assert.equal(disk.chainHead, eventHash(events[events.length - 1]));

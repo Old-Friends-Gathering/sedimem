@@ -31,10 +31,13 @@ test('tr: user data is left alone', () => {
 });
 
 test('English README and site use English images and link the project site', async () => {
-  const site = 'https://old-friends-gathering.github.io/sedimem/';
+  const want = { host: 'old-friends-gathering.github.io', path: '/sedimem/' };
   for (const rel of ['README.md', 'README.en.md']) {
     const body = await fsp.readFile(path.join(ROOT, rel), 'utf8');
-    assert.ok(body.includes(site), `${rel} 缺少项目站链接`);
+    const ok = [...body.matchAll(/https:\/\/[^\s)<>"']+/g)]
+      .map((m) => { try { return new URL(m[0]); } catch { return null; } })
+      .some((u) => u && u.hostname === want.host && u.pathname === want.path);
+    assert.ok(ok, `${rel} 缺少项目站链接`);
   }
   const files = ['README.en.md', 'docs/en/index.html'];
   for (const rel of files) {
