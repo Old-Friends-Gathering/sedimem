@@ -236,7 +236,7 @@ const hero = () => `<!doctype html><meta charset="utf-8"><style>${BASE}
     <p>本地优先的个人记忆系统：真相层只追加、永不改写，索引/视图/派生全部可重建。DSH / Codex / Claude 三端共用同一个 MCP server。</p>
     <div class="pills">
       <span class="pill"><b>0</b> 运行时依赖</span>
-      <span class="pill"><b>768</b> tests · I1–I56</span>
+      <span class="pill"><b>831</b> tests · I1–I56</span>
       <span class="pill"><b>as-of</b> 回查任意时点</span>
       <span class="pill"><b>MIT</b> · 数据只在 <span class="m">~/.memo/</span></span>
     </div>

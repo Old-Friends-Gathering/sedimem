@@ -60,8 +60,12 @@ export async function cmdSearch(argv, opts, asJson) {
     else {
       process.stdout.write(`共 ${result.total} 条（asOf ${result.asOf}）\n`);
       for (const { record, score } of result.items) {
-        process.stdout.write(`\n# ${record.id}  score=${score.toFixed(3)}\n`);
+        const mark = record.snippetTruncated ? '  [snippet]' : '';
+        process.stdout.write(`\n# ${record.id}  score=${score.toFixed(3)}${mark}\n`);
         printRecord(record);
+      }
+      if (result.readBudget?.truncated) {
+        process.stdout.write(`（会话读预算已满：${result.readBudget.truncatedReason}；本次返回 ${result.readBudget.returned} 条）\n`);
       }
     }
   } finally {
@@ -90,6 +94,8 @@ export async function cmdGet(positional) {
       throw e;
     }
     printRecord(record);
+    // B5 读取审计：get 也是「读过」，要能从 events 追溯（只记 id/surface，不记内容）
+    await service._event('read', record.id, { surface: 'cli', recordId: record.id });
   } finally {
     await service.close();
   }
@@ -217,8 +223,40 @@ export async function cmdScope(asJson) {
   return 0;
 }
 
-/** memo doctor（任务 A）：损坏库也正常打印结构化结果并退出码 1（有 error）；健康库 0。 */
-export async function cmdDoctor(asJson) {
+/**
+ * Windows 适配层说明（B6）。
+ * 结论（docs/06 §4.1）：Windows 只支持 kernel/CLI；adapters（DSH/Codex/Claude 客户端适配、
+ * launchd 自启等）不支持。doctor 在 win32 明确说明并以退出码 2 标记「部分支持」。
+ * @param {string} [platform]
+ */
+export function windowsAdapterNotice(platform = 'win32') {
+  return {
+    ok: false,
+    platform,
+    supported: ['kernel', 'cli'],
+    unsupported: ['adapters', 'launchd'],
+    exitCode: 2,
+    issues: [{
+      code: 'windows_adapters_unsupported',
+      severity: 'warning',
+      message: 'Windows 仅支持 kernel/CLI（items/events/brief/search 等命令可用）；'
+        + 'adapters（DSH/Codex/Claude 客户端注入、launchd 自启）不支持。详见 docs/06 §4.1。',
+    }],
+  };
+}
+
+/** memo doctor（任务 A）：损坏库也正常打印结构化结果并退出码 1（有 error）；健康库 0。
+ *  win32：先打印适配层限制（exit 2），不把「部分支持」伪装成全绿。 */
+export async function cmdDoctor(asJson, platform = process.platform) {
+  if (platform === 'win32') {
+    const notice = windowsAdapterNotice(platform);
+    if (asJson) printJson(notice);
+    else {
+      process.stdout.write('Windows：仅支持 kernel/CLI\n');
+      for (const i of notice.issues) process.stdout.write(`  [${i.severity}] ${i.code}: ${i.message}\n`);
+    }
+    return 2;
+  }
   let service;
   try {
     service = await loadService();
@@ -263,4 +301,81 @@ export async function cmdDoctor(asJson) {
     }
   }
   return result.ok ? 0 : 1; // 有 error → 退出码 1
+}
+
+/**
+ * memo inject（B5）：构建一次注入并把审计写进 events.jsonl（kind:'inject'）。
+ * 与插件 pre-step 的差别：插件是高频只读钩子，审计由本命令/显式调用方写，
+ * 避免每步注入都落盘（docs/02 §3.24）。
+ */
+export async function cmdInject(opts, asJson) {
+  const service = await loadService(serviceOpts());
+  try {
+    const { buildInjection } = await import('../../render/inject.js');
+    const built = await buildInjection({
+      memoHome: service.memoHome,
+      scope: service.scope,
+      maxChars: parseNumber(opts, 'max-chars') ?? parseNumber(opts, 'maxChars'),
+      allowUntrusted: opts['allow-untrusted'] === true,
+      surface: typeof opts.surface === 'string' ? opts.surface : 'cli',
+    });
+    if (built === null) {
+      if (asJson) printJson({ text: null, chars: 0, audited: false });
+      else process.stdout.write('（无可注入内容）\n');
+      return 0;
+    }
+    const audited = opts['no-audit'] !== true;
+    if (audited) await service._event('inject', null, built.audit);
+    if (asJson) printJson({ ...built, audited });
+    else process.stdout.write(`${built.text}\n`);
+    return 0;
+  } finally {
+    await service.close();
+  }
+}
+
+/**
+ * memo audit verify|anchor（B5）：本地校验/锚定 events.jsonl 的哈希链。
+ * 边界（必须如实说明）：**不抗同 UID 重算**——能重写事件文件的人也能重算整条链；
+ * `--git` 只是把当前链头写进本地 git 提交（不 push），作为外部时间戳的可选手段。
+ */
+export async function cmdAudit(positional, opts, asJson) {
+  const sub = positional[0] ?? 'verify';
+  const service = await loadService(serviceOpts());
+  try {
+    const { verifyEventChain, writeAnchor, eventHash } = await import('../../storage/audit.js');
+    if (sub === 'verify') {
+      const events = await service.store.readEvents();
+      const verify = verifyEventChain(events);
+      const result = { ok: verify.ok, events: events.length, chained: verify.chained, broken: verify.broken };
+      if (asJson) printJson(result);
+      else {
+        process.stdout.write(`${verify.ok ? 'OK' : '链断裂'}（events=${events.length}，chained=${verify.chained}）\n`);
+        for (const b of verify.broken) process.stdout.write(`  [#${b.index}] ${b.reason}\n`);
+      }
+      return verify.ok ? 0 : 1;
+    }
+    if (sub === 'anchor') {
+      const events = await service.store.readEvents();
+      const anchor = await writeAnchor({ memoHome: service.memoHome, events });
+      let git = null;
+      if (opts.git === true) {
+        // 只 add/commit 两个本地文件；不 push（审计锚不引入远端副作用）
+        const { spawnSync } = await import('node:child_process');
+        try {
+          spawnSync('git', ['-C', service.memoHome, 'add', 'events.jsonl', 'events.anchor.json'], { stdio: 'pipe' });
+          git = spawnSync('git', ['-C', service.memoHome, 'commit', '-m', `memo audit anchor ${new Date().toISOString()}`], { stdio: 'pipe' });
+        } catch (err) {
+          git = { status: null, error: err };
+        }
+      }
+      const result = { ok: true, ...anchor, head: events.length > 0 ? eventHash(events[events.length - 1]) : null, git: git ? { status: git.status } : null };
+      if (asJson) printJson(result);
+      else process.stdout.write(`锚已写入 ${anchor.path}（count=${anchor.count}，chained=${anchor.chained}）\n`);
+      return 0;
+    }
+    throw new UsageError('memo audit verify|anchor [--git] [--json]');
+  } finally {
+    await service.close();
+  }
 }

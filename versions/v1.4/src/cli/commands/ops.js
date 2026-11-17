@@ -245,3 +245,26 @@ export async function cmdTrust(positional, opts, asJson) {
     await service.close();
   }
 }
+
+/**
+ * memo mcp（B6）：在前台启动 MCP server 子进程，stdio 直接继承。
+ * 为什么用子进程：server.js 的 stdio 协议与 CLI 的 stdout 文案互斥，
+ * 同进程会把 USAGE/日志混进 JSON-RPC 流，客户端直接解析失败。
+ * @param {string[]} argv 原样转发给 server 的参数
+ */
+export async function cmdMcp(argv = []) {
+  const { spawn } = await import('node:child_process');
+  const { fileURLToPath } = await import('node:url');
+  const serverPath = fileURLToPath(new URL('../../mcp/server.js', import.meta.url));
+  const child = spawn(process.execPath, [serverPath, ...argv], { stdio: 'inherit', env: process.env });
+  return await new Promise((resolve) => {
+    child.on('error', (err) => {
+      process.stderr.write(`memo mcp 启动失败: ${err.message}\n`);
+      resolve(1);
+    });
+    child.on('exit', (code, signal) => {
+      if (signal) resolve(1);
+      else resolve(typeof code === 'number' ? code : 1);
+    });
+  });
+}

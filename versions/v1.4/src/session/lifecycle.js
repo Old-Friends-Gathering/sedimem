@@ -6,11 +6,12 @@
 import { randomBytes } from 'node:crypto';
 import {
   readdirSync, readFileSync, existsSync, mkdirSync, writeFileSync,
-  appendFileSync, renameSync, statSync,
+  renameSync, statSync,
 } from 'node:fs';
 import path from 'node:path';
 import { systemClock } from '../core/clock.js';
 import { itemsFileName, scopeFromItemsFileName } from '../config/paths.js';
+import { appendAuditedEventSync } from '../storage/audit.js';
 // 只取形状常量，scope-state.js 无反向依赖（无循环）
 import { SCOPE_PATTERN } from '../core/scope-state.js';
 
@@ -477,11 +478,12 @@ export function removeSession({ memoHome, scope, clock = systemClock }) {
     renameSync(src, dest);
     files.push(path.basename(src));
   }
-  // 审计事件（与 store.appendEvent 同一行格式：{ts,op,scope,id,detail}）
+  // 审计事件：与 store.appendEvent 同一条链（kind/seq/prevHash/hash）。
+  // removeSession 是同步数据层 API（CLI/Web 直接调），这里用同步版链头读取，避免为一条事件改成 async。
   const ts = clock.now ? clock.now() : new Date().toISOString();
-  appendFileSync(
+  appendAuditedEventSync(
     path.join(memoHome, 'events.jsonl'),
-    JSON.stringify({ ts, op: 'session_remove', scope, id: null, detail: { movedTo } }) + '\n',
+    { ts, op: 'session_remove', scope, id: null, detail: { movedTo } },
   );
   return { scope, movedTo, files };
 }

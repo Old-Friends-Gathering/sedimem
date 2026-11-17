@@ -57,6 +57,10 @@ const USAGE = `memo —— 本地跨会话记忆系统 v0.1
   memo session archive --scope session:<id> [--yes]              # 归档整个任务目录 → archive/
   memo migrate dsh-memory [--db path]
   memo serve [--port N] [--no-ui]                             # 只读 Web UI/API（默认 127.0.0.1:7788；--no-ui 只提供 API）
+  memo mcp [--surface core|all] [--session-tools]             # MCP server（默认 all=17 工具；core=3 或 10）
+  memo inject [--max-chars N] [--allow-untrusted] [--no-audit] [--json]  # 构建一次注入并写 kind:"inject" 审计
+  memo audit verify|anchor [--git] [--json]                   # events.jsonl 哈希链本地校验/锚定（不抗同 UID 重算）
+  memo quarantine list|accept|reject [--ids a,b] [--by 人] [--json]  # 隔离区只存引用；accept 仅人工提升
 
 环境:
   MEMO_HOME   记忆库根目录（默认 ~/.memo）
@@ -72,6 +76,11 @@ async function main() {
     return 0;
   }
   const command = argv[0];
+  // mcp 原样转发参数（--surface/--session-tools 是子进程的，不该被 CLI 解析器吞掉）
+  if (command === 'mcp') {
+    const { cmdMcp } = await import('./commands/ops.js');
+    return await cmdMcp(argv.slice(1));
+  }
   const { positional, opts } = parseArgs(argv.slice(1));
   setCurrentOpts(opts); // 让 loadService() 能读到 --scope（0.6.2）
   const asJson = Boolean(opts.json);
@@ -190,6 +199,18 @@ async function main() {
       return 0;
     case 'serve':
       return await cmdServe(opts);
+    case 'inject': {
+      const { cmdInject } = await import('./commands/memory.js');
+      return await cmdInject(opts, asJson);
+    }
+    case 'audit': {
+      const { cmdAudit } = await import('./commands/memory.js');
+      return await cmdAudit(positional, opts, asJson);
+    }
+    case 'quarantine': {
+      const { quarantineCli } = await import('./quarantine.js');
+      return await quarantineCli({ sub: positional[0], positional: positional.slice(1), opts, json: asJson });
+    }
     default:
       throw new UsageError(`未知命令: ${command}\n${USAGE}`);
   }

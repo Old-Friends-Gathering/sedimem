@@ -23,7 +23,7 @@ cd "$(cat versions/CURRENT)" && node eval/run.js   # 行为（I1–I56）
 
 | 项 | 指标 | 阈值 | 失败含义 |
 |---|---|---|---|
-| `test (22)` / `test (24)` | `node --test 'tests/**/*.test.js'` | **0 失败**（2026-11-17 实测 768 用例） | 行为回归，或测试自身有竞态（历史上 I8 就因此偶发红，已修根因） |
+| `test (22)` / `test (24)` | `node --test 'tests/**/*.test.js'` | **0 失败**（2026-11-17 实测 831 用例） | 行为回归，或测试自身有竞态（历史上 I8 就因此偶发红，已修根因） |
 | `eval (I1–I56)` | `eval/run.js` 退出码 | **全 PASS**（最近一次见 `eval/results/LATEST.json`） | 注入式行为契约破了：重复/冲突/过时/删除/投毒/配额/改写/并发/时区/遮蔽/裁决回路/中文改写等 56 条 |
 | `windows-smoke` | `node tools/windows-smoke.mjs`（`windows-latest`） | **全部 PASS** | Windows 真相层文件名 / 分库枚举 / `compact` / `nightly` 之一回归（见 §一.1） |
 | 关键指标 | `dupRatio` / `conflictRate` | `dupRatio = 0`；`conflictRate` 只允许由**真冲突用例**产生 | 冗余或冲突治理失效 |
@@ -66,7 +66,7 @@ cd "$(cat versions/CURRENT)" && node eval/run.js   # 行为（I1–I56）
 | ID | 检查 | 判定 | 为什么这条值得占一个门禁 |
 |---|---|---|---|
 | Q1 | 零运行时依赖 | 当前版本与 `packages/*` 的 `dependencies/devDependencies/peerDependencies/optionalDependencies` 全空；`type=module`；有 `engines.node`；`src/` 里无外部 `import`（冻结快照不在此列；adapters/plugin 在 G6 落地前不得引入运行时依赖） | 便携性是本项目的前提（三端装得上、无需联网装包）。想引库必须先改架构文档 |
-| Q2 | 源码规模 | 单文件 **≤ 900 行**；`src` 总量 **≤ 13000 行**（v0.6 从 12000 调高：新增 session 模块 `src/session/*` 约 450 行 + `cli/session` 130 行 + 写侧契约约 60 行；单文件硬线不动） | 防上帝模块。`api/service.js` 868 行已登记 v0.2 拆分 |
+| Q2 | 源码规模 | 单文件 **≤ 900 行**；`src` 总量 **≤ 21000 行**（v1.4 P0b 新增 trust/taint、删除/profile、Web 鉴权、注入审计、隔离区与读预算约 2000 行；单文件硬线不动） | 防上帝模块。`api/service.js` 868 行已登记 v0.2 拆分 |
 | Q3 | 测试清单 | 测试文件 ≥ 8；`tests/unit` 与 `tests/injection` 都非空 | 防"只有单元测试没有行为测试"或反之 |
 | Q4 | 评测对齐 | `eval/run.js` 里声明的每个 I 用例都要有注入测试文件；被引用的 `eval/cases/*.json` 必须存在 | 防"删了用例只留 runner 还显示全绿" |
 | Q5 | 契约覆盖 | `src/` 每个 `export` 必须出现在 `docs/`（不含 research）中；**≥ 90%** | 防"导出即隐形契约"。内部工具写进 docs/02 §3.8，对外 API 写正文 |
@@ -157,7 +157,7 @@ Pages 构建是异步的（实测 2–5 分钟），脚本默认重试 20×15s�
 
 | 门禁 | 结果 |
 |---|---|
-| 单元 + 注入式 | **768 tests pass**（`node --test 'tests/**/*.test.js'`） |
+| 单元 + 注入式 | **831 tests pass**（`node --test 'tests/**/*.test.js'`） |
 | 评测 | **eval I1–I56 全 PASS**（`node eval/run.js`；最近一次结果归档于 `eval/results/LATEST.json`，2026-11-17T04:06Z，56/56 通过） |
 | 质量 | **15/15**（Q1–Q11 + Q13–Q16） |
 | 安全 | 9/9（含 S9：src/web 无写接口、只绑回环） |
@@ -167,7 +167,8 @@ Pages 构建是异步的（实测 2–5 分钟），脚本默认重试 20×15s�
 
 > Q2 单文件上限仍是 900 行；源码总量上限的变动史：v0.4 从 9000 调到 12000（新增语义道 / 捕获 /
 > 分歧 / 注入 / 脱敏 / 搜索页共 8 个模块约 1450 行），v0.6 从 12000 调到 **13000**（新增会话临时库
-> `src/session/*` 约 450 行、`cli/session` 130 行、`core/record` 写侧契约约 60 行）。
+> `src/session/*` 约 450 行、`cli/session` 130 行、`core/record` 写侧契约约 60 行），v1.4 P0b 从 19000 调到 **21000**
+> （trust/taint、按来源删除、profile、Web 鉴权、注入审计、隔离区、读预算）。
 > 放宽的始终是总量，不是单文件——理由是「宁要多个职责单一的小文件，不要一个变大的文件」。
 
 ### 覆盖率为何 exclude `src/cli/memo.js`

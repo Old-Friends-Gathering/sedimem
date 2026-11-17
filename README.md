@@ -272,6 +272,10 @@ claude mcp add --scope user memo -e MEMO_HOME=$HOME/.memo -- \
 | `memo session expand --scope session:<id> --segment <segId> [--to-file]` | — |
 | `memo session archive --scope session:<id> [--yes]` | — |
 | `memo migrate dsh-memory [--db path]` | — |
+| `memo mcp [--surface core|all] [--session-tools]` | MCP server：默认 all（17 工具），`--surface core` 只留 search/write/brief（3 个） |
+| `memo inject [--max-chars N] [--allow-untrusted] [--no-audit] [--json]` | 构建一次注入并写 `kind:"inject"` 审计（默认扣留 T2 原文） |
+| `memo audit verify|anchor [--git] [--json]` | events.jsonl 哈希链本地校验 / 写链头锚（不抗同 UID 重算；不 push） |
+| `memo quarantine list|accept|reject [--ids a,b] [--by 人] [--json]` | 隔离区只存引用；accept 仅人工提升 |
 | `memo serve [--port N] [--no-ui]` | — |
 
 </details>
@@ -280,7 +284,7 @@ claude mcp add --scope user memo -e MEMO_HOME=$HOME/.memo -- \
 
 ![五层门禁：质量 → 安全 → 覆盖率 → docs-drift → pages-verify](docs/shots/diagrams/gates.png)
 
-本地脚本 = CI 脚本：质量 15 项 + 安全 9 项 + 覆盖率（lines ≥ 85 / branches ≥ 70 / functions ≥ 90）+ docs-drift + pages-verify，另含 768 tests 与 eval I1–I56。
+本地脚本 = CI 脚本：质量 15 项 + 安全 9 项 + 覆盖率（lines ≥ 85 / branches ≥ 70 / functions ≥ 90）+ docs-drift + pages-verify，另含 831 tests 与 eval I1–I56。
 
 ```bash
 node tools/quality-check.mjs && node tools/security-check.mjs && node tools/coverage-gate.mjs

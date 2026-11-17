@@ -8,7 +8,7 @@
 import process from 'node:process';
 import readline from 'node:readline';
 import { validateArgs } from './validate.js';
-import { TOOLS_BY_NAME, SERVER_INFO, INSTRUCTIONS, MAX_LINE_BYTES } from './tools.js';
+import { SERVER_INFO, INSTRUCTIONS, MAX_LINE_BYTES, toolsForSurface } from './tools.js';
 import {
   getService, closeAllServices, initConnScope, makeServiceFacade,
 } from './session-tools.js';
@@ -18,6 +18,41 @@ import { PROMOTE_KINDS } from '../session/cli-support.js';
 
 // 兼容导出：插件与测试从 server.js import 这些名字（原实现拆到 tools.js）
 export { validateArgs, MAX_LINE_BYTES, INSTRUCTIONS, SERVER_INFO, PROMOTE_KINDS };
+
+/**
+ * 解析 server 参数（B6）：`memo mcp --surface core|all [--session-tools]`。
+ * 默认 all：v1.4 之前的所有客户端都不带参数，改默认会让它们静默少工具（兼容性红线）。
+ * @param {string[]} argv
+ * @returns {{surface: 'core'|'all', sessionTools: boolean, help: boolean}}
+ */
+export function parseServerArgs(argv = []) {
+  let surface = 'all';
+  let sessionTools = false;
+  let help = false;
+  for (let i = 0; i < argv.length; i++) {
+    const a = argv[i];
+    if (a === '--help' || a === '-h') { help = true; continue; }
+    if (a === '--session-tools') { sessionTools = true; continue; }
+    if (a === '--surface' || a.startsWith('--surface=')) {
+      const value = a === '--surface' ? argv[++i] : a.slice('--surface='.length);
+      if (value !== 'core' && value !== 'all') {
+        const err = new Error(`--surface 只接受 core|all，收到 ${JSON.stringify(value)}`);
+        err.code = 'E_USAGE';
+        throw err;
+      }
+      surface = value;
+      continue;
+    }
+    const err = new Error(`未知参数: ${a}`);
+    err.code = 'E_USAGE';
+    throw err;
+  }
+  return { surface, sessionTools, help };
+}
+
+const SERVER_USAGE = '用法: memo-mcp [--surface core|all] [--session-tools]\n' +
+  '  --surface core   只暴露 search/write/brief 三个工具（默认 all）\n' +
+  '  --session-tools  core 下额外暴露 7 个会话/任务库工具\n';
 
 const SUPPORTED_PROTOCOL_VERSIONS = new Set(['2025-06-18', '2025-03-26', 20241105].map(String));
 const FALLBACK_PROTOCOL_VERSION = '2025-06-18';
@@ -78,11 +113,11 @@ async function handleMessage(msg, _service, state) {
       return rpcResult(id, {});
     case 'tools/list':
       return rpcResult(id, {
-        tools: [...TOOLS_BY_NAME.values()].map(({ name, description, inputSchema }) => ({ name, description, inputSchema })),
+        tools: [...state.tools.values()].map(({ name, description, inputSchema }) => ({ name, description, inputSchema })),
       });
     case 'tools/call': {
       const toolName = params && params.name;
-      const tool = TOOLS_BY_NAME.get(toolName);
+      const tool = state.tools.get(toolName);
       if (!tool) {
         if (isNotification) return null;
         return rpcError(id, -32601, `未知工具: ${toolName}`);
@@ -117,6 +152,11 @@ async function handleMessage(msg, _service, state) {
 
 async function main() {
   // 分库在 initialize 时按 clientInfo 决定（见 initConnScope）：不同客户端的覆盖文件互不干扰。
+  const args = parseServerArgs(process.argv.slice(2));
+  if (args.help) {
+    process.stderr.write(SERVER_USAGE);
+    return;
+  }
   // B4：默认信任本机 stdio；MEMO_MCP_TOKEN / MEMO_MCP_REQUIRE_TOKEN=1 时强制 token（取舍见 token-gate.js）。
   // 必须先解析门禁（可能读 ~/.memo/web-token）再建 readline：
   // readline 一旦创建就开始消费 stdin，await 期间到达的行会没有监听者，管道输入会被整段丢掉。
@@ -126,6 +166,9 @@ async function main() {
   // 每连接独立：initialize 门禁 + 运行期 scope（client/scope 在 initialize 时填充）
   const connState = {
     initialized: false, client: 'unknown', scope: null, scopeSource: null, auth: tokenGate,
+    // B6 工具面：在连接建立前就定好，tools/list 与 tools/call 用同一张表（不可能列了却调不到）。
+    surface: args.surface,
+    tools: new Map(toolsForSurface(args.surface, { sessionTools: args.sessionTools }).map((t) => [t.name, t])),
   };
   // v1.0 W3 裁决 86：MCP 空闲时排空派生队列（第二顺位 drain 者）。
   // 只在端口就绪且已初始化时工作：未配置 LLM 时零成本，协议处理路径完全不受影响。
