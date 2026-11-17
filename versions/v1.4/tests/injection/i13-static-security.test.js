@@ -10,7 +10,10 @@ import { join, dirname } from 'node:path';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 
-import { createWebServer } from '../../src/web/server.js';
+import { createAuthedWebServer as createWebServer, installAuthFetch } from '../support/web-auth.js';
+
+// B4：所有 /api/* 需要会话 token；本垫片对登记过的 server 自动补 Authorization（非 GET 再补同源 Origin）
+installAuthFetch();
 
 const CASE = JSON.parse(readFileSync(
   join(dirname(fileURLToPath(import.meta.url)), '../../eval/cases/i13-static-security.json'),
@@ -30,10 +33,11 @@ const DIR_PATHS = Object.freeze(['/ui/', '/subdir']);
 const WRITE_METHODS = Object.freeze(['POST', 'PUT', 'DELETE', 'PATCH']);
 
 /** 发送「原始路径」请求：不经 URL 规范化（fetch/new URL 会把 /../ 吞掉），必须走裸 http.request。 */
-function rawReq(port, rawPath, method = 'GET') {
+function rawReq(port, rawPath, method = 'GET', token) {
   return new Promise((resolve, reject) => {
+    const headers = token ? { authorization: `Bearer ${token}` } : {};
     const req = http.request(
-      { host: '127.0.0.1', port, method, path: rawPath },
+      { host: '127.0.0.1', port, method, path: rawPath, headers },
       (res) => {
         const chunks = [];
         res.on('data', (d) => chunks.push(d));
@@ -83,7 +87,7 @@ test('I13 静态资源与接口安全：可达性 / 穿越 404 / 只读 / 绑定
 
     // 5) 只读语义：写方法打 /api/summary 一律 405
     for (const m of WRITE_METHODS) {
-      const r = await rawReq(port, '/api/summary', m);
+      const r = await rawReq(port, '/api/summary', m, web.token);
       assert.equal(r.status, 405, `${m} /api/summary 应 405，实际 ${r.status}`);
       let body = null;
       try { body = JSON.parse(r.body); } catch { /* 保持 null */ }
@@ -91,7 +95,7 @@ test('I13 静态资源与接口安全：可达性 / 穿越 404 / 只读 / 绑定
     }
 
     // 6) 未知 /api/nope → 404 且 JSON 形状 ok:false
-    const nope = await rawReq(port, '/api/nope');
+    const nope = await rawReq(port, '/api/nope', 'GET', web.token);
     assert.equal(nope.status, 404, '未知 API 端点应 404');
     const nopeBody = JSON.parse(nope.body);
     assert.equal(nopeBody.ok, false, '404 API 响应应为 { ok:false, ... }');

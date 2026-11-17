@@ -10,7 +10,10 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
 import { listScopes } from '../../src/web/scopes.js';
-import { createWebServer } from '../../src/web/server.js';
+import { createAuthedWebServer as createWebServer, installAuthFetch } from '../support/web-auth.js';
+
+// B4：所有 /api/* 需要会话 token；本垫片对登记过的 server 自动补 Authorization（非 GET 再补同源 Origin）
+installAuthFetch();
 
 /** 造一个分库文件：n 条最小合法记录 */
 function seedScope(memoHome, scope, texts) {

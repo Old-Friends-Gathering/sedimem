@@ -13,7 +13,10 @@ import zlib from 'node:zlib';
 
 import { appendSegment } from '../../src/session/ledger.js';
 import { cwdToSessionSlug } from '../../src/session/transcript.js';
-import { createWebServer } from '../../src/web/server.js';
+import { createAuthedWebServer as createWebServer, installAuthFetch } from '../support/web-auth.js';
+
+// B4：所有 /api/* 需要会话 token；本垫片对登记过的 server 自动补 Authorization（非 GET 再补同源 Origin）
+installAuthFetch();
 
 const TASK = '20261115-1000-abcd'; // 预置 2 段
 const TASK_CAP = '20261115-1010-cafe'; // capture 目标（只有 meta）

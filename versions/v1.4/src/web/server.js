@@ -1,5 +1,5 @@
-// web/server.js — 只读 HTTP 服务（W3，契约：docs/08-web-ui.md §4.2、docs/02 §3.9 裁决 32/33/34）
-// 只绑回环（D1）、无鉴权、无写端点；内部复用一个 MemoryService 实例。
+// web/server.js — HTTP 服务（W3，契约：docs/08-web-ui.md §4.2、docs/02 §3.9 裁决 32/33/34、§3.24 B4）
+// 只绑回环、强校验 Host/Origin、所有 /api/* 需要会话 token（cookie 或 Bearer）；内部复用一个 MemoryService 实例。
 
 import http from 'node:http';
 import path from 'node:path';
@@ -10,16 +10,25 @@ import { listScopes } from './scopes.js';
 import { handleApi } from './handlers.js';
 import { TASK_QUERY_PATHS } from './api/task-ledger.js';
 import { createStaticHandler } from './static.js';
+import {
+  assertHostAllowed, isLoopbackHost, presentedToken, sessionCookie,
+} from './auth.js';
+import { issueWebToken, tokensEqual } from '../config/web-token.js';
+import { describePermIssues, ensureMemoDir, inspectMemoPerms } from '../config/perms.js';
 
 const UI_DIR = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../ui');
 
-/** 回环地址判定（127.0.0.0/8、::1、localhost）。'0.0.0.0'/'' 一律视为非回环。 */
-function isLoopbackHost(host) {
-  const h = String(host ?? '').trim().toLowerCase();
-  if (h === 'localhost') return true;
-  if (h === '::1' || h === '[::1]') return true;
-  const m = /^127\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/.exec(h);
-  return Boolean(m) && m.slice(1).every((n) => Number(n) <= 255);
+const JSON_HEADERS = { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store' };
+const HTML_HEADERS = { 'cache-control': 'no-store', 'x-content-type-options': 'nosniff' };
+
+/** 认证失败统一 401：不区分「没带 token」与「token 错」（避免给探测者提供区分信号）。 */
+function unauthorized(res) {
+  res.writeHead(401, { ...JSON_HEADERS, 'www-authenticate': 'Bearer realm="memo"' });
+  res.end(JSON.stringify({
+    ok: false,
+    code: 'E_UNAUTHORIZED',
+    message: '需要会话 token：浏览器请先访问 / 取得 HttpOnly cookie，脚本用 Authorization: Bearer <~/.memo/web-token>',
+  }));
 }
 
 /**
@@ -32,6 +41,7 @@ export async function createWebServer({
   memoHome, scope, port = 7788, host = '127.0.0.1', includeUi = true, service,
   write = process.env.MEMO_WRITE === '1', // W7：默认只读；显式 {write:true} 或 MEMO_WRITE=1 才开放写端点
   writeEnabled, // v1.2：与 write 等价的显式别名（插件/测试按 createWebServer({writeEnabled:true}) 调用）
+  token, // B4：测试/嵌入方可显式指定；缺省则每次启动重新生成并写入 <memoHome>/web-token
 } = {}) {
   const writable = writeEnabled === true || write === true;
   // W7：把「是否可写」同步到进程环境，供 /api/summary 与 UI 只读门禁读取（避免再穿一层参数）
@@ -49,6 +59,12 @@ export async function createWebServer({
     throw err;
   }
   const svc = service ?? await createMemoryService({ memoHome, scope });
+  // B4：浏览器面与 MCP 面共用同一个 token 文件；每次启动重新生成（docs/plans/v1.4-p0b.md B4）。
+  await ensureMemoDir(memoHome);
+  const sessionToken = typeof token === 'string' && token !== '' ? token : await issueWebToken(memoHome);
+  // 权限自查只告警不阻断：存量 `~/.memo` 多为 0755，阻断会把老用户挡在门外（docs/02 §3.24）。
+  const permReport = await inspectMemoPerms(memoHome);
+  for (const line of describePermIssues(permReport)) process.stderr.write(`${line}\n`);
   const serveStatic = includeUi ? createStaticHandler(UI_DIR) : null;
   // 多分库浏览（docs/08 §13）：?scope= 指定其它分库时按需懒建服务并缓存。
   // scope 会直接进文件路径（items/<scope>.jsonl），所以必须过 SCOPE_PATTERN —— 否则就是 path traversal。
@@ -78,7 +94,7 @@ export async function createWebServer({
       // （js/stack-trace-exposure；本地服务也不该把内部路径递到浏览器里）。详情写 stderr 供排障。
       process.stderr.write(`[memo-web] ${req.method} ${req.url} 失败: ${err?.stack ?? err}\n`);
       if (!res.headersSent) {
-        res.writeHead(500, { 'content-type': 'application/json; charset=utf-8' });
+        res.writeHead(500, JSON_HEADERS);
         res.end(JSON.stringify({
           ok: false,
           code: err?.code ?? 'E_INTERNAL',
@@ -91,17 +107,32 @@ export async function createWebServer({
   });
 
   async function handle(req, res) {
+    const actualPort = server.address()?.port ?? port;
+    // 1) Host 强校验：DNS rebinding 的第一道闸（docs/02 §3.24）。任何路径都先过。
+    try {
+      assertHostAllowed(req, actualPort);
+    } catch (err) {
+      res.writeHead(403, JSON_HEADERS);
+      res.end(JSON.stringify({ ok: false, code: err?.code ?? 'E_BAD_HOST', message: err?.message ?? 'Host 不合法' }));
+      return;
+    }
     let url;
     try {
       url = new URL(req.url, `http://${req.headers.host ?? '127.0.0.1'}`);
     } catch {
-      res.writeHead(400, { 'content-type': 'application/json; charset=utf-8' });
+      res.writeHead(400, JSON_HEADERS);
       res.end(JSON.stringify({ ok: false, code: 'E_INVALID_ARG', message: 'malformed request url' }));
       return;
     }
     const pathname = url.pathname;
 
     if (pathname.startsWith('/api/')) {
+      // 2) token 强校验：所有 /api/* 一律先认证，再谈方法/参数。
+      //    顺序讲究：未认证请求不应看到 404/405 这类「端点存不存在」的信号。
+      if (!tokensEqual(presentedToken(req), sessionToken)) {
+        unauthorized(res);
+        return;
+      }
       // W7+I52：POST 只放行写端点（后续仍有 只读门禁/Origin 校验 在 write 通道内执行）；其余方法一律 405
       const isWritePost = req.method === 'POST'
         && (pathname === '/api/write' || pathname === '/api/supersede' || pathname === '/api/forget'
@@ -109,13 +140,13 @@ export async function createWebServer({
           || pathname === '/api/tasks/capture' || pathname === '/api/tasks/archive'
           || pathname === '/api/records/tombstone');
       if (req.method !== 'GET' && !isWritePost) {
-        res.writeHead(405, { 'content-type': 'application/json; charset=utf-8' });
+        res.writeHead(405, JSON_HEADERS);
         res.end(JSON.stringify({ ok: false, code: 'E_METHOD', message: `${req.method} not allowed (read-only GET API)` }));
         return;
       }
       if (pathname === '/api/scopes') {
         const payload = await listScopes(memoHome, svc.scope);
-        res.writeHead(200, { 'content-type': 'application/json; charset=utf-8' });
+        res.writeHead(200, JSON_HEADERS);
         res.end(JSON.stringify({ ok: true, ...payload }));
         return;
       }
@@ -136,7 +167,7 @@ export async function createWebServer({
         } catch (e) {
           // 只回固定文案：错误对象可能带绝对路径/栈信息（js/stack-trace-exposure），本地服务也不该外泄
           const code = e?.code ?? 'E_INTERNAL';
-          res.writeHead(code === 'E_INVALID_ARG' ? 400 : 500, { 'content-type': 'application/json; charset=utf-8' });
+          res.writeHead(code === 'E_INVALID_ARG' ? 400 : 500, JSON_HEADERS);
           res.end(JSON.stringify({
             ok: false,
             code,
@@ -151,22 +182,27 @@ export async function createWebServer({
       }
       // W7：POST 写端点把 req（读 body）与写模式上下文递给 handleApi；GET 行为不变
       const writeOpts = isWritePost
-        ? { write: writable, serverPort: server.address()?.port ?? port }
+        ? { write: writable, serverPort: actualPort }
         : undefined;
       const { status, body } = await handleApi(active, url, req, writeOpts);
-      res.writeHead(status, { 'content-type': 'application/json; charset=utf-8' });
+      res.writeHead(status, JSON_HEADERS);
       res.end(JSON.stringify(body));
       return;
     }
 
     if (serveStatic && req.method === 'GET') {
       const { status, body, headers } = await serveStatic(pathname);
-      res.writeHead(status, headers ?? { 'content-type': 'text/plain; charset=utf-8' });
+      const out = { ...(headers ?? { 'content-type': 'text/plain; charset=utf-8' }) };
+      // 3) 浏览器面：页面本身 200 时下发 token cookie，页面 JS 永远拿不到 token 值。
+      if (status === 200 && String(out['content-type'] ?? '').includes('text/html')) {
+        Object.assign(out, HTML_HEADERS, { 'set-cookie': sessionCookie(sessionToken) });
+      }
+      res.writeHead(status, out);
       res.end(body);
       return;
     }
 
-    res.writeHead(404, { 'content-type': 'application/json; charset=utf-8' });
+    res.writeHead(404, JSON_HEADERS);
     res.end(JSON.stringify({ ok: false, code: 'E_NOT_FOUND', message: `not found: ${pathname}` }));
   }
 
@@ -186,6 +222,7 @@ export async function createWebServer({
   return {
     server,
     url,
+    token: sessionToken,
     async close() {
       // 先掐掉空闲 keep-alive 连接，否则 close 会等它们自然超时（浏览器标签页常驻时尤其明显）
       if (typeof server.closeIdleConnections === 'function') server.closeIdleConnections();

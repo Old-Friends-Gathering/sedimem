@@ -11,6 +11,7 @@
 
 import fs from 'node:fs';
 import path from 'node:path';
+import { MEMO_DIR_MODE, MEMO_FILE_MODE } from '../config/perms.js';
 
 /**
  * scope 形状：`repo:名字` / `dir:名字` / `user:名字` / `global:名字` / `session:<id>`。
@@ -55,8 +56,9 @@ export function writeScopeOverride(memoHome, scope, key = 'default') {
     throw e;
   }
   const file = scopeFilePath(memoHome, key);
-  fs.mkdirSync(path.dirname(file), { recursive: true });
-  fs.writeFileSync(file, JSON.stringify({ scope, at: new Date().toISOString() }, null, 2) + '\n');
+  // B4：覆盖文件是「配置」，只该 owner 可读；目录同样收紧（新建时生效）。
+  fs.mkdirSync(path.dirname(file), { recursive: true, mode: MEMO_DIR_MODE });
+  fs.writeFileSync(file, JSON.stringify({ scope, at: new Date().toISOString() }, null, 2) + '\n', { mode: MEMO_FILE_MODE });
   return file;
 }
 

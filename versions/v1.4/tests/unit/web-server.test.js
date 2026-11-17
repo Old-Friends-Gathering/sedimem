@@ -8,7 +8,10 @@ import os from 'node:os';
 import path from 'node:path';
 import http from 'node:http';
 import { createMemoryService } from '../../src/api/service.js';
-import { createWebServer } from '../../src/web/server.js';
+import { createAuthedWebServer as createWebServer, installAuthFetch } from '../support/web-auth.js';
+
+// B4：所有 /api/* 需要会话 token；本垫片对登记过的 server 自动补 Authorization（非 GET 再补同源 Origin）
+installAuthFetch();
 
 const SCOPE = 'dir:test-web-server';
 
@@ -40,9 +43,10 @@ async function seed(memoHome) {
   }
 }
 
-function rawGet(port, reqPath) {
+function rawGet(port, reqPath, token) {
   return new Promise((resolve, reject) => {
-    const req = http.request({ host: '127.0.0.1', port, path: reqPath, method: 'GET' }, (res) => {
+    const headers = token ? { authorization: `Bearer ${token}` } : {};
+    const req = http.request({ host: '127.0.0.1', port, path: reqPath, method: 'GET', headers }, (res) => {
       const chunks = [];
       res.on('data', (c) => chunks.push(c));
       res.on('end', () => resolve({ status: res.statusCode, body: Buffer.concat(chunks).toString('utf8') }));
@@ -169,20 +173,20 @@ test('web-server：绑定地址、7 端点形状、错误形状、遮蔽与穿�
 
   // 非法参数 → 400 + ok:false（E_INVALID_ARG）
   {
-    const r1 = await rawGet(port, '/api/today?date=not-a-date');
+    const r1 = await rawGet(port, '/api/today?date=not-a-date', web.token);
     assert.equal(r1.status, 400);
     assert.equal(JSON.parse(r1.body).ok, false);
     assert.equal(JSON.parse(r1.body).code, 'E_INVALID_ARG');
 
-    const r2 = await rawGet(port, '/api/records?limit=abc');
+    const r2 = await rawGet(port, '/api/records?limit=abc', web.token);
     assert.equal(r2.status, 400);
     assert.equal(JSON.parse(r2.body).code, 'E_INVALID_ARG');
 
-    const r3 = await rawGet(port, '/api/timeline?tzOffset=99999');
+    const r3 = await rawGet(port, '/api/timeline?tzOffset=99999', web.token);
     assert.equal(r3.status, 400);
     assert.equal(JSON.parse(r3.body).code, 'E_INVALID_ARG');
 
-    const r4 = await rawGet(port, '/api/records?status=bogus');
+    const r4 = await rawGet(port, '/api/records?status=bogus', web.token);
     assert.equal(r4.status, 400);
     assert.equal(JSON.parse(r4.body).code, 'E_INVALID_ARG');
   }
@@ -197,12 +201,18 @@ test('web-server：绑定地址、7 端点形状、错误形状、遮蔽与穿�
 
   // 未知 API → 404 JSON；非 GET → 405
   {
-    const r = await rawGet(port, '/api/nope');
+    const r = await rawGet(port, '/api/nope', web.token);
     assert.equal(r.status, 404);
     assert.equal(JSON.parse(r.body).ok, false);
 
     const post = await new Promise((resolve, reject) => {
-      const req = http.request({ host: '127.0.0.1', port, path: '/api/summary', method: 'POST' }, (res) => {
+      const req = http.request({
+        host: '127.0.0.1',
+        port,
+        path: '/api/summary',
+        method: 'POST',
+        headers: { authorization: `Bearer ${web.token}`, origin: `http://127.0.0.1:${port}` },
+      }, (res) => {
         resolve({ status: res.statusCode });
         res.resume();
       });

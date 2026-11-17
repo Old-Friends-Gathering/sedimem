@@ -12,6 +12,7 @@ import { TOOLS_BY_NAME, SERVER_INFO, INSTRUCTIONS, MAX_LINE_BYTES } from './tool
 import {
   getService, closeAllServices, initConnScope, makeServiceFacade,
 } from './session-tools.js';
+import { checkMcpToken, createMcpTokenGate } from './token-gate.js';
 // 架构边界基线：mcp → session/cli-support 的边由本文件持有（tests/unit/arch-boundaries.test.js）
 import { PROMOTE_KINDS } from '../session/cli-support.js';
 
@@ -38,6 +39,13 @@ async function handleMessage(msg, _service, state) {
   }
   const { id, method, params } = msg;
   const isNotification = id === undefined || id === null;
+
+  // B4：token 门禁在 initialize 之前——未认证请求连「服务器初始化状态」都不该看到。
+  const authError = checkMcpToken(state.auth, params);
+  if (authError) {
+    if (isNotification) return null;
+    return rpcError(id, -32001, authError);
+  }
 
   // 任务 C（审核建议）：initialize 门禁——未初始化前除 initialize/ping 外的方法
   // 一律返回 -32002（Server not initialized），且绝不触达任何存储操作（提前返回，handler 不执行）。
@@ -109,10 +117,16 @@ async function handleMessage(msg, _service, state) {
 
 async function main() {
   // 分库在 initialize 时按 clientInfo 决定（见 initConnScope）：不同客户端的覆盖文件互不干扰。
+  // B4：默认信任本机 stdio；MEMO_MCP_TOKEN / MEMO_MCP_REQUIRE_TOKEN=1 时强制 token（取舍见 token-gate.js）。
+  // 必须先解析门禁（可能读 ~/.memo/web-token）再建 readline：
+  // readline 一旦创建就开始消费 stdin，await 期间到达的行会没有监听者，管道输入会被整段丢掉。
+  const tokenGate = await createMcpTokenGate();
 
   const rl = readline.createInterface({ input: process.stdin, crlfDelay: Infinity });
   // 每连接独立：initialize 门禁 + 运行期 scope（client/scope 在 initialize 时填充）
-  const connState = { initialized: false, client: 'unknown', scope: null, scopeSource: null };
+  const connState = {
+    initialized: false, client: 'unknown', scope: null, scopeSource: null, auth: tokenGate,
+  };
   // v1.0 W3 裁决 86：MCP 空闲时排空派生队列（第二顺位 drain 者）。
   // 只在端口就绪且已初始化时工作：未配置 LLM 时零成本，协议处理路径完全不受影响。
   const idleDeriver = (() => {

@@ -21,7 +21,7 @@ const WRITE_PATHS = new Set([
 
 /** POST 写请求的错误码 → HTTP 状态映射（区别于只读 GET 的映射） */
 function writeErrorStatus(code) {
-  if (code === 'E_READONLY' || code === 'E_READ_ONLY' || code === 'E_BAD_ORIGIN') return 403;
+  if (code === 'E_READONLY' || code === 'E_READ_ONLY' || code === 'E_BAD_ORIGIN' || code === 'E_BAD_HOST') return 403;
   if (code === 'E_PAYLOAD_TOO_LARGE') return 413;
   if (code === 'E_CONFLICT') return 409;
   if (code === 'E_NOT_FOUND') return 404;

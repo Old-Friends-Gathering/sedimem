@@ -10,7 +10,10 @@ import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import { createMemoryService } from '../../src/api/service.js';
-import { createWebServer } from '../../src/web/server.js';
+import { createAuthedWebServer as createWebServer, installAuthFetch } from '../support/web-auth.js';
+
+// B4：所有 /api/* 需要会话 token；本垫片对登记过的 server 自动补 Authorization（非 GET 再补同源 Origin）
+installAuthFetch();
 
 const CASE = JSON.parse(readFileSync(
   join(dirname(fileURLToPath(import.meta.url)), '../../eval/cases/i14-cross-section.json'),
