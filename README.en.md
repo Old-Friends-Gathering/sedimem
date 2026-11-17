@@ -250,6 +250,9 @@ Tool surface: 10 `memory_*` + 5 `memory_session_*`, identical across all three c
 | `memo get <id>` | — |
 | `memo supersede <id> --value "..." [--text "..."] [--agent dsh] [--json]` | — |
 | `memo forget <id> [--purge] [--reason "..."] [--json]` | — |
+| `memo forget --source-agent <a> [--source-session <s>] [--content-hash <h>] [--reason "..."] [--dry-run]` | Delete by source: tombstone every scope, clean derived index/brief/ledger (B3) |
+| `memo verify-delete --source-agent <a> [--source-session <s>] [--content-hash <h>] [--json]` | Verify items/index/vector/brief/ledger have no residue; exit 1 on any residue |
+| `memo trust promote <id> --to T0|T1 --reason "..." [--drop-taint t1,t2] [--json]` | Human-only trust promotion (the only taint reduction), writes a trust_promote audit event |
 | `memo stats [--json]` | — |
 | `memo scope [--json]` | 看本目录解析出的分库（以及 MCP 侧覆盖文件） |
 | `memo doctor [--json]` | — |

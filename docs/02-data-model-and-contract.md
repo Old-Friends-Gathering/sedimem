@@ -1108,3 +1108,89 @@ Q5 契约覆盖按「导出名必须出现在 docs/」判定，这里逐模块�
 
 **裁决 123（可还原 + 可归档）**：段必须带 `anchor{path,fromSeq,toSeq}`，`expand` 据此重读转录还原原文；
 `archive` 把整个 `sessions/<taskId>/` 移入 `archive/<taskId>-<ts>/` 并写事件，不做物理删除。
+
+## §3.24 v1.4 P0b：trust / taint、按来源删除与 profile 收敛（B2/B3）
+
+本节是 v1.4 P0b 的编码契约；字段是**可选**的：旧记录没有 `trust`/`taint` 仍必须可读。
+
+### §3.24.1 trust 四档与写入不变式
+
+`trust` 取值 `T0|T1|T2|T3`（`TRUST_LEVELS`），缺省读作 `T2`（`DEFAULT_TRUST`）。
+语义以 [`docs/plans/future-architecture.md`](plans/future-architecture.md) §4.1 为准：
+T0 = 维护者本人/本机 CLI，T1 = 本机可信来源，T2 = 远程内容（默认不进 facts），T3 = 未注册来源。
+
+- **普通写路径不得自报 T0**：`service.write`/CLI/`capture accept` 只能接受 adapter 声明的上限；
+  普通 `writeRecord` 的真实等级恒由 `deriveTrust(..., {mode:'write'})` 给出 `T2`，调用方传
+  `trust:'T0'` 会被覆盖，非法值（如 `T9`）fail-loud 抛 `E_INVALID_RECORD`。
+- **读取派生而非写回**：`effectiveTrust(record)` 对缺 `trust` 的存量记录按
+  `source.agent ∈ {cli,dsh,claude,codex,test}` 且 `tags` 不含 `capture` 派生 T0，否则 T2
+  （`LEGACY_TRUSTED_AGENTS`）。`get`/`search`/`exportRecords` 返回读取视图（`withTrustView`），
+  真相层 `items/*.jsonl` 不因读取而改变；读取派生就是 P0b 的 backfill 方案（见 §3.24.4）。
+- `taint` 是非空字符串数组（`taintError` / `normalizeTaint` 负责校验与归一化）；非法值 fail-loud。
+- 人工提升只经 `promoteTrust`（CLI `memo trust promote`）：必须给 `--reason`，只能变强
+  （`trustRank` 变小），taint 只允许通过 `--drop-taint` 显式缩减；每次提升追加
+  `op:'trust_promote'` 审计事件，`detail` 记录 `reason/from/to/taintRemoved` 与 removed taint 的
+  `sha256:<12>` 指纹，**不写 taint 原文**。
+- `weakestTrust(...)` 取更弱者；`unionTaint(...)` 取并集并排序；`sameTaint` 用于判断是否需要追加版本；
+  `isTrustLevel` 做合法值判定，`effectiveTaint` 是读取视图里的 taint（缺省空数组）。
+
+### §3.24.2 supersede / merge：版本 +1、污点单调不减
+
+- `service.supersede` 与被 write-gate 判为 `supersede` 的覆盖写，都沿被取代记录的版本链追加
+  `v+1`（新记录与 closed 旧记录同版本号），并让新版本 `taint = unionTaint(旧 taint, 新 taint)`。
+- 去重 `merge`（`curateApply` / `commitPairVerdict`）的胜者同样取两侧 taint 并集，`trust` 取两侧
+  `weakestTrust`；`T0 + T2 → T2`，任何自动合并都不得把污点洗掉或把等级洗高。
+- `noop_duplicate` / `noop_same_value` 若候选携带了新 taint，必须给已有记录追加一次 `v+1` 快照
+  （不能只写事件），否则「重复写」会成为静默去污通道。
+
+### §3.24.3 按来源删除（`deleteBySource`）与验证（`verifyDelete`）
+
+- `deleteBySource(svc, {agent?, session?, contentHash?, reason?, dryRun?})`：至少给一个选择器；
+  对 **memoHome 下所有分库**中匹配的最新非墓碑记录追加 `status:'tombstoned'` +
+  `tags:['source-deleted']` 的墓碑（`withPatch` 使 `v+1`），**绝不物理删 `items/*.jsonl` 历史行**。
+- 清派生：其他分库的 `index/<scopeKey>.sqlite{,-wal,-shm}` / `.vectors.jsonl{,.bak}` 直接删除，
+  `brief/<scope>.md` 删除；当前分库走 `_commit` + `_reload` 重建（墓碑不进索引），并清掉向量
+  rewrite 留下的 `.bak`、对 sqlite WAL 做 `wal_checkpoint(TRUNCATE)`（磁盘上不再留可回放副本）。
+- 任务账本：`sessions/<taskId>/segments.jsonl` 按 taskId 命中选择器时删除整个
+  `sessions/<taskId>/` 与 `sessions/<taskId>.json`；taskId 来源 = 显式 `--source-session` ∪
+  命中记录的 `source.session`，并扫段内 `source.agent/kind/session/sessionId`。
+- 审计：追加 `op:'delete_source'` 事件，detail 只含选择器、数量、id 列表、分库与账本名，
+  **不含正文**；CLI 为 `memo forget --source-agent <a> [--source-session <s>] [--content-hash <h>] [--reason ...] [--dry-run]`。
+- `verifyDelete(svc, {agent?, session?, contentHash?})`：检查 items（只把「最新快照仍非墓碑」当残留）、
+  `index/*`（向量/JSONL 按目标 id/contentHash 字节匹配；sqlite 走 `select id from docs` 语义查询，
+  **不**把 freelist/WAL 里的旧字节当残留——DELETE 后字节仍可能停留，按字节判会全部误报）、
+  `brief/*`（按目标正文）、`sessions/*/segments.jsonl`；
+  有任何残留返回 `{ok:false, residue:[{where, reason, id?}]}`，CLI `memo verify-delete` 逐条打印并以
+  非零退出。历史墓碑不算残留（append-only 真相层，as-of 仍可回查）。
+  两个 CLI 处理函数分别是 `cmdVerifyDelete`（`memo verify-delete`）与 `cmdTrust`（`memo trust promote`），
+  仅做参数映射、输出与退出码，语义全部落在 `verifyDelete` / `promoteTrust`。
+
+### §3.24.4 存量 backfill 的取舍
+
+P0b 选择**读取派生**而不是一次性改写真相层：`effectiveTrust` 在读取时按 §3.24.1 派生，
+`items/*.jsonl` 一个字节都不动。理由：
+
+1. 真相层是 append-only 审计面；为了一个可计算的缺省值批量写回，会让「谁在何时改了 trust」
+   变得不可解释，也让备份/回滚多出一份必须协调的状态。
+2. 读取派生天然幂等、可回滚（撤掉视图函数即回到原状），不需要 `memo migrate` 的迁移快照。
+3. 存量与新增记录走同一套 `deriveTrust`，不会出现「迁移过的库」与「没迁移的库」行为分叉。
+
+因此本版**不提供** trust 回填写库命令；若未来 P1 需要物化 trust（例如 pack 预计算），必须另写
+ADR 说明快照、幂等键与回滚方式。trust 的 pack 验收依赖 P1 的 pack/投影层，本版只保证：
+读取 API / `exportRecords` 返回的 trust 非空，且真相层缺字段时派生结果稳定。
+
+### §3.24.5 profile 路径收敛（I-10）
+
+唯一入口是 `resolveMemoHome(env, cwd, profilePointer)`（`src/config/paths.js`），
+`memoBaseHome(env)` 决定 base：`MEMO_HOME` 优先，否则 `~/.memo`（默认 profile 路径**完全不变**）。
+命名 profile 由 `<base>/profiles.json` 指针登记，目录固定 `<base>/profiles/<name>/`：
+
+```json
+{ "version": 1, "profiles": { "work": { "path": "profiles/work" } } }
+```
+
+- 名字必须匹配 `/^[a-z0-9][a-z0-9._-]{0,63}$/`；指针路径解析后必须仍在 `<base>/profiles/` 下。
+- 指针文件缺失、JSON 损坏、名字未注册、路径越界一律 fail-closed（`E_PROFILE_UNAVAILABLE`），
+  **绝不**静默回落到默认库——数据串库比启动失败更糟。
+- 不做物理迁移：已有 `~/.memo` 数据原地不动；`MEMO_PROFILE` 只影响解析结果。CLI 的
+  `memo scope` 与所有 `loadService` 都复用该入口，`memoBaseHome`/`resolveMemoHome` 是唯一实现。

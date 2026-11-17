@@ -12,6 +12,11 @@ import { invalid, notFound } from '../core/errors.js';
 // session 库写入门禁（v0.6 修复：之前 assertWritableKind 写了但没人调用，fact 仍能落临时库）。
 // lifecycle.js 只静态依赖 core/config/mcp-常量，不依赖 api/*，此处静态 import 无循环。
 import { assertWritableKind, assertSessionOpen } from '../session/lifecycle.js';
+// B2：信任派生/污点并集只走 core/trust.js，写路径不自己拼条件。
+import {
+  deriveTrust, effectiveTrust, effectiveTaint, weakestTrust, unionTaint, sameTaint,
+  isTrustLevel, taintError, normalizeTaint,
+} from '../core/trust.js';
 
 
 /**
@@ -99,6 +104,14 @@ export async function writeRecord(svc, input) {
   // 只有「太长」才打 long-form；缺 title 属于另一类告警，不该被当成超长记录（0.6.1 修）。
   if (warnings.some((w) => w.code === 'E_RECORD_LONG') && !tags.includes('long-form')) tags.push('long-form');
 
+  // B2（docs/02 §3.24）：普通写路径不得自报 T0/T1。显式 trust 非法 fail-loud；
+  // 合法显式值也不采信——真实等级恒由 deriveTrust(mode:'write') 给出（T2）。
+  if (input.trust !== undefined && !isTrustLevel(input.trust)) {
+    throw invalid(`write: trust must be one of T0|T1|T2|T3, got ${JSON.stringify(input.trust)}`);
+  }
+  const trustProblem = taintError(input.taint);
+  if (trustProblem) throw invalid(`write: ${trustProblem}`);
+  const trust = deriveTrust({ source: writeInput.source, tags }, { mode: 'write' });
   const candidate = createRecord({
     ...writeInput,
     tags,
@@ -106,6 +119,9 @@ export async function writeRecord(svc, input) {
     value: writeInput.value ?? writeInput.text,
     subject: input.subject ?? 'text',
     predicate: input.predicate ?? 'text',
+    // 这两个键放在 spread 之后，确保调用方传进来的 trust/taint 不能绕过上面的规则。
+    trust,
+    ...(input.taint !== undefined ? { taint: normalizeTaint(input.taint) } : {}),
   }, { clock: svc.clock, policy: svc.policy ?? POLICY });
 
   // 裁决 13（阻断项）：「增量重读 → 判定 → 追加」必须在同一把 scope 锁的临界区内完成，
@@ -122,7 +138,23 @@ export async function writeRecord(svc, input) {
 
       const gate = decideWrite(candidate, candidates, { clock: svc.clock });
       if (!gate || !gate.action) throw invalid('write: decideWrite returned no action');
-      const record = gate.record ?? candidate;
+      let record = gate.record ?? candidate;
+      // B2：supersede 的新版本必须继承旧记录的污点并取并集（taint 单调不减），
+      // trust 取两侧更弱者，禁止借「覆盖写」把 T2 洗成 T0。
+      // noop 分支的 gate.record 是已存在的重复记录，不套用候选的 trust（见下面 noop 处理）。
+      if (gate.action === 'supersede' && gate.superseded) {
+        const mergedTaint = unionTaint(record.taint, gate.superseded.taint);
+        const mergedTrust = weakestTrust(effectiveTrust(record), effectiveTrust(gate.superseded));
+        // v 必须沿旧版本链 +1（plan §B2：「追加新版本 v+1」）。不能靠 withPatch
+        // 之后再补，否则 taint/trust 无变化时新记录会停留在 v=1，版本链断掉。
+        record = {
+          ...record,
+          trust: mergedTrust,
+          v: (gate.superseded.v ?? 1) + 1,
+        };
+        if (mergedTaint.length > 0) record.taint = mergedTaint;
+        else delete record.taint;
+      }
       const vv = validateRecord(record, undefined, svc.policy ?? POLICY);
       if (!vv.ok) throw invalid(`write: gate produced invalid record: ${vv.errors.join('; ')}`);
 
@@ -134,9 +166,17 @@ export async function writeRecord(svc, input) {
         }
         case 'noop_duplicate':
         case 'noop_same_value': {
-          // 不写真相层；只写审计事件（每次写操作必返回 action —— hook 静默失败防线）
+          // B2：noop 也不能把候选携带的污点丢掉。若并集比已有记录更大，
+          // 给已有记录追加一次 v+1 快照（真相层多一行，但 taint 语义正确）。
+          const mergedTaint = unionTaint(record.taint, candidate.taint);
+          let outRecord = record;
+          if (!sameTaint(mergedTaint, record.taint)) {
+            outRecord = withPatch(record, { taint: mergedTaint });
+            await svc._commit(outRecord, 'write', { action: gate.action, reason: 'taint-merged' });
+          }
+          // 每次写操作必返回 action —— hook 静默失败防线。
           await svc._event('write', record.id, { action: gate.action, reason: gate.reason });
-          return { action: gate.action, record, warnings };
+          return { action: gate.action, record: outRecord, warnings };
         }
         case 'supersede': {
           if (!gate.superseded) throw invalid('write: supersede without superseded record');
@@ -167,7 +207,7 @@ export async function writeRecord(svc, input) {
 }
 
 /** 人工 supersede：新记录 + 旧记录追加 superseded 版本 */
-export async function supersedeRecord(svc, { oldId, value, text, title, source, reason }) {
+export async function supersedeRecord(svc, { oldId, value, text, title, source, reason, taint }) {
   svc._ensureOpen();
   const old = svc._records.get(oldId);
   if (!old) throw notFound(`supersede: record ${oldId} not found`);
@@ -194,7 +234,17 @@ export async function supersedeRecord(svc, { oldId, value, text, title, source, 
     svc.policy ?? POLICY,
   );
   if (supWarnings.some((w) => w.code === 'E_RECORD_LONG') && !supTags.includes('long-form')) supTags.push('long-form');
-  const record = createRecord({
+  // B2：污点单调不减——人工 supersede 也必须继承旧记录 taint 并与新提供的取并集。
+  const taintProblem = taintError(taint);
+  if (taintProblem) throw invalid(`supersede: ${taintProblem}`);
+  const mergedTaint = unionTaint(effectiveTaint(old), taint);
+  // trust 只能变保守：新版本取「旧记录 vs 本条写路径（恒 T2）」的更弱者，
+  // 借 supersede 把 T2 洗成 T0 的路径在此关闭。
+  const mergedTrust = weakestTrust(
+    effectiveTrust(old),
+    deriveTrust({ source: redacted.input.source, tags: supTags }, { mode: 'write' }),
+  );
+  const created = createRecord({
     text: body,
     value: redacted.input.value,
     // S-01：新记录没传 title 时继承旧记录 title——supersede 是「改值」不是「换主题」，
@@ -209,9 +259,13 @@ export async function supersedeRecord(svc, { oldId, value, text, title, source, 
     tags: supTags,
     privacy: old.privacy,
     supersedes: oldId,
+    trust: mergedTrust,
+    ...(mergedTaint.length > 0 ? { taint: mergedTaint } : {}),
     // B2：把 svc 的 clock 与 policy 传进 createRecord，否则自定义 policy
     // （textHardMaxChars / titleEnforce 等）在 supersede 路径整体失效。
   }, { clock: svc.clock, policy: svc.policy ?? POLICY });
+  // plan §B2：supersede 追加新版本 v+1（沿被取代记录版本链），与 closed 行的 v+1 对齐。
+  const record = { ...created, v: (old.v ?? 1) + 1 };
   await svc._commit(record, 'write', { action: 'supersede', reason: reason ?? 'manual' });
   // 裁决 111：遗留行的 scope 可能还是改名前的旧值——快照必须归一到当前分库，
   // 否则这条 supersede 会静默写到旧文件里（真实事故：删除/取代看起来没生效）。

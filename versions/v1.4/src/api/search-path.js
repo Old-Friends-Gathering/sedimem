@@ -12,6 +12,8 @@ import { maskSuspiciousRecord } from './mask.js';
 // 错误工厂从 service.js 反向引用（错误文本被测试断言，必须单一来源）。
 import { invalid } from '../core/errors.js';
 import { parseAsOf, nowIso } from '../core/time.js';
+// B2：读取视图补派生 trust/taint（不写真相层；缺 trust 的存量记录在这里看到 T0/T2）。
+import { effectiveTrust, effectiveTaint } from '../core/trust.js';
 
 /**
  * 检索：bm25 × kindWeight × recencyDecay × confidence（系数全部来自 policy）。
@@ -113,7 +115,10 @@ export async function searchRecords(svc, query, {
     }
   }
   const out = {
-    items: top.map((it) => ({ ...it, record: withExtraHits(svc, maskSuspicious(svc, it.record, includeSuspicious)) })),
+    items: top.map((it) => ({
+      ...it,
+      record: withTrustView(withExtraHits(svc, maskSuspicious(svc, it.record, includeSuspicious))),
+    })),
     total: items.length,
     asOf: asOfIso ?? nowIso(svc.clock),
   };
@@ -141,6 +146,19 @@ export function maskSuspicious(svc, r, includeSuspicious) {
 export function withExtraHits(svc, r) {
   const extra = svc._extraHits.get(r.id);
   return extra ? { ...r, hits: (r.hits ?? 0) + extra } : r;
+}
+
+/**
+ * 读取视图：显式 trust 原样返回；缺省按 backfill 规则派生（T0/T2），taint 归一。
+ * 只复制对象，不回写 _records / items/*.jsonl —— 存量记录的真相层保持原样。
+ */
+export function withTrustView(r) {
+  const taint = effectiveTaint(r);
+  return {
+    ...r,
+    trust: effectiveTrust(r),
+    ...(taint.length > 0 ? { taint } : {}),
+  };
 }
 
 /**
@@ -182,7 +200,7 @@ export function statusOk(svc, r, { status, includeDisputed }) {
 export async function getRecord(svc, id, { includeSuspicious = false } = {}) {
   svc._ensureOpen();
   const r = svc._records.get(id);
-  return r ? withExtraHits(svc, maskSuspicious(svc, r, includeSuspicious)) : null;
+  return r ? withTrustView(withExtraHits(svc, maskSuspicious(svc, r, includeSuspicious))) : null;
 }
 
 /** 确定性 brief：pinned/decision 优先 → 最近 active 事实；suspicious 不进 brief。

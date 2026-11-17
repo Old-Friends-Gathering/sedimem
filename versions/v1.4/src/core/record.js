@@ -6,6 +6,10 @@ import { systemClock } from './clock.js';
 // kind 清单唯一真相在 config/policy.json 的 kinds 段（issue #33 / 裁决 D2）；
 // 依赖方向必须是 record → policy（policy.js 只校验数据形状，绝不反向 import 本文件，否则成环）。
 import { defaultPolicy, kindNames } from '../config/policy.js';
+// B2：trust/taint 的缺省与校验规则集中在本模块，写路径/supersede/merge 不得另写一份。
+import {
+  isTrustLevel, TRUST_LEVELS, taintError, normalizeTaint,
+} from './trust.js';
 
 const STATUSES = new Set(['active', 'superseded', 'disputed', 'tombstoned']);
 // 已知 agent 只是「带颜色的标签」，不是白名单（裁决 25：允许任意新客户端接入，避免写死）
@@ -110,6 +114,12 @@ export function createRecord(input, deps = {}) {
   const source = { ...rawSource, agent };
 
   const title = normalizeTitle(input.title);
+  // B2：trust/taint 都是可选字段；出现即校验（fail-loud），绝不静默丢弃非法值。
+  if (input.trust !== undefined && !isTrustLevel(input.trust)) {
+    throw invalid(`createRecord: trust must be one of ${TRUST_LEVELS.join('|')}, got ${JSON.stringify(input.trust)}`);
+  }
+  const taintProblem = taintError(input.taint);
+  if (taintProblem) throw invalid(`createRecord: ${taintProblem}`);
   // W1 契约：结构化记录必须能一句话扫读。默认只警告（titleEnforce=false），
   // 需要硬约束的部署把 policy.write.titleEnforce 打开即可（v0.7 计划默认开）。
   if (wp.titleEnforce && wp.titleRequiredKinds.includes(String(input.kind ?? 'fact')) && title === '') {
@@ -143,6 +153,10 @@ export function createRecord(input, deps = {}) {
     ...(input.sourceRefs !== undefined ? { sourceRefs: input.sourceRefs } : {}),
     // 标题（裁决 59）：没有就不写这个键——空字符串会让「没有标题」和「标题是空」分不开
     ...(title !== '' ? { title } : {}),
+    // B2（docs/02 §3.24）：trust 缺失读作 T2；taint 缺失读作空集。
+    // 只写调用方显式提供的值（与 sourceRefs/title 同一约定，避免真相层被空键撑大）。
+    ...(input.trust !== undefined ? { trust: input.trust } : {}),
+    ...(input.taint !== undefined ? { taint: normalizeTaint(input.taint) } : {}),
     tags,
   };
 
@@ -188,6 +202,18 @@ export function validateRecord(r, kinds = kindNames(defaultPolicy), policy = def
   if (!STATUSES.has(r.status)) errors.push(`status: must be one of ${[...STATUSES].join('|')}, got ${r.status}`);
   if (typeof r.hits !== 'number' || r.hits < 0) errors.push(`hits: must be >= 0, got ${r.hits}`);
   if (r.privacy !== 'private' && r.privacy !== 'shared') errors.push(`privacy: must be private|shared, got ${r.privacy}`);
+  // B2（docs/02 §3.24）：trust 出现就必须是 T0–T3；taint 出现就必须是非空字符串数组。
+  // 缺失是合法状态（读作 T2 / 空集），不在这里补默认值——补了就等于改写真相层。
+  if (r.trust !== undefined && !isTrustLevel(r.trust)) {
+    errors.push(`trust: must be one of ${TRUST_LEVELS.join('|')}, got ${JSON.stringify(r.trust)}`);
+  }
+  if (r.taint !== undefined) {
+    const problem = taintError(r.taint);
+    if (problem) errors.push(problem);
+    else if (normalizeTaint(r.taint).join('\u0001') !== r.taint.join('\u0001')) {
+      errors.push('taint: must be normalized (unique, trimmed, sorted) before commit');
+    }
+  }
   // 标题（裁决 59）：出现就必须是单行、非空、≤MAX_TITLE，且已归一化（首尾无空白）
   if (r.title !== undefined) {
     if (typeof r.title !== 'string') errors.push(`title: must be a string, got ${typeof r.title}`);

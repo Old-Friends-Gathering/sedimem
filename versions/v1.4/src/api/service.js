@@ -16,6 +16,8 @@ import * as lifecycle from './lifecycle.js';
 import * as writePath from './write-path.js';
 import * as searchPath from './search-path.js';
 import * as maintenance from './maintenance.js';
+import * as deletePath from './delete-path.js';
+import * as trustPath from './trust-path.js';
 import { createLlmPort } from '../llm/port.js';
 import { loadDerived, appendDerived } from '../llm/derived-store.js';
 import { enqueueDerive, claimBatch, completeItem } from '../llm/outbox.js';
@@ -177,6 +179,11 @@ export class MemoryService {
   async forget(args) { return writePath.forgetRecord(this, args); }
   async enforceQuota(opts) { return writePath.enforceQuota(this, opts); }
   async _enforceQuota() { return writePath.enforceQuotaPrivate(this); }
+  // B3：按来源删除（墓碑 + 清派生 + 删任务账本）与删除验证
+  async deleteBySource(opts) { return deletePath.deleteBySource(this, opts); }
+  async verifyDelete(opts) { return deletePath.verifyDelete(this, opts); }
+  // B2：唯一允许提升 trust / 缩减 taint 的动作（写审计事件）
+  async promoteTrust(opts) { return trustPath.promoteTrust(this, opts); }
 
   // —— search-path ——
   async search(query, opts) { return searchPath.searchRecords(this, query, opts); }

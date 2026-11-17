@@ -43,7 +43,9 @@ export async function reload(svc) {
     if (!svc._versions.has(r.id)) svc._versions.set(r.id, []);
     svc._versions.get(r.id).push(r);
   }
-  svc.index.build(records);
+  // B3：墓碑不是可检索记录——索引/向量/brief 一律只见 live 记录，
+  // 否则删除后派生层仍残留正文（verify-delete 会失败，检索也可能召回已删内容）。
+  svc.index.build(records.filter((r) => r.status !== 'tombstoned'));
   // 以「读之前」的 size 作为消费水位：宁可重复消费已读过的行，也不能跳过未读的行
   svc._readOffset = records.length === 0 && svc._loadError ? 0 : sizeBefore;
   return records;
@@ -92,7 +94,8 @@ export async function refreshIncremental(svc) {
     svc._records.set(r.id, r);
     if (!svc._versions.has(r.id)) svc._versions.set(r.id, []);
     svc._versions.get(r.id).push(r);
-    svc.index.add(r);
+    if (r.status === 'tombstoned') svc.index.remove(r.id);
+    else svc.index.add(r);
   }
   return records;
 }
@@ -132,7 +135,8 @@ export async function commit(svc, record, op = 'write', detail = {}) {
   svc._records.set(record.id, record);
   if (!svc._versions.has(record.id)) svc._versions.set(record.id, []);
   svc._versions.get(record.id).push(record);
-  svc.index.add(record);
+  if (record.status === 'tombstoned') svc.index.remove(record.id);
+  else svc.index.add(record);
   await event(svc, op, record.id, detail);
   // v1.0 W3：真相层落盘成功后只**入队**（裁决 84：写入路径绝不同步调 LLM）。
   // 入队失败不影响写入（派生层是可选投影，失败可由 rebuild 重建）。
