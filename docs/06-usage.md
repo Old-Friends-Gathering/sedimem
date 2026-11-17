@@ -632,6 +632,18 @@ close 做四件事，顺序固定：
 | `memo session sweep --older-than 14d` | 只报告忘了 close 的僵尸会话，不删 | §17.7 |
 | `memo derive …` | **v1.0 规划，尚未实现**（LLM 派生 title/summary，见 `docs/plans/v1.0.0-refactor.md`） | 勿据此使用 |
 
+### 18.1 v1.4 P0b 新增：trust / 按来源删除 / profile
+
+| 命令 / 环境变量 | 作用 | 详见 |
+|---|---|---|
+| `memo trust promote <id> --to T0|T1 --reason "..." [--drop-taint t1,t2]` | 人工提升 trust 的唯一入口；必须给理由，写 `trust_promote` 审计（只记指纹，不记 taint 原文）。普通 `write` 永远只能 T2，不能自报 T0 | §3.24.1 |
+| `memo forget --source-agent <a> [--source-session <s>] [--content-hash <h>] [--reason "..."] [--dry-run]` | 按来源删除：所有分库追加墓碑（不物理删历史行），清 index/vector/brief 与任务账本 | §3.24.3 |
+| `memo verify-delete --source-agent <a> [--source-session <s>] [--content-hash <h>]` | 检查 items/index/vector/brief/账本是否还有目标残留；有残留列出位置并以 1 退出 | §3.24.3 |
+| `MEMO_PROFILE=<name>` | 命名 profile（目录 `<MEMO_HOME 或 ~/.memo>/profiles/<name>/`），指针在 `<base>/profiles.json`；缺失/损坏/未注册 fail-closed，不回落默认库 | §3.24.5 |
+
+存量记录没有 `trust` 字段时按读取派生（`cli/dsh/claude/codex/test` 且非 capture → T0，其余 T2），
+**不回写真相层**；因此没有 trust 回填命令，回滚只需撤掉读取视图。trust 的 pack 验收依赖 P1，本版不承诺。
+
 ## 19. LLM 总结层（v1.0 W3）
 
 记忆的 title/summary 可以由 LLM 生成，但它**永远是派生投影**：真相层 `items/*.jsonl` 不因为

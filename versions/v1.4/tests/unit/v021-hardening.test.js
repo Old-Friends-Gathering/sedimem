@@ -32,6 +32,8 @@ test('facade：拆分后 MemoryService 的公开方法集合不变（裁决 48�
     'brief', 'close', 'compact', 'curateApply', 'curateAuto', 'curateExport', 'dedupeScan', 'doctor', 'events',
     'enforceQuota', 'exportRecords', 'flushHits', 'forget', 'get', 'reindex', 'refreshView', 'search', 'stats',
     'supersede', 'write',
+    // v1.4 P0b B2/B3：按来源删除、删除验证、人工信任提升
+    'deleteBySource', 'verifyDelete', 'promoteTrust',
     // v1.0 W3（裁决 83–88）：LLM 派生层对外方法
     '_loadDerived', 'derivedFor', 'drainDerive', 'enqueueDeriveFor', 'rebuildDerived',
   ].sort();

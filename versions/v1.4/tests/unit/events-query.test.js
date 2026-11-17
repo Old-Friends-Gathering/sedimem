@@ -184,8 +184,9 @@ describe('svc.exportRecords（裁决 30：只读记录导出）', () => {
       await svc.write(W({ text: '字段检查', subject: 's.fields' }));
       const { records } = await svc.exportRecords();
       assert.deepEqual(Object.keys(records[0]).sort(), [
+        // B2：导出是读取视图，trust 必须随记录出去（缺省记录派生后也是显式等级）。
         'createdAt', 'hits', 'id', 'kind', 'predicate', 'source',
-        'status', 'subject', 'tags', 'text', 'validFrom', 'validTo', 'value',
+        'status', 'subject', 'tags', 'text', 'trust', 'validFrom', 'validTo', 'value',
       ]);
     } finally {
       await svc.close(); rmSync(memoHome, { recursive: true, force: true });

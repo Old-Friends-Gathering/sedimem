@@ -183,3 +183,60 @@ export async function llmCli(service, { action = 'status', json = false } = {}) 
   process.stdout.write(`LLM 可用（${ms}ms）：${out.sample}\n`);
   return out;
 }
+
+/**
+ * B3：`memo verify-delete --source-agent <a>|--source-session <s>|--content-hash <h>`
+ * 有残留 → 列出位置并返回 1（脚本/CI 可直接据此失败）。
+ */
+export async function cmdVerifyDelete(opts, asJson) {
+  const agent = opts['source-agent'] === true ? undefined : opts['source-agent'];
+  const session = opts['source-session'] === true ? undefined : opts['source-session'];
+  const contentHash = opts['content-hash'] === true ? undefined : opts['content-hash'];
+  if (agent === undefined && session === undefined && contentHash === undefined) {
+    throw new UsageError('memo verify-delete 需要 --source-agent、--source-session 或 --content-hash 之一');
+  }
+  const service = await loadService(serviceOpts());
+  try {
+    const out = await service.verifyDelete({ agent, session, contentHash });
+    if (asJson) printJson(out);
+    else if (out.ok) {
+      process.stdout.write(`verify-delete: OK（items ${out.checked.itemLines} 行 / index ${out.checked.indexFiles} 个 / brief ${out.checked.briefFiles} 个 / 账本 ${out.checked.ledgerFiles} 个）\n`);
+    } else {
+      process.stdout.write(`verify-delete: 发现 ${out.residue.length} 处残留\n`);
+      for (const r of out.residue) {
+        process.stdout.write(`  - ${r.where}: ${r.reason}${r.id ? `（${r.id}）` : ''}${r.hash ? `（${r.hash}）` : ''}\n`);
+      }
+    }
+    return out.ok ? 0 : 1;
+  } finally {
+    await service.close();
+  }
+}
+
+/** B2：`memo trust promote <id> --to T0|T1 --reason "..." [--drop-taint a,b]` */
+export async function cmdTrust(positional, opts, asJson) {
+  if (positional[0] !== 'promote') {
+    throw new UsageError('memo trust promote <id> --to T0|T1 --reason "..."');
+  }
+  const id = positional[1];
+  if (!id) throw new UsageError('memo trust promote <id> --to T0|T1 --reason "..."');
+  if (opts.to === undefined || opts.to === true) throw new UsageError('memo trust promote: --to 是必填项');
+  if (opts.reason === undefined || opts.reason === true) throw new UsageError('memo trust promote: --reason 是必填项（审计要求）');
+  const dropTaint = typeof opts['drop-taint'] === 'string'
+    ? opts['drop-taint'].split(',').map((x) => x.trim()).filter(Boolean)
+    : [];
+  const service = await loadService(serviceOpts());
+  try {
+    const out = await service.promoteTrust({
+      id, to: String(opts.to), reason: String(opts.reason), dropTaint,
+    });
+    const result = {
+      id, from: out.from, to: out.to, taintRemoved: out.taintRemoved, v: out.record.v,
+    };
+    if (asJson) printJson(result);
+    else process.stdout.write(`${id}: ${out.from} → ${out.to}（taint −${out.taintRemoved}）\n`);
+    return 0;
+  } finally {
+    await service.close();
+  }
+}

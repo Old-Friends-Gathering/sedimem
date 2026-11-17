@@ -4,9 +4,9 @@
  */
 import process from 'node:process';
 import path from 'node:path';
-import os from 'node:os';
 import {
   UsageError, requireOpt, serviceOpts, loadService, printJson, printRecord, parseAgent, parseNumber,
+  resolveMemoHome,
 } from './shared.js';
 import { isSessionScope, sessionStatus } from '../../session/lifecycle.js';
 
@@ -117,9 +117,30 @@ export async function cmdSupersede(positional, opts, asJson) {
 
 export async function cmdForget(positional, opts, asJson) {
   const id = positional[0];
-  if (!id) throw new UsageError('memo forget <id> [--purge]');
+  // B3：按来源删除复用 forget，避免再加一个顶层命令（Q16 发布面同步成本）。
+  // `memo forget --source-agent dsh` / `--source-session <taskId>` / `--content-hash <h>`
+  const bySource = opts['source-agent'] !== undefined
+    || opts['source-session'] !== undefined
+    || opts['content-hash'] !== undefined;
+  if (!id && !bySource) throw new UsageError('memo forget <id> [--purge] [--reason "..."]');
+  if (id && bySource) throw new UsageError('memo forget: <id> 与 --source-* 不能同时使用');
   const service = await loadService(serviceOpts());
   try {
+    if (bySource) {
+      const result = await service.deleteBySource({
+        agent: opts['source-agent'] === true ? undefined : opts['source-agent'],
+        session: opts['source-session'] === true ? undefined : opts['source-session'],
+        contentHash: opts['content-hash'] === true ? undefined : opts['content-hash'],
+        reason: opts.reason === true || opts.reason === undefined ? undefined : String(opts.reason),
+        dryRun: opts['dry-run'] === true,
+      });
+      if (asJson) printJson(result);
+      else {
+        const verb = result.dryRun ? '将删除' : '已删除';
+        process.stdout.write(`${verb} ${result.tombstoned.length} 条记录；分库 ${result.scopes.length} 个；任务账本 ${result.taskIds.length} 个\n`);
+      }
+      return;
+    }
     const result = await service.forget({
       id,
       mode: opts.purge ? 'purge' : 'tombstone',
@@ -153,7 +174,7 @@ export async function withStats(asJson, fn) {
 export async function cmdScope(asJson) {
   const { resolveScope } = await import('../../core/scope.js');
   const { scope, root } = resolveScope({ cwd: process.cwd(), env: process.env });
-  const memoHome = process.env.MEMO_HOME || path.join(os.homedir(), '.memo');
+  const memoHome = resolveMemoHome();
   // MCP 侧的覆盖是**按客户端**存的（.scope.<client>.json），列出全部而不是只读一个：
   // 排障时最常见的问题就是「DSH 那份覆盖指向别的项目」。
   const overrides = {};

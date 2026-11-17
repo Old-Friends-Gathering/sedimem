@@ -9,7 +9,7 @@ import process from 'node:process';
 import { UsageError, parseArgs, setCurrentOpts, serviceOpts, loadService, resolveMemoHome } from './commands/shared.js';
 import { cmdWrite, cmdSearch, cmdBrief, cmdGet, cmdSupersede, cmdForget, withStats, cmdScope, cmdDoctor } from './commands/memory.js';
 import { cmdDedupe, cmdCurate, cmdRetitle } from './commands/hygiene.js';
-import { cmdServe, cmdMigrate, cmdConflicts, cmdBackfillVectors } from './commands/ops.js';
+import { cmdServe, cmdMigrate, cmdConflicts, cmdBackfillVectors, cmdVerifyDelete, cmdTrust } from './commands/ops.js';
 import { cmdView, cmdBriefTier0 } from './view.js';
 
 const USAGE = `memo —— 本地跨会话记忆系统 v0.1
@@ -26,6 +26,9 @@ const USAGE = `memo —— 本地跨会话记忆系统 v0.1
   memo get <id>
   memo supersede <id> --value "..." [--text "..."] [--agent dsh] [--json]
   memo forget <id> [--purge] [--reason "..."] [--json]
+  memo forget --source-agent <a> [--source-session <s>] [--content-hash <h>] [--reason "..."] [--dry-run] [--json]
+  memo verify-delete --source-agent <a>|--source-session <s>|--content-hash <h> [--json]   # 有残留→退出码 1
+  memo trust promote <id> --to T0|T1 --reason "..." [--drop-taint a,b] [--json]  # 唯一提升信任/去污动作（写审计）
   memo stats [--json]
   memo scope [--json]                                         # 看本目录解析出的分库（以及 MCP 侧覆盖文件）
   memo doctor [--json]
@@ -58,6 +61,7 @@ const USAGE = `memo —— 本地跨会话记忆系统 v0.1
 环境:
   MEMO_HOME   记忆库根目录（默认 ~/.memo）
   MEMO_SCOPE  强制指定 scope（默认按 cwd 推导 repo:x / dir:y）
+  MEMO_PROFILE  命名 profile（需在 $MEMO_HOME/profiles.json 注册；缺失指针 fail-closed）
 
 退出码: 0 成功 / 1 业务失败 / 2 用法错误`;
 
@@ -101,6 +105,10 @@ async function main() {
     case 'forget':
       await cmdForget(positional, opts, asJson);
       return 0;
+    case 'verify-delete':
+      return await cmdVerifyDelete(opts, asJson);
+    case 'trust':
+      return await cmdTrust(positional, opts, asJson);
     case 'stats':
       await withStats(asJson, (s) => s.stats());
       return 0;

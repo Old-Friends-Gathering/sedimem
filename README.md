@@ -242,6 +242,9 @@ claude mcp add --scope user memo -e MEMO_HOME=$HOME/.memo -- \
 | `memo get <id>` | — |
 | `memo supersede <id> --value "..." [--text "..."] [--agent dsh] [--json]` | — |
 | `memo forget <id> [--purge] [--reason "..."] [--json]` | — |
+| `memo forget --source-agent <a> [--source-session <s>] [--content-hash <h>] [--reason "..."] [--dry-run]` | 按来源删除：所有分库追加墓碑并清派生/账本（B3） |
+| `memo verify-delete --source-agent <a> [--source-session <s>] [--content-hash <h>] [--json]` | 验证 items/index/vector/brief/账本无残留，有残留退出码 1 |
+| `memo trust promote <id> --to T0|T1 --reason "..." [--drop-taint t1,t2] [--json]` | 人工提升 trust（唯一降 taint 动作），写 trust_promote 审计 |
 | `memo stats [--json]` | — |
 | `memo scope [--json]` | — |
 | `memo doctor [--json]` | — |

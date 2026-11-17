@@ -4,12 +4,12 @@
  * 退出码：0 成功 / 1 业务失败 / 2 用法错误
  */
 import process from 'node:process';
-import path from 'node:path';
-import os from 'node:os';
 import { AGENT_PATTERN, RESERVED_AGENTS } from '../../core/record.js';
+// B3：memoHome 解析收敛到 config/paths.js（profile 指针/fail-closed 的唯一实现）。
+import { resolveMemoHome as resolveHomeFromEnv } from '../../config/paths.js';
 
 export function resolveMemoHome() {
-  return process.env.MEMO_HOME || path.join(os.homedir(), '.memo');
+  return resolveHomeFromEnv(process.env, process.cwd());
 }
 
 export class UsageError extends Error {

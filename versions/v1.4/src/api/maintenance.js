@@ -10,6 +10,18 @@ import { nowIso, DAY_MS } from '../core/time.js';
 import { defaultPolicy as POLICY } from '../config/policy.js';
 // 错误工厂从 service.js 反向引用（错误文本被测试断言，必须单一来源）。
 import { invalidArg, notFound } from '../core/errors.js';
+// B2：去重合并/裁决也是「改写记录」的路径，taint 必须取并集、trust 只能变保守。
+import { effectiveTrust, effectiveTaint, weakestTrust, unionTaint } from '../core/trust.js';
+
+/**
+ * 合并两条记录的信任面：trust 取更弱、taint 取并集。
+ * 只在「一条记录要被另一条取代/合并」时使用；keep_both 两条各自保留，不并。
+ */
+function mergeTrustFace(...records) {
+  const trust = weakestTrust(...records.map((r) => effectiveTrust(r)));
+  const taint = unionTaint(...records.map((r) => effectiveTaint(r)));
+  return { trust, taint };
+}
 
 export async function stats(svc) {
   svc._ensureOpen();
@@ -60,7 +72,8 @@ export async function stats(svc) {
 export async function reindex(svc) {
   svc._ensureOpen();
   const records = await svc._reload();
-  return { rebuilt: records.length };
+  // rebuilt 报告「进入索引的条数」（墓碑被 reload 过滤掉），与 index.size 对齐。
+  return { rebuilt: records.filter((r) => r.status !== 'tombstoned').length };
 }
 
 /** 任务 A：从 store 的 E_CORRUPT_JSONL 错误信息里解析 file(:line)。
@@ -98,8 +111,10 @@ export async function doctor(svc) {
       }
     }
     // 2. 索引一致性（裁决 18：用 index.size 比较；实现未暴露 size 则跳过，不假阳性）
-    if (typeof svc.index.size === 'number' && svc.index.size !== svc._records.size) {
-      issues.push({ code: 'index_inconsistent', severity: 'error', detail: `index=${svc.index.size} records=${svc._records.size}` });
+    // B3：索引只含 live 记录，因此比较对象也必须是 live 数（墓碑不进索引）。
+    const liveCount = [...svc._records.values()].filter((r) => r.status !== 'tombstoned').length;
+    if (typeof svc.index.size === 'number' && svc.index.size !== liveCount) {
+      issues.push({ code: 'index_inconsistent', severity: 'error', detail: `index=${svc.index.size} records=${liveCount}` });
     }
     // 2b. 未落盘 hits（裁决 21：flush 失败/未 close 时以 warn 呈现）
     if (svc._extraHits.size > 0) {
@@ -288,18 +303,23 @@ export async function commitPairVerdict(svc, a, b, d, detail) {
   const now = nowIso(svc.clock);
   const maxConf = Math.max(a.confidence ?? 0, b.confidence ?? 0);
   let newRecord = null;
+  // 合并/胜负裁决都会让一条记录代表另一条：污点并集、trust 取更弱者。
+  const face = mergeTrustFace(a, b);
+  const facePatch = { trust: face.trust, ...(face.taint.length > 0 ? { taint: face.taint } : {}) };
   if (d === 'a_wins' || d === 'merge') {
     const winnerTags = d === 'merge' && !(a.tags ?? []).includes('merged')
       ? [...(a.tags ?? []), 'merged'] : a.tags;
     const loser = withPatch(b, { status: 'superseded', validTo: b.validTo ?? now });
     newRecord = withPatch(a, {
-      status: 'active', validTo: null, confidence: maxConf, tags: winnerTags,
+      status: 'active', validTo: null, confidence: maxConf, tags: winnerTags, ...facePatch,
     });
     await svc._commit(loser, 'curate_apply', { ...detail, decision: d, side: 'loser' });
     await svc._commit(newRecord, 'curate_apply', { ...detail, decision: d, side: 'winner' });
   } else if (d === 'b_wins') {
     const loser = withPatch(a, { status: 'superseded', validTo: a.validTo ?? now });
-    newRecord = withPatch(b, { status: 'active', validTo: null, confidence: maxConf });
+    newRecord = withPatch(b, {
+      status: 'active', validTo: null, confidence: maxConf, ...facePatch,
+    });
     await svc._commit(loser, 'curate_apply', { ...detail, decision: d, side: 'loser' });
     await svc._commit(newRecord, 'curate_apply', { ...detail, decision: d, side: 'winner' });
   } else { // keep_both
@@ -367,7 +387,11 @@ export async function applyIdsDecision(svc, d) {
     const winner = recs[winnerIdx];
     const wTags = decision === 'merge' && !(winner.tags ?? []).includes('merged')
       ? [...(winner.tags ?? []), 'merged'] : winner.tags;
-    newRecord = withPatch(winner, { status: 'active', validTo: null, confidence: maxConf, tags: wTags });
+    const face = mergeTrustFace(...recs);
+    newRecord = withPatch(winner, {
+      status: 'active', validTo: null, confidence: maxConf, tags: wTags,
+      trust: face.trust, ...(face.taint.length > 0 ? { taint: face.taint } : {}),
+    });
     await svc._commit(newRecord, 'curate_apply', { ...detail, side: 'winner' });
   }
   return { ids, applied: true, decision, newRecord };
