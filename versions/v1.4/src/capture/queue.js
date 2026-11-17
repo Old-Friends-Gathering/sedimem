@@ -4,7 +4,8 @@
 
 import { randomUUID } from 'node:crypto';
 import {
-  mkdirSync, readFileSync, appendFileSync, existsSync, statSync, renameSync, rmSync, writeFileSync,
+  mkdirSync, readFileSync, existsSync, statSync, renameSync, rmSync, writeFileSync,
+  openSync, fstatSync, writeSync, closeSync,
 } from 'node:fs';
 import path from 'node:path';
 import { scopeKeyOf } from '../config/paths.js';
@@ -121,17 +122,21 @@ export function createCaptureQueue({ memoHome, scope = 'default', maxQueueBytes:
     mkdirSync(inboxDir, { recursive: true });
     const payload = `${rows.map((r) => JSON.stringify(r)).join('\n')}\n`;
     const bytes = Buffer.byteLength(payload);
-    let current = 0;
-    try { current = statSync(file).size; } catch (e) { if (e.code !== 'ENOENT') throw e; }
-    if (current + bytes > maxQueueBytes) {
-      // 配额按字节而不是条数：一条 2 MB 的粘贴正文能把「50 条」撑爆。
-      const err = new Error(`capture queue: 写入 ${bytes} 字节会超过上限 ${maxQueueBytes}（当前 ${current}）`);
-      err.code = 'E_QUEUE_QUOTA';
-      err.detail = { file, current, bytes, maxQueueBytes };
-      throw err;
+    const fd = openSync(file, 'a');
+    try {
+      const current = fstatSync(fd).size;
+      if (current + bytes > maxQueueBytes) {
+        // 配额按字节而不是条数：一条 2 MB 的粘贴正文能把「50 条」撑爆。
+        const err = new Error(`capture queue: 写入 ${bytes} 字节会超过上限 ${maxQueueBytes}（当前 ${current}）`);
+        err.code = 'E_QUEUE_QUOTA';
+        err.detail = { file, current, bytes, maxQueueBytes };
+        throw err;
+      }
+      // O_APPEND 追加，不整文件重读重写；锁保证同一时刻只有本进程写。读者仍按「同 id 最后一行胜出」折叠。
+      writeSync(fd, payload);
+    } finally {
+      closeSync(fd);
     }
-    // O_APPEND 追加，不整文件重读重写；锁保证同一时刻只有本进程写。读者仍按「同 id 最后一行胜出」折叠。
-    appendFileSync(file, payload);
   }
 
   /** 追加若干行（自带锁；锁内调用要用 appendRaw，同步锁不可重入）。 */

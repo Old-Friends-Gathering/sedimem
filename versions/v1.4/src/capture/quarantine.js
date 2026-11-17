@@ -12,7 +12,8 @@
 // 落库文本只有 quote（≤200 字），并带 tags ['quarantine','capture'] 供追溯。
 import { randomUUID } from 'node:crypto';
 import {
-  mkdirSync, readFileSync, appendFileSync, existsSync, statSync, renameSync, rmSync, writeFileSync,
+  mkdirSync, readFileSync, existsSync, statSync, renameSync, rmSync, writeFileSync,
+  openSync, fstatSync, writeSync, closeSync,
 } from 'node:fs';
 import path from 'node:path';
 import { scopeKeyOf } from '../config/paths.js';
@@ -113,15 +114,19 @@ export function createQuarantine({ memoHome, scope = 'default', maxQueueBytes, t
       mkdirSync(inboxDir, { recursive: true });
       const payload = `${rows.map((r) => JSON.stringify(r)).join('\n')}\n`;
       const bytes = Buffer.byteLength(payload, 'utf8');
-      let current = 0;
-      try { current = statSync(file).size; } catch (e) { if (e.code !== 'ENOENT') throw e; }
-      if (current + bytes > maxBytes) {
-        const err = new Error(`quarantine: 写入 ${bytes} 字节会超过上限 ${maxBytes}（当前 ${current}）`);
-        err.code = 'E_QUEUE_QUOTA';
-        err.detail = { file, current, bytes, maxBytes };
-        throw err;
+      const fd = openSync(file, 'a');
+      try {
+        const current = fstatSync(fd).size;
+        if (current + bytes > maxBytes) {
+          const err = new Error(`quarantine: 写入 ${bytes} 字节会超过上限 ${maxBytes}（当前 ${current}）`);
+          err.code = 'E_QUEUE_QUOTA';
+          err.detail = { file, current, bytes, maxBytes };
+          throw err;
+        }
+        writeSync(fd, payload);
+      } finally {
+        closeSync(fd);
       }
-      appendFileSync(file, payload);
     });
   }
 
