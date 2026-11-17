@@ -5,7 +5,7 @@
 
 | 计划 | 对应需求 | 状态 | 覆盖版本 |
 |---|---|---|---|
-| [`v1.4-p0b.md`](v1.4-p0b.md) | m02899：P0b 安全与信任最小集 + 英文视觉资产 / README 站点链接 | 已完成（PR #215，待合并） | v1.4.0 |
+| [`v1.4-p0b.md`](v1.4-p0b.md) | m02899：P0b 安全与信任最小集 + 英文视觉资产 / README 站点链接 | 已完成（PR #215） | v1.4.0 |
 | [`v1.3-p0a.md`](v1.3-p0a.md) | P0a 地基：CI/文档/版本真值化（v1.3） | 已完成（PR #208） | v1.3.0 |
 | [`v1.3.1-task-library-naming.md`](v1.3.1-task-library-naming.md) | [#210](https://github.com/Old-Friends-Gathering/sedimem/issues/210)：任务库术语与 MCP 入口修复（session-99680927 复盘） | 已完成（PR [#211](https://github.com/Old-Friends-Gathering/sedimem/pull/211) 已合并） | v1.3.1 |
 | [`future-architecture.md`](future-architecture.md) | m00378：基于 v1.2 重新调研后的未来架构（个人观测台 + 治理路线） | 已批准（A） | 自 v1.3 起（P0a 已完成） |
