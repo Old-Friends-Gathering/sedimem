@@ -12,6 +12,7 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { execFileSync } from 'node:child_process';
+import { translateHtml, assertNoCjk } from './i18n.mjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const REPO = path.resolve(HERE, '../..');
@@ -94,7 +95,7 @@ const arch = () => `<!doctype html><meta charset="utf-8"><style>${BASE}
   <div class="head">
     <span class="kicker">ARCHITECTURE</span>
     <h1>整系统架构：四个客户端 → 一个门面 → 一条真相链</h1>
-    <span class="note">v1.0 · 12 模块 · 0 运行时依赖</span>
+    <span class="note">v1.4.0 · 14 模块 · 0 运行时依赖</span>
   </div>
 
   <div class="stage">
@@ -235,26 +236,31 @@ const hero = () => `<!doctype html><meta charset="utf-8"><style>${BASE}
     <p>本地优先的个人记忆系统：真相层只追加、永不改写，索引/视图/派生全部可重建。DSH / Codex / Claude 三端共用同一个 MCP server。</p>
     <div class="pills">
       <span class="pill"><b>0</b> 运行时依赖</span>
-      <span class="pill"><b>648</b> tests · I1–I50</span>
+      <span class="pill"><b>831</b> tests · I1–I56</span>
       <span class="pill"><b>as-of</b> 回查任意时点</span>
       <span class="pill"><b>MIT</b> · 数据只在 <span class="m">~/.memo/</span></span>
     </div>
   </div>
-  <div class="right">v1.0 · local-first · append-only truth layer</div>
+  <div class="right">v1.4.0 · local-first · append-only truth layer</div>
 </body>`;
 
 mkdirSync(path.join(OUT, 'diagrams'), { recursive: true });
 const TMP = mkdtempSync(path.join(tmpdir(), 'sedimem-master-'));
 const only = process.argv.includes('--only') ? process.argv[process.argv.indexOf('--only') + 1] : null;
+const lang = process.argv.includes('--lang') ? process.argv[process.argv.indexOf('--lang') + 1] : 'zh';
+if (!['zh', 'en'].includes(lang)) throw new Error(`unknown lang: ${lang}`);
+const suffix = lang === 'en' ? '-en' : '';
 const jobs = [
-  ['master-arch', arch, path.join(OUT, 'diagrams/master-arch.png'), ARCH_W, ARCH_H],
-  ['hero', hero, path.join(OUT, 'hero.png'), HERO_W, HERO_H],
+  ['master-arch', arch, path.join(OUT, `diagrams/master-arch${suffix}.png`), ARCH_W, ARCH_H],
+  ['hero', hero, path.join(OUT, `hero${suffix}.png`), HERO_W, HERO_H],
 ];
 for (const [name, build, png, w, h] of jobs) {
   if (only && only !== name) continue;
     // 临时目录用 mkdtemp（随机名 + 0700）：固定 /tmp 路径会被 CodeQL 判成 js/insecure-temporary-file。
   const html = path.join(TMP, `${name}.html`);
-  writeFileSync(html, build(), 'utf8');
+  const markup = translateHtml(build(), lang);
+  if (lang === 'en') assertNoCjk(markup, name);
+  writeFileSync(html, markup, 'utf8');
   execFileSync(CHROME, [
     '--headless=new', '--disable-gpu', '--hide-scrollbars', '--force-device-scale-factor=2',
     `--window-size=${w},${h}`, `--screenshot=${png}`, `file://${html}`,

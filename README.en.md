@@ -1,11 +1,13 @@
 > doc-kind: manual
-> doc-version: 1.3
+> doc-version: 1.4
 
 <div align="center">
 
-![sedimem](docs/shots/hero.png)
+![sedimem](docs/shots/hero-en.png)
 
 [中文](README.md) · **English**
+
+📖 **Project site**: [English](https://old-friends-gathering.github.io/sedimem/en/) · [中文](https://old-friends-gathering.github.io/sedimem/)
 
 [![ci](https://github.com/Old-Friends-Gathering/sedimem/actions/workflows/ci.yml/badge.svg)](https://github.com/Old-Friends-Gathering/sedimem/actions/workflows/ci.yml)
 [![quality](https://github.com/Old-Friends-Gathering/sedimem/actions/workflows/quality.yml/badge.svg)](https://github.com/Old-Friends-Gathering/sedimem/actions/workflows/quality.yml)
@@ -56,7 +58,7 @@ $NODE $V/src/cli/memo.js serve --port 7788   # Memory Hub at http://127.0.0.1:77
 
 ## Architecture
 
-![Overall architecture: clients → interface layer → MemoryService → 14 modules → data layer](docs/shots/diagrams/master-arch.png)
+![Overall architecture: clients → interface layer → MemoryService → 14 modules → data layer](docs/shots/diagrams/master-arch-en.png)
 
 - **Three layers, one-way flow**: clients → interface layer (CLI / MCP / Web) → MemoryService → 14 modules (api / config / core / storage / index / hygiene / render / views / session / capture / llm / mcp / web / cli) → data layer; dependencies point only downward.
 - **Four write gates**: schema validation → redaction (secrets / intranet domains / private paths → `[REDACTED:x]`, before anything hits disk) → dedupe (contentHash / entity keys / CJK bigram Dice, 0.15 recall, 0.85 match) → conflict (same slot, different value → superseded or disputed, with agent-as-judge adjudication).
@@ -64,7 +66,7 @@ $NODE $V/src/cli/memo.js serve --port 7788   # Memory Hub at http://127.0.0.1:77
 
 **The two main flows in detail**:
 
-| ![Write: schema → redact → dedupe → conflict → append](docs/shots/diagrams/write.png) | ![Read: BM25 ± semantic → RRF → basis/degraded](docs/shots/diagrams/read.png) |
+| ![Write: schema → redact → dedupe → conflict → append](docs/shots/diagrams/write-en.png) | ![Read: BM25 ± semantic → RRF → basis/degraded](docs/shots/diagrams/read-en.png) |
 |---|---|
 | Four write gates: each step costs more; cheap gates filter most noise | Dual-channel read: lexical always works, semantic degrades explicitly |
 
@@ -92,9 +94,9 @@ $NODE $V/src/cli/memo.js serve --port 7788   # Memory Hub at http://127.0.0.1:77
 
 `memo serve --port 7788`, nine pages: Today / Graph / Search / Hygiene / Edit / Import / Task / Handoffs / Settings.
 
-| ![Today: stream of the day's changes](docs/shots/ui-today.png) | ![Graph: force-directed + kind filter](docs/shots/ui-graph.png) |
+| ![Today: stream of the day's changes](docs/shots/ui-today-en.png) | ![Graph: force-directed + kind filter](docs/shots/ui-graph-en.png) |
 |---|---|
-| ![Hygiene: pending clusters + 30-day trend](docs/shots/ui-hygiene.png) | ![Task: task-store status](docs/shots/ui-session.png) |
+| ![Hygiene: pending clusters + 30-day trend](docs/shots/ui-hygiene-en.png) | ![Task: task-store status](docs/shots/ui-session-en.png) |
 
 | Page | Purpose | Page | Purpose |
 |---|---|---|---|
@@ -108,7 +110,7 @@ $NODE $V/src/cli/memo.js serve --port 7788   # Memory Hub at http://127.0.0.1:77
 
 Default `provider=none` — the whole layer doesn't exist. When enabled, derived output goes only to the sidecar; the truth layer stays byte-identical.
 
-![LLM derived layer: write → outbox → LlmPort → derived sidecar](docs/shots/diagrams/llm.png)
+![LLM derived layer: write → outbox → LlmPort → derived sidecar](docs/shots/diagrams/llm-en.png)
 
 ```bash
 mkdir -p ~/.config/sedimem && printf '%s\n' '<key>' > ~/.config/sedimem/llm-key && chmod 600 ~/.config/sedimem/llm-key
@@ -136,7 +138,7 @@ A task's working state lives in a `session:*` store (fact writes forbidden). We 
 
 MCP default: when the user says "create a task store / create a task in the task store", call `memory_session_start({title})` first, then write directly with `memory_write({kind:"decision"|"gotcha"|"state", scope:"session:<id>"})` (no scope switch needed). Pass the same `scope` to `memory_session_checkpoint/status/close`; `close` restores the main scope automatically. Create `task_board_*` cards only for execution status; never create the task store as a `repo:`/`dir:` memory scope.
 
-![Task store: start → checkpoint → close](docs/shots/diagrams/session.png)
+![Task store: start → checkpoint → close](docs/shots/diagrams/session-en.png)
 
 ```bash
 memo session start --title "Debug lock contention"
@@ -152,7 +154,7 @@ The task store keeps *conclusions*; the ledger keeps the *process*. Host compact
 into a few summaries — detail, your corrections, and dead ends are gone for good. The ledger folds the session transcript
 into **replayable segments**, so nothing is lost when the session closes and you can expand the original text later.
 
-![Task ledger: segments / brief / capture](docs/shots/ui-ledger.png)
+![Tasks: one task store per task, with its ledger inside](docs/shots/ui-session-en.png)
 
 | Capability | What it does | Command |
 |---|---|---|
@@ -182,7 +184,7 @@ Each client gets one stdio MCP entry pointing at the same `server.js` and the sa
         serverName: memo
         transport: stdio
         command: node
-        args: ['/ABS/PATH/versions/v1.3/src/mcp/server.js']
+        args: ['/ABS/PATH/versions/v1.4/src/mcp/server.js']
         env: { MEMO_HOME: '$HOME/.memo' }
 ```
 
@@ -190,7 +192,7 @@ Each client gets one stdio MCP entry pointing at the same `server.js` and the sa
 # Codex CLI: ~/.codex/config.toml
 [mcp_servers.memo]
 command = "node"
-args = ["/ABS/PATH/versions/v1.3/src/mcp/server.js"]
+args = ["/ABS/PATH/versions/v1.4/src/mcp/server.js"]
 enabled = true
 [mcp_servers.memo.env]
 MEMO_HOME = "$HOME/.memo"
@@ -199,10 +201,10 @@ MEMO_HOME = "$HOME/.memo"
 ```bash
 # Claude Code
 claude mcp add --scope user memo -e MEMO_HOME=$HOME/.memo -- \
-  node /ABS/PATH/versions/v1.3/src/mcp/server.js
+  node /ABS/PATH/versions/v1.4/src/mcp/server.js
 ```
 
-Self-check: `bash versions/v1.3/configs/verify-three-clients.sh` (expect `PASS`).
+Self-check: `bash versions/v1.4/configs/verify-three-clients.sh` (expect `PASS`).
 
 Tool surface: 10 `memory_*` + 5 `memory_session_*`, identical across all three clients.
 
@@ -248,6 +250,9 @@ Tool surface: 10 `memory_*` + 5 `memory_session_*`, identical across all three c
 | `memo get <id>` | — |
 | `memo supersede <id> --value "..." [--text "..."] [--agent dsh] [--json]` | — |
 | `memo forget <id> [--purge] [--reason "..."] [--json]` | — |
+| `memo forget --source-agent <a> [--source-session <s>] [--content-hash <h>] [--reason "..."] [--dry-run]` | Delete by source: tombstone every scope, clean derived index/brief/ledger (B3) |
+| `memo verify-delete --source-agent <a> [--source-session <s>] [--content-hash <h>] [--json]` | Verify items/index/vector/brief/ledger have no residue; exit 1 on any residue |
+| `memo trust promote <id> --to T0|T1 --reason "..." [--drop-taint t1,t2] [--json]` | Human-only trust promotion (the only taint reduction), writes a trust_promote audit event |
 | `memo stats [--json]` | — |
 | `memo scope [--json]` | 看本目录解析出的分库（以及 MCP 侧覆盖文件） |
 | `memo doctor [--json]` | — |
@@ -275,15 +280,19 @@ Tool surface: 10 `memory_*` + 5 `memory_session_*`, identical across all three c
 | `memo session expand --scope session:<id> --segment <segId> [--to-file]` | 按锚点还原原文（仅本地） |
 | `memo session archive --scope session:<id> [--yes]` | 归档整个任务目录 → archive/ |
 | `memo migrate dsh-memory [--db path]` | — |
+| `memo mcp [--surface core|all] [--session-tools]` | MCP server: default all (17 tools); `--surface core` keeps search/write/brief (3) |
+| `memo inject [--max-chars N] [--allow-untrusted] [--no-audit] [--json]` | Build one injection and audit it as `kind:"inject"` (T2 body withheld by default) |
+| `memo audit verify|anchor [--git] [--json]` | Verify the events.jsonl hash chain / write a local anchor (not tamper-proof vs same UID; no push) |
+| `memo quarantine list|accept|reject [--ids a,b] [--by who] [--json]` | Quarantine stores references only; accept is human-only |
 | `memo serve [--port N] [--no-ui]` | 只读 Web UI/API（默认 127.0.0.1:7788；--no-ui 只提供 API） |
 
 </details>
 
 ## Quality gates
 
-![Five gate layers: quality → security → coverage → docs-drift → pages-verify](docs/shots/diagrams/gates.png)
+![Five gate layers: quality → security → coverage → docs-drift → pages-verify](docs/shots/diagrams/gates-en.png)
 
-Local scripts = CI scripts: 15 quality checks + 9 security checks + coverage (lines ≥ 85 / branches ≥ 70 / functions ≥ 90) + docs-drift + pages-verify, plus 761 tests and eval I1–I56.
+Local scripts = CI scripts: 15 quality checks + 9 security checks + coverage (lines ≥ 85 / branches ≥ 70 / functions ≥ 90) + docs-drift + pages-verify, plus 831 tests and eval I1–I56.
 
 ```bash
 node tools/quality-check.mjs && node tools/security-check.mjs && node tools/coverage-gate.mjs
@@ -305,7 +314,8 @@ node tools/quality-check.mjs && node tools/security-check.mjs && node tools/cove
 
 | Version | Theme | Status |
 |---|---|---|
-| **v1.3.1** | Task-library terminology & entry fix: MCP now says "task store = temporary memory = session:<id>"; `memory_write` accepts a one-shot `scope` | ✅ Current |
+| **v1.4.0** | P0b start: English README/site (English diagrams + `?lang=en` UI) and project-site links in both READMEs | 🚧 In progress |
+| v1.3.1 | Task-store terminology & entry fix: MCP now says "task store = temporary memory = session:<id>"; `memory_write` accepts a one-shot `scope` | ✅ Shipped |
 | v1.3.0 | P0a foundation: CI follows `versions/CURRENT`, coverage/Windows smoke de-hardcoded, engines 22.15 | ✅ Shipped |
 | v1.2.x | Task context ledger (segments/brief/expand) + task page | ✅ Shipped |
 | v1.1.x | Task library management + UI rebuild | ✅ Shipped |

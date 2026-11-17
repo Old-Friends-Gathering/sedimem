@@ -1,0 +1,11 @@
+{
+  "id": "I27",
+  "name": "分歧视图与裁决",
+  "expects": [
+    "不可比值进 disputed",
+    "/api/conflicts 暴露 slot",
+    "resolve 后收敛",
+    "真相层只增",
+    "重放幂等"
+  ]
+}

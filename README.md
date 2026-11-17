@@ -1,11 +1,13 @@
 > doc-kind: manual
-> doc-version: 1.3
+> doc-version: 1.4
 
 <div align="center">
 
 ![sedimem](docs/shots/hero.png)
 
 **中文** · [English](README.en.md)
+
+📖 **项目站**: [中文](https://old-friends-gathering.github.io/sedimem/) · [English](https://old-friends-gathering.github.io/sedimem/en/)
 
 [![ci](https://github.com/Old-Friends-Gathering/sedimem/actions/workflows/ci.yml/badge.svg)](https://github.com/Old-Friends-Gathering/sedimem/actions/workflows/ci.yml)
 [![quality](https://github.com/Old-Friends-Gathering/sedimem/actions/workflows/quality.yml/badge.svg)](https://github.com/Old-Friends-Gathering/sedimem/actions/workflows/quality.yml)
@@ -174,7 +176,7 @@ memo session sweep      # 扫 14 天僵尸库
         serverName: memo
         transport: stdio
         command: node
-        args: ['/ABS/PATH/versions/v1.3/src/mcp/server.js']
+        args: ['/ABS/PATH/versions/v1.4/src/mcp/server.js']
         env: { MEMO_HOME: '$HOME/.memo' }
 ```
 
@@ -182,7 +184,7 @@ memo session sweep      # 扫 14 天僵尸库
 # Codex CLI：~/.codex/config.toml
 [mcp_servers.memo]
 command = "node"
-args = ["/ABS/PATH/versions/v1.3/src/mcp/server.js"]
+args = ["/ABS/PATH/versions/v1.4/src/mcp/server.js"]
 enabled = true
 [mcp_servers.memo.env]
 MEMO_HOME = "$HOME/.memo"
@@ -191,10 +193,10 @@ MEMO_HOME = "$HOME/.memo"
 ```bash
 # Claude Code
 claude mcp add --scope user memo -e MEMO_HOME=$HOME/.memo -- \
-  node /ABS/PATH/versions/v1.3/src/mcp/server.js
+  node /ABS/PATH/versions/v1.4/src/mcp/server.js
 ```
 
-自检：`bash versions/v1.3/configs/verify-three-clients.sh`（期望 `PASS`）。
+自检：`bash versions/v1.4/configs/verify-three-clients.sh`（期望 `PASS`）。
 
 工具面：10 个 `memory_*` + 5 个 `memory_session_*`，三端完全一致。
 
@@ -240,6 +242,9 @@ claude mcp add --scope user memo -e MEMO_HOME=$HOME/.memo -- \
 | `memo get <id>` | — |
 | `memo supersede <id> --value "..." [--text "..."] [--agent dsh] [--json]` | — |
 | `memo forget <id> [--purge] [--reason "..."] [--json]` | — |
+| `memo forget --source-agent <a> [--source-session <s>] [--content-hash <h>] [--reason "..."] [--dry-run]` | 按来源删除：所有分库追加墓碑并清派生/账本（B3） |
+| `memo verify-delete --source-agent <a> [--source-session <s>] [--content-hash <h>] [--json]` | 验证 items/index/vector/brief/账本无残留，有残留退出码 1 |
+| `memo trust promote <id> --to T0|T1 --reason "..." [--drop-taint t1,t2] [--json]` | 人工提升 trust（唯一降 taint 动作），写 trust_promote 审计 |
 | `memo stats [--json]` | — |
 | `memo scope [--json]` | — |
 | `memo doctor [--json]` | — |
@@ -267,6 +272,10 @@ claude mcp add --scope user memo -e MEMO_HOME=$HOME/.memo -- \
 | `memo session expand --scope session:<id> --segment <segId> [--to-file]` | — |
 | `memo session archive --scope session:<id> [--yes]` | — |
 | `memo migrate dsh-memory [--db path]` | — |
+| `memo mcp [--surface core|all] [--session-tools]` | MCP server：默认 all（17 工具），`--surface core` 只留 search/write/brief（3 个） |
+| `memo inject [--max-chars N] [--allow-untrusted] [--no-audit] [--json]` | 构建一次注入并写 `kind:"inject"` 审计（默认扣留 T2 原文） |
+| `memo audit verify|anchor [--git] [--json]` | events.jsonl 哈希链本地校验 / 写链头锚（不抗同 UID 重算；不 push） |
+| `memo quarantine list|accept|reject [--ids a,b] [--by 人] [--json]` | 隔离区只存引用；accept 仅人工提升 |
 | `memo serve [--port N] [--no-ui]` | — |
 
 </details>
@@ -275,7 +284,7 @@ claude mcp add --scope user memo -e MEMO_HOME=$HOME/.memo -- \
 
 ![五层门禁：质量 → 安全 → 覆盖率 → docs-drift → pages-verify](docs/shots/diagrams/gates.png)
 
-本地脚本 = CI 脚本：质量 15 项 + 安全 9 项 + 覆盖率（lines ≥ 85 / branches ≥ 70 / functions ≥ 90）+ docs-drift + pages-verify，另含 761 tests 与 eval I1–I56。
+本地脚本 = CI 脚本：质量 15 项 + 安全 9 项 + 覆盖率（lines ≥ 85 / branches ≥ 70 / functions ≥ 90）+ docs-drift + pages-verify，另含 831 tests 与 eval I1–I56。
 
 ```bash
 node tools/quality-check.mjs && node tools/security-check.mjs && node tools/coverage-gate.mjs
@@ -297,7 +306,8 @@ node tools/quality-check.mjs && node tools/security-check.mjs && node tools/cove
 
 | 版本 | 主题 | 状态 |
 |---|---|---|
-| **v1.3.1** | 任务库术语与入口修复：MCP 统一「任务库=临时记忆库」、`memory_write` 支持 `scope`、`memory_scope` 补 session 示例 | ✅ 当前 |
+| **v1.4.0** | P0b 启动：英文 README/项目站（英文示意图 + `?lang=en` UI）、两版 README 加项目站链接 | 🚧 进行中 |
+| v1.3.1 | 任务库术语与入口修复：MCP 统一「任务库=临时记忆库」、`memory_write` 支持 `scope`、`memory_scope` 补 session 示例 | ✅ 已发布 |
 | v1.3.0 | P0a 地基：CI 跑 CURRENT、覆盖率/Windows 冒烟去硬编码、engines 22.15、文档与门禁对齐 | ✅ 已发布 |
 | v1.2.2 | 文档同步门禁 Q16 + README/项目站补「任务账本」章节与 CLI 速查 | ✅ 已发布 |
 | v1.2.1 | 任务账本补丁：简报可读性与预算、决策抽取精度、默认走 LLM | ✅ 已发布 |

@@ -1,9 +1,9 @@
 # 11 · 文档治理契约
 
 > doc-kind: contract
-> doc-version: 1.3
+> doc-version: 1.4
 > verified-at: 2026-11-14
-> verified-against: versions/CURRENT（v1.3 / 1.3.0）
+> verified-against: versions/CURRENT（v1.4 / 1.4.0）
 
 ## 一、为什么有这篇：现状证据
 

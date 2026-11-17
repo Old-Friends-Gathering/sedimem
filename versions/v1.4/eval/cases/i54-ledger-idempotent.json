@@ -1,0 +1,11 @@
+{
+  "id": "I54",
+  "title": "区间幂等与重叠：重复 capture 不重复落段，重叠 append 抛 E_ALREADY_CAPTURED，coveredSeqs 合并且无重叠",
+  "why": "capture 会被定时任务/用户重跑，如果第二次把同一区间再 append 一次，账本就出现重复段、brief 也会重复结论。这条用例钉住 appendSegment 的半开区间语义：重复 capture 幂等（created:0），手工重叠 append fail-closed（E_ALREADY_CAPTURED 且零写入），相切区间可追加并被 merged 成一段覆盖。",
+  "pass": [
+    "同一转录连跑两次 captureTask：第二次返回 {created:0, skipped:1, segments:[]}，segments.jsonl 仍只有 1 行",
+    "手工 append 与 [1,5) 重叠的 [2,4) → 抛 E_ALREADY_CAPTURED，段文件逐字节不变（零写入）",
+    "半开区间相切 [5,7) 可追加，index.segments.length===2，segments.jsonl 行数===2",
+    "coveredSeqs 合并相邻区间为 [[1,7]]，且升序、两两不重叠"
+  ]
+}

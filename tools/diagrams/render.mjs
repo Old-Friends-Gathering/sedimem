@@ -13,6 +13,7 @@ import path from 'node:path';
 import { tmpdir } from 'node:os';
 import { fileURLToPath } from 'node:url';
 import { execFileSync } from 'node:child_process';
+import { translateHtml, assertNoCjk } from './i18n.mjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const REPO = path.resolve(HERE, '../..');
@@ -23,7 +24,7 @@ const CHROME = process.env.CHROME_PATH
 const CSS = `
   * { box-sizing: border-box; margin: 0; padding: 0; }
   body {
-    width: 1600px; height: 560px; padding: 30px 48px;
+    width: 1600px; height: 640px; padding: 30px 48px;
     background: radial-gradient(1200px 600px at 15% -10%, #17213a 0%, #0b1020 55%, #080c17 100%);
     color: #e8edff; font-family: "PingFang SC", "Noto Sans CJK SC", -apple-system, sans-serif;
     display: flex; flex-direction: column; gap: 22px; overflow: hidden;
@@ -66,7 +67,8 @@ const CSS = `
   .band .label { font-size: 12px; letter-spacing: .18em; color: #4d6bfe; font-weight: 700; }
 `;
 
-const P = (body) => `<!doctype html><meta charset="utf-8"><style>${CSS}</style><body>${body}</body>`;
+let CURRENT_H = 640;
+const P = (body) => `<!doctype html><meta charset="utf-8"><style>${CSS}</style><style>body{height:${CURRENT_H}px}</style><body>${body}</body>`;
 
 const head = (eyebrow, title, sub) => `
   <div class="head">
@@ -74,6 +76,8 @@ const head = (eyebrow, title, sub) => `
   </div>`;
 
 const foot = (left, right) => `<div class="foot"><span>${left}</span><span style="margin-left:auto">${right}</span></div>`;
+
+const HEIGHTS = { gates: 780 };
 
 const DIAGRAMS = {
   arch: () => P(`
@@ -106,7 +110,7 @@ const DIAGRAMS = {
       <div class="col">
         <div class="card">
           <div class="t">③ 界面层</div>
-          <div class="d">记忆中心九页（浏览器）· MCP 10+5 工具（DSH / Codex / Claude）· CLI</div>
+          <div class="d">记忆中心九页（浏览器）· MCP 17 工具（DSH / Codex / Claude）· CLI</div>
         </div>
         <div class="card">
           <div class="t">读路径 <span class="tag">BM25 → 可选语义 → RRF</span></div>
@@ -115,15 +119,15 @@ const DIAGRAMS = {
       </div>
     </div>
     <div class="band">
-      <div class="label">12 个模块 · 依赖单向</div>
+      <div class="label">14 个模块 · 依赖单向</div>
       <div class="chips">
         ${['core 基础类型/文本归一', 'storage JSONL+锁', 'index BM25/向量/RRF', 'hygiene 四道门+裁决',
            'render brief/tier0/注入', 'views L2 场景块/L3 画像', 'session 临时库/交接', 'capture 候选队列',
-           'llm port/outbox/派生', 'mcp 10+5 工具', 'web 九页+只读 API', 'cli 命令面']
+           'llm port/outbox/派生', 'mcp 17 工具', 'web 九页+只读 API', 'cli 命令面']
           .map((x) => `<span class="chip"><b>${x.split(' ')[0]}</b> ${x.split(' ').slice(1).join(' ')}</span>`).join('')}
       </div>
     </div>
-    ${foot('依赖方向：api → hygiene/index/views/llm → storage → core；ui 不 import 任何 src/', 'sedimem v1.0')}
+    ${foot('依赖方向：api → hygiene/index/views/llm → storage → core；ui 不 import 任何 src/', 'sedimem v1.4.0')}
   `),
 
   write: () => P(`
@@ -168,7 +172,7 @@ const DIAGRAMS = {
           .map((x) => `<span class="chip">${x}</span>`).join('')}
       </div>
     </div>
-    ${foot('I1–I50 注入式评测：每条断言都能在 tests/injection/ 里找到同名用例', 'sedimem v1.0')}
+    ${foot('I1–I56 注入式评测：每条断言都能在 tests/injection/ 里找到同名用例', 'sedimem v1.4.0')}
   `),
 
   llm: () => P(`
@@ -197,7 +201,7 @@ const DIAGRAMS = {
         <span class="chip"><b>3</b> memo llm test &amp;&amp; memo derive --rebuild</span>
       </div>
     </div>
-    ${foot('policy.llm.thinking 默认 disabled：GLM-4.5+ 的思考链会吃掉 max_tokens，content 变成空串（v1.0.1 修）', 'sedimem v1.0.1')}
+    ${foot('policy.llm.thinking 默认 disabled：GLM-4.5+ 的思考链会吃掉 max_tokens，content 变成空串（v1.0.1 修）', 'sedimem v1.4.0')}
   `),
 
   session: () => P(`
@@ -225,7 +229,7 @@ const DIAGRAMS = {
            'memo session close --compress', 'memo session sweep'].map((c) => `<span class="chip"><b class="mono">${c}</b></span>`).join('')}
       </div>
     </div>
-    ${foot('DSH / Codex / Claude 三端共用：临时库仍是同一个 MCP server', 'sedimem v1.0')}
+    ${foot('DSH / Codex / Claude 三端共用：临时库仍是同一个 MCP server', 'sedimem v1.4.0')}
   `),
 
   read: () => P(`
@@ -257,28 +261,28 @@ const DIAGRAMS = {
         <span class="chip"><b>k=60</b> RRF 平滑常数</span>
       </div>
     </div>
-    ${foot('英文只用 containment：全字符二元组在英文无关句对上误聚 13.7%（实测 780 对）', 'sedimem v1.0')}
+    ${foot('英文只用 containment：全字符二元组在英文无关句对上误聚 13.7%（实测 780 对）', 'sedimem v1.4.0')}
   `),
 
   gates: () => P(`
     ${head('GATES', '五层门禁：自己会腐化，所以让机器盯着', '本地脚本 = CI 脚本，改阈值必须先改契约')}
-    <div class="stage" style="flex-direction:column; gap:12px">
+    <div class="stage" style="flex-direction:column; gap:12px; align-items:stretch">
       ${[
-        ['质量 14 项', 'Q1 零依赖 · Q2 规模 · Q3 测试清单 · Q4 评测对齐 · Q5 契约覆盖 · Q6 链接 · Q7 版本自包含 · Q8 编码 · Q9 Web 边界 · Q10 发布面 · Q11 写侧与任务库 · Q13 vendor · Q14 文档治理 · Q15 LLM 契约', 'ok'],
+        ['质量 15 项', 'Q1 零依赖 · Q2 规模 · Q3 测试清单 · Q4 评测对齐 · Q5 契约覆盖 · Q6 链接 · Q7 版本自包含 · Q8 编码 · Q9 Web 边界 · Q10 发布面 · Q11 写侧与任务库 · Q13 vendor · Q14 文档治理 · Q15 LLM 契约', 'ok'],
         ['安全 9 项', '无个人路径 · 无凭据/私钥 · 无内网域名 · 模板不含 home · .gitignore 覆盖 · LICENSE · 无超大文件 · 历史面轻扫 · 运行时回环断言', 'ok'],
-        ['覆盖率门禁', 'lines ≥ 89% · functions ≥ 90% · branches ≥ 77%（低于阈值直接 fail，不看人）', 'ok'],
+        ['覆盖率门禁', 'lines ≥ 85% · functions ≥ 90% · branches ≥ 70%（低于阈值直接 fail，不看人）', 'ok'],
         ['docs-drift', '文档里的命令/路径/版本必须能被脚本验证存在，防「文档漂移」', 'warn'],
         ['pages-verify', '合并后校验线上项目站版本号已更新；不通过就是发布面漏了', 'hl'],
       ].map(([t, d, cls]) => `<div class="card ${cls}"><div class="t">${t}</div><div class="d">${d}</div></div>`).join('')}
     </div>
     <div class="band">
-      <div class="label">CI 上的 12 个 job</div>
+      <div class="label">CI 上的 11 个 job</div>
       <div class="chips">
-        ${['test (22)', 'test (24)', 'eval (I1–I50)', 'quality', 'security', 'CodeQL', 'codeql',
+        ${['test (22)', 'test (24)', 'eval (I1–I56)', 'quality', 'security', 'CodeQL', 'codeql',
            'issue-link', 'ci-gate', 'pages', 'pages-verify', 'docs-drift'].map((j) => `<span class="chip">${j}</span>`).join('')}
       </div>
     </div>
-    ${foot('required checks 全绿 + strict 才允许合并；管理员也绕不过', 'sedimem v1.0.1')}
+    ${foot('required checks 全绿 + strict 才允许合并；管理员也绕不过', 'sedimem v1.4.0')}
   `),
 };
 
@@ -287,15 +291,21 @@ mkdirSync(OUT, { recursive: true });
 // 而且同名文件有被预先放置软链的风险。
 const TMP = mkdtempSync(path.join(tmpdir(), 'sedimem-diagrams-'));
 const only = process.argv.includes('--only') ? process.argv[process.argv.indexOf('--only') + 1] : null;
+const lang = process.argv.includes('--lang') ? process.argv[process.argv.indexOf('--lang') + 1] : 'zh';
+if (!['zh', 'en'].includes(lang)) throw new Error(`unknown lang: ${lang}`);
+const suffix = lang === 'en' ? '-en' : '';
 let n = 0;
 for (const [name, build] of Object.entries(DIAGRAMS)) {
+  CURRENT_H = HEIGHTS[name] || 640;
   if (only && only !== name) continue;
   const htmlPath = path.join(TMP, `${name}.html`);
-  writeFileSync(htmlPath, build(), 'utf8');
-  const png = path.join(OUT, `${name}.png`);
+  const markup = translateHtml(build(), lang);
+  if (lang === 'en') assertNoCjk(markup, name);
+  writeFileSync(htmlPath, markup, 'utf8');
+  const png = path.join(OUT, `${name}${suffix}.png`);
   execFileSync(CHROME, [
     '--headless=new', '--disable-gpu', '--hide-scrollbars', '--force-device-scale-factor=2',
-    '--window-size=1600,560', `--screenshot=${png}`, `file://${htmlPath}`,
+    `--window-size=1600,${CURRENT_H}`, `--screenshot=${png}`, `file://${htmlPath}`,
   ], { stdio: 'ignore' });
   n += 1;
   process.stdout.write(`✓ ${path.relative(REPO, png)}\n`);

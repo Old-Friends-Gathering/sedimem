@@ -1,9 +1,9 @@
 # 08 · Web UI（记忆观察台）—— v0.6 现状
 
 > doc-kind: contract
-> doc-version: 1.3
-> verified-at: 2026-11-14
-> verified-against: versions/CURRENT（v1.3 / 1.3.0）
+> doc-version: 1.4
+> verified-at: 2026-11-17
+> verified-against: versions/CURRENT（v1.4 / 1.4.0）
 
 > 本文件是 Web UI 的**设计契约**，描述 v0.6 的现状：页面规格、只读 HTTP 接口、图谱语义、
 > 安全边界、门禁增项。§1–§11 为 v0.2 定稿的核心契约（至今有效，实现与本文件不一致时以本文件为准，
@@ -26,6 +26,12 @@
 | **卫生**（Hygiene） | 库在**变健康还是变脏**？待裁决多少、合并了多少、冗余率/冲突率走势 | `metrics/` + `dedupeScan` + `doctor` |
 
 设计顺序原则：**先「今天变了什么」，再「长什么样」，最后「健康度」**。因为前者是日常高频，后者是每周一次。
+
+### 1.1 英文界面（v1.4）
+
+`?lang=en` 或 `localStorage["sedimem.lang"]="en"` 时，`ui/i18n.js` 在渲染后翻译**界面文案**（导航、页标题、按钮、统计卡、任务库与图谱工具栏、空态）；用户记录正文不翻译。词表未覆盖的文案保持中文——这是「中文优先、英文可选」的边界，不是完整 i18n 框架。
+
+英文项目站与英文 README 必须引用 `*-en.png` 视觉资产；`tests/unit/ui-i18n.test.js` 同时断言两版 README 含项目站链接。
 
 ## 2. 硬约束（不可协商）
 
@@ -87,6 +93,8 @@ async exportRecords({ since, until, status = 'active', kind, limit = 2000 } = {}
 约定：
 - 所有时间字段一律 **UTC ISO8601 字符串**；「哪一天」由 `tzOffset`（分钟，东为正）换算成 `[from, to)` UTC 时刻后再过滤，服务端不猜时区（用户决策：按自然日）。
 - 所有响应带 `{ "ok": true, ... }`；错误统一 `{ ok: false, code, message }` + 4xx/5xx（`E_INVALID_ARG` → 400，`E_CORRUPT_JSONL` → 500 且带 `file/line`）。
+- 鉴权：所有 `/api/*`（读与写）都要会话 token（cookie 或 Bearer）；无 token 一律 401 `E_UNAUTHORIZED`，
+  不因路径是否存在而在 401/404 之间泄漏信息（契约见 `docs/02` §3.24）。
 - `label` 的生成规则在服务端（`subject/predicate` 优先，unstructured 用 `text` 前 60 字），**UI 不拼接语义**，避免两端规则漂移。
 
 ### 4.3 图谱的边语义（`type`）
@@ -142,7 +150,18 @@ async exportRecords({ since, until, status = 'active', kind, limit = 2000 } = {}
 - **CSP**：静态页 `<meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data:; style-src 'self' 'unsafe-inline'; script-src 'self'">`，禁一切外链。
 - **输出转义**：所有记录正文经 `textContent` 写入，禁止 `innerHTML` 拼接用户数据（XSS 面即投毒面）。
 - **遮蔽**：`suspicious` 内容由服务端替换为 `[suspicious withheld]`，UI 无开关（想看得用 CLI `--include-suspicious`）。
-- **不写状态**：无 cookie、无 localStorage 存正文（只存 UI 偏好：过滤器 + 缩放锚点）、无上传。
+- **会话鉴权（v1.4 B4）**：`memo serve` 每次启动生成随机 token（`$MEMO_HOME/web-token`，0600）；
+  `GET /` 对回环 Host 下发 `Set-Cookie: memo_session=<token>; HttpOnly; SameSite=Strict; Path=/`（不设 `Secure`，
+  因为只跑 http 回环），页面 JS 不读 token。`/api/*` 接受 cookie **或** `Authorization: Bearer <token>`，
+  两者皆无 → 401 `E_UNAUTHORIZED`（在方法白名单之前判定）。契约细节见 `docs/02` §3.24。
+- **Host / Origin 强校验**：Host 必须是回环 + 实际监听端口（否则 403 `E_BAD_HOST`）；写请求必须带同源 Origin
+  （缺失 Origin 也 403 `E_BAD_ORIGIN`，旧「缺就放行」废止）。
+- **不写状态**：cookie 只存会话 token（`HttpOnly`），localStorage 只存 UI 偏好（过滤器 + 缩放锚点），无正文、无上传。
+- **MCP 的取舍**：`memo-mcp` 默认信任本机 stdio（三端配置里没有 token，强制会让它们全挂）；
+  设 `MEMO_MCP_TOKEN` 或 `MEMO_MCP_REQUIRE_TOKEN=1` 才强制，首帧 `initialize.params._meta` 可带
+  `token` / `headers.authorization` / `headers["x-memo-token"]`，失败返回 JSON-RPC `-32001 E_MCP_UNAUTHORIZED`。
+- **文件权限**：`$MEMO_HOME` 与 `items/` 0700；items/events/web-token 0600；启动自查权限过宽时**只告警不阻断**
+  （存量用户目录多为 0755，阻断等于升级后打不开）。Windows 不承诺 POSIX mode；Time Machine / 云盘同步不受 0600 约束——不想让记忆进备份就在 Time Machine 偏好或同步盘里排除 `~/.memo`。
 - **端口**：默认 `7788`，`--port` 可改；占用时报错并提示换端口，不静默递增。
 
 ## 8. 门禁增项（与 `docs/07` 同步）

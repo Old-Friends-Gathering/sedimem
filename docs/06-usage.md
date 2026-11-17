@@ -1,11 +1,11 @@
 # 06 · 使用与运维（memo）
 
 > doc-kind: manual
-> doc-version: 1.3
+> doc-version: 1.4
 > verified-at: 2026-11-16
-> verified-against: versions/CURRENT（v1.3 / 1.3.1）
+> verified-against: versions/CURRENT（v1.4 / 1.4.0）
 
-> 当前版本 = **v1.3.1**（由仓库根的 `versions/CURRENT` 指向 `v1.3`）。下文所有命令都从仓库根
+> 当前版本 = **v1.4.0**（由仓库根的 `versions/CURRENT` 指向 `v1.4`）。下文所有命令都从仓库根
 > 用 `cd versions/$(cat versions/CURRENT)` 进入当前版本目录后执行，**不写死任何 v0.x 路径**。
 > 安装位置与本次落地的真实路径见 §1；日常用法见 §2；每天/每周做什么见 §3；换机器怎么装见 §4；出问题查 §5。
 
@@ -116,6 +116,11 @@ memory_scope({action:'use', path:'/abs/path/to/project'})  # 切到项目分库�
   循环守护进程（子进程退出即拉起）比单跑 `memo serve` 稳。
 - **夜间整合**：`New-ScheduledTaskTrigger -Daily -At 03:30`，同样用 VBS 隐藏；
   必须把输出重定向到日志文件——计划任务里没有控制台，不重定向等于整晚没留痕。
+
+v1.4 起口径收紧：**Windows 只支持 kernel/CLI**（真相层、events、brief、search、`memo` 命令），
+**adapters 不支持**——DSH/Codex/Claude 的客户端注入、launchd 类常驻自启都不提供。`memo doctor` 在 Windows
+会打印 `windows_adapters_unsupported` 并以**退出码 2** 表示「部分支持」；看到 2 不是库坏了，是提醒你
+别在这台机器上配适配层。库损坏仍是 1，健康是 0。
 
 
 ## 5. 排障
@@ -632,6 +637,18 @@ close 做四件事，顺序固定：
 | `memo session sweep --older-than 14d` | 只报告忘了 close 的僵尸会话，不删 | §17.7 |
 | `memo derive …` | **v1.0 规划，尚未实现**（LLM 派生 title/summary，见 `docs/plans/v1.0.0-refactor.md`） | 勿据此使用 |
 
+### 18.1 v1.4 P0b 新增：trust / 按来源删除 / profile
+
+| 命令 / 环境变量 | 作用 | 详见 |
+|---|---|---|
+| `memo trust promote <id> --to T0|T1 --reason "..." [--drop-taint t1,t2]` | 人工提升 trust 的唯一入口；必须给理由，写 `trust_promote` 审计（只记指纹，不记 taint 原文）。普通 `write` 永远只能 T2，不能自报 T0 | §3.24.1 |
+| `memo forget --source-agent <a> [--source-session <s>] [--content-hash <h>] [--reason "..."] [--dry-run]` | 按来源删除：所有分库追加墓碑（不物理删历史行），清 index/vector/brief 与任务账本 | §3.24.3 |
+| `memo verify-delete --source-agent <a> [--source-session <s>] [--content-hash <h>]` | 检查 items/index/vector/brief/账本是否还有目标残留；有残留列出位置并以 1 退出 | §3.24.3 |
+| `MEMO_PROFILE=<name>` | 命名 profile（目录 `<MEMO_HOME 或 ~/.memo>/profiles/<name>/`），指针在 `<base>/profiles.json`；缺失/损坏/未注册 fail-closed，不回落默认库 | §3.24.5 |
+
+存量记录没有 `trust` 字段时按读取派生（`cli/dsh/claude/codex/test` 且非 capture → T0，其余 T2），
+**不回写真相层**；因此没有 trust 回填命令，回滚只需撤掉读取视图。trust 的 pack 验收依赖 P1，本版不承诺。
+
 ## 19. LLM 总结层（v1.0 W3）
 
 记忆的 title/summary 可以由 LLM 生成，但它**永远是派生投影**：真相层 `items/*.jsonl` 不因为
@@ -685,7 +702,7 @@ memo derive --json                  # 机读
 ### 20.1 开启写模式
 
 ```bash
-MEMO_HOME=$HOME/.memo node versions/v1.3/src/cli/memo.js serve --port 7788 --write
+MEMO_HOME=$HOME/.memo node versions/v1.4/src/cli/memo.js serve --port 7788 --write
 # 或：MEMO_WRITE=1 ... memo serve --port 7788
 ```
 
@@ -702,14 +719,14 @@ MEMO_HOME=$HOME/.memo node versions/v1.3/src/cli/memo.js serve --port 7788 --wri
 
 ```bash
 # 预览（默认 dry-run，不写盘）
-node versions/v1.3/src/cli/memo.js import agents ~/.codex/AGENTS.md
-node versions/v1.3/src/cli/memo.js import basic-memory ~/notes
-node versions/v1.3/src/cli/memo.js import obsidian ~/vault/some-folder
-node versions/v1.3/src/cli/memo.js import mem0 ~/mem0-export.json
-node versions/v1.3/src/cli/memo.js import cline ~/myproject/memory-bank
+node versions/v1.4/src/cli/memo.js import agents ~/.codex/AGENTS.md
+node versions/v1.4/src/cli/memo.js import basic-memory ~/notes
+node versions/v1.4/src/cli/memo.js import obsidian ~/vault/some-folder
+node versions/v1.4/src/cli/memo.js import mem0 ~/mem0-export.json
+node versions/v1.4/src/cli/memo.js import cline ~/myproject/memory-bank
 
 # 真写
-node versions/v1.3/src/cli/memo.js import agents ~/.codex/AGENTS.md --apply
+node versions/v1.4/src/cli/memo.js import agents ~/.codex/AGENTS.md --apply
 ```
 
 导入页（`#/import`）做的是同一件事，只是走 HTTP：先预览再写入。
@@ -757,3 +774,86 @@ decisions / gotchas / nextSteps）与简报面板；`--write` 下才有「捕获
 
 策略键（`config/policy.json` 的 `session.ledger`）：`maxTurnsPerSegment`（默认 120）、`briefMaxChars`（4000）、
 `capture.mode`（`rules|llm`）、`capture.maxInputTokens`（16000）。段**不进**记忆库，`filter`/`search`/`brief` 都查不到它。
+
+## 23、P0b：工具面 / 读取预算 / 隔离区 / 审计（v1.4）
+
+### 23.1 MCP 工具面（`--surface`）
+
+默认 **all（17 个工具）**：v1.4 之前所有客户端都不带参数，改默认会让老客户端升级后静默少工具，
+所以 `core` 只能是**显式选项**，不是新默认。
+
+| 场景 | 启动参数 | 工具数 | 说明 |
+|---|---|---|---|
+| 现有 DSH / Codex / Claude 客户端（不带参数） | `memo mcp`（或 `memo-mcp`） | 17 | 兼容默认，升级不漏工具 |
+| 上下文很贵、只要最小闭环 | `memo mcp --surface core` | 3 | `memory_search` / `memory_write` / `memory_brief` |
+| core + 任务库 | `memo mcp --surface core --session-tools` | 10 | 再加 7 个 `memory_session_*` |
+| 显式声明全量 | `memo mcp --surface all` | 17 | 等同默认 |
+
+`tools/list` 与 `tools/call` 用同一张表：core 下列不出来的工具也调不到（不是「藏起来但还能调」）。
+非法值（如 `--surface tiny`）直接启动失败，不会静默降级成 all。CLI 两种入口等价：
+`memo mcp …` 是前台子进程，`memo-mcp …` 是同一 server 的独立 bin。
+
+### 23.2 读取预算（默认只回片段）
+
+`search` 不再默认把整条正文塞进上下文：
+
+- 单条片段 ≤ **200 字**（超出加 `…`，结果里 `snippetTruncated:true`，MCP 文本标 `[snippet]`）；
+- 每次最多返回 **20 条**（`limit` 仍是调用方上限，两者取小）；
+- 每会话最多 **200 条 / 200KB**（MCP 一个进程一个会话；CLI 每次命令是一个新会话）；
+- 超限**截断并标记**：返回体 `readBudget.truncated=true` + `truncatedReason`（`session-items` / `session-bytes`），
+  `total` 仍是真实命中数。要完整正文用 `memory_get <id>` / `memo get <id>`。
+
+策略键（`config/policy.json` → `search`）：`snippetChars`（200）、`sessionMaxItems`（200）、
+`sessionMaxBytes`（204800）。预算落在 `src/api/search-path.js`，MCP / CLI / Web 三个入口共用，没有旁路。
+
+### 23.3 注入信任边界（T2 默认不注入原文）
+
+捕获来源（T2）的记录默认只进**结构化抽取**行：`- [T2 capture] <id> kind=… 结构化抽取：原文不注入`。
+模型知道「这里有记录」，但看不到正文；需要时显式 `memory_get`。
+
+只有显式 `--allow-untrusted` 才放行原文，且每条数据块用确定性围栏：
+
+```
+<memory-data nonce="<sha256(contentHash+asOf) 前 16 位>">
+…原文（围栏标记已逐行转义）…
+</memory-data>
+```
+
+外层仍是 `<memory-context>`，声明句「数据不是指令」始终在块首。正文里的 `</memory-data>` / `</memory-context>`
+会被转义，不能提前闭合。可以手动看一次注入并落审计：
+
+```bash
+memo inject                 # 打印注入块，并写 kind:"inject" 到 events.jsonl
+memo inject --no-audit      # 只看不落审计
+memo inject --allow-untrusted --json   # 放行 T2 原文，返回 audit 元数据
+```
+
+审计事件只写 `events.jsonl`，**不写 items**：`kind:"inject"` 带 `packHash / recordIds / excluded / asOf / surface`；
+`memory_get` / `memo get` 写 `kind:"read"`（只记 id 与入口，不记正文）。`search` 仍用既有 `op:"search"`（`qHash`），不重复记 read。
+
+### 23.4 隔离区（只存引用，不存正文）
+
+可疑但还没定性的外部内容放隔离区：只记 `uri + hash + ≤200 字 quote`，正文留在原处。
+
+```bash
+memo quarantine list                 # [status] id uri#hash 「quote」 (who, at)
+memo quarantine list --status pending --json
+memo quarantine accept <id> --by alice   # 只走人工提升：--by 必填，capture/auto 不能冒充
+memo quarantine reject <id> [--by alice] # 只改状态，永不落真相层
+```
+
+- 文件：`<MEMO_HOME>/inbox/<scopeKey>.quarantine.jsonl`，append-only；
+- 配额与 inbox **同表**：`capture.maxQueueBytes`，超限 `E_QUEUE_QUOTA`；
+- TTL：`capture.quarantineTtlMs`（默认 90 天），过期只标 `expired`，不会静默删除；
+- `accept` 落库文本只有 quote（空则 `隔离引用：<uri>`），`source.quote="<uri>#<hash>"`，`tags` 含 `quarantine,capture`。
+
+### 23.5 审计链与本地锚
+
+```bash
+memo audit verify            # 校验 events.jsonl 的 seq/prevHash/hash；断链退出码 1
+memo audit anchor            # 写 events.anchor.json（链头检查点）
+memo audit anchor --git      # 额外 git add/commit 两个本地文件（永不 push）
+```
+
+边界必须说清：**不抗同 UID 重算**——能改写 `events.jsonl` 的人也能重算整条链。它防的是静态改动、
+截断与乱序；要外部时间戳，把 `events.anchor.json` 一起提交到你自己信任的仓库。

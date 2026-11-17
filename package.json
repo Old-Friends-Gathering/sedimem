@@ -6,7 +6,7 @@
     "node": ">=22.15"
   },
   "workspaces": [
-    "versions/v1.3",
+    "versions/v1.4",
     "plugin/dsh-sedimem"
   ]
 }
