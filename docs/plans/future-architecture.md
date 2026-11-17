@@ -644,6 +644,8 @@ GateMem（136★）已在做多主体治理 benchmark，BEAM 已覆盖矛盾消�
 - 不做云端多租户 / 团队协作 / RBAC。
 - 不做日历/邮件 OAuth、IMAP、Gmail restricted scope（P2 只读 `.ics`/导出文件）。
 - 不做图数据库；不做 Docker 依赖。
+- 不做图谱物化邻接（仅当出现 k-hop 查询或 `/api/graph` P95 超预算时，才作为可删可重建的派生缓存；当前不排期）。
+- 不做跨源实体消解（ER）；多源只保留 provenance，不把不同来源的记录合并成单一实体。
 - 不做 benchmark 排行榜；不做「通用记忆协议」标准。
 - 不做 Windows adapters；Windows 只保证 kernel / CLI。
 - 不做 gateway 默认启用；不做多 profile 产品化（P0b 只做路径收敛与隔离）。
@@ -770,8 +772,10 @@ GateMem（136★）已在做多主体治理 benchmark，BEAM 已覆盖矛盾消�
 6. **P5 套件的输入格式**：JSONL 导出 vs MCP 只读端点；优先 JSONL（可离线复现）。
 7. **多 profile 产品化**：P0b 只做路径收敛与隔离；是否值得做 UI 切换，等第二消费者。
 8. **中文分词**：当前汉字二元组足够；是否引入词典，等坏了再说。
-9. **战略分叉（2026-11-15 新增）**：A 个人观测台 + 治理工作台（本计划默认）；B 通用治理平台，对标 Mnemosyne/GateMem（单人维护不建议）；C 以 Mnemosyne 为内核或只读导入源，sedimem 专注 DSH/中文/UI。**需要用户拍板**；未拍板前按 A 执行，不写 B/C 的代码。
+9. **战略分叉（2026-11-15，已拍板）**：选 **A**（个人观测台 + 治理工作台）；B（通用治理平台，对标 Mnemosyne/GateMem）与 C（以 Mnemosyne 为内核或只读导入源）不执行，不写相关代码。
 10. **是否把 Mnemosyne 纳入 P2 对照/导入**：它已有 npm、SQLite、as-of 与回执；作为只读导入源可减少重复造轮，但会增加外部依赖与格式跟踪。触发条件 = 其导出格式稳定 ≥2 个版本，且 P1 已证明 pack 有日常使用。
+
+11. **图谱与多源口径（2026-11-17 已定，按 A 执行）**：图谱 = **force-graph + 请求时构图**（只读派生视图，节点上限 300，真相层仍是 JSONL）；SQLite 物化邻接**不进 P0a–P5**，仅当出现 k-hop 查询或 `/api/graph` P95 超预算时，才作为可删可重建的派生表；多源只做 **provenance**（`trust` / `taint` / `sourceRefs`、按来源删除、`verify-delete`），**不做 ER/实体消解**；P2 只读导入的每条记录保留来源，不合并成单一实体。
 
 ---
 
