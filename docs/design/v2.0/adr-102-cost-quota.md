@@ -1,10 +1,9 @@
-# ADR-102 · 成本与配额闸门（v2.0 规格草案）
+# ADR-102 · 成本与配额闸门（v2.0）
 
 > doc-kind: history
 > doc-version: 2.0
-> status: proposed
 
-状态：**proposed**——随 [v2.0 规格包](README.md) 冻结转 accepted。来源：[future-architecture.md](../../plans/future-architecture.md) §8 可行性、§0.3 规则 7；施工映射 [v2.0-p1.md](../../plans/v2.0-p1.md) §2 冻结决策 7。
+状态：**accepted（2026-11-18，随九项冻结）**——随 [v2.0 规格包](README.md) 九项冻结转正。来源：[future-architecture.md](../../plans/future-architecture.md) §8 可行性、§0.3 规则 7；施工映射 [v2.0-p1.md](../../plans/v2.0-p1.md) §2 冻结决策 7。
 
 ## 决策
 
