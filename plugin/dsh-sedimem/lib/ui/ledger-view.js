@@ -18,6 +18,10 @@
  */
 import { el } from './dom.js';
 import { apiPost } from './api.js';
+import { normalizeCheckpoints, buildCheckpointRows, renderCheckpointsInto, CP_KEY_LABELS } from './ledger-checkpoints.js';
+
+// 兼容旧导入路径（tests/ledger-view.test.js 与外部引用）
+export { normalizeCheckpoints, buildCheckpointRows, CP_KEY_LABELS };
 
 export const READ_ONLY_HINT = '用 memo serve --write 启动才可写';
 export const BRIEF_BLOCK_TAG = 'pre';
@@ -85,7 +89,7 @@ export function buildSummaryBadges(context) {
   const segments = Number.isFinite(Number(ctx.segments)) ? Math.max(0, Math.trunc(Number(ctx.segments))) : 0;
   return [
     { key: 'segments', label: `${segments} 段`, cls: segments > 0 ? 'b-accent' : '' },
-    { key: 'covered', label: coveredLabel(ctx.covered), cls: '' },
+    { key: 'covered', label: ctx.transcripts > 1 ? `${ctx.transcripts} 个转录` : coveredLabel(ctx.covered), cls: '' },
     { key: 'brief', label: `简报 ${fmtBriefChars(ctx.briefChars)}`, cls: '' },
     { key: 'captured', label: `上次捕获 ${fmtClock(ctx.lastCapturedAt)}`, cls: '' },
   ];
@@ -152,13 +156,21 @@ export function buildSegmentRow(seg) {
     decisions: textList(rec.decisions),
     gotchas: textList(rec.gotchas),
     nextSteps: textList(rec.nextSteps),
+    anchorShort: rec?.source?.sessionId ? `…${String(rec.source.sessionId).slice(-6)}` : '',
+    anchorFull: rec?.source?.sessionId ? String(rec.source.sessionId) : '',
+    when: (() => { const t = Date.parse(rec?.fromAt) || Date.parse(rec?.createdAt); if (!Number.isFinite(t)) return ''; return new Intl.DateTimeFormat('sv-SE', { timeZone: 'Asia/Shanghai', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', hour12: false }).format(new Date(t)).slice(5).replace('T', ' '); })(),
+    ordinal: 0,
   };
 }
 
 /** 段数组 → 行视图模型数组（过滤非对象项）。 */
 export function buildSegmentRows(segments) {
   if (!Array.isArray(segments)) return [];
-  return segments.filter((s) => s && typeof s === 'object').map(buildSegmentRow);
+  return segments.filter((s) => s && typeof s === 'object').map((s, i) => {
+    const row = buildSegmentRow(s);
+    row.ordinal = i + 1;
+    return row;
+  });
 }
 
 /** 空账本提示模型。 */
@@ -197,6 +209,21 @@ export function buildBriefText(brief) {
   return lines.join('\n');
 }
 
+
+function coveredOf(segments) {
+  const spans = segments
+    .filter((s) => Number.isFinite(s?.fromSeq) && Number.isFinite(s?.toSeq))
+    .map((s) => [s.fromSeq, s.toSeq])
+    .sort((a, b) => a[0] - b[0]);
+  const out = [];
+  for (const [from, to] of spans) {
+    const last = out.at(-1);
+    if (last && from <= last[1] + 1) last[1] = Math.max(last[1], to);
+    else out.push([from, to]);
+  }
+  return out;
+}
+
 /** `/api/task-context` 返回 → 视图模型（容忍缺失/异常形状）。 */
 export function normalizeContext(raw) {
   const body = raw && typeof raw === 'object' ? raw : {};
@@ -217,41 +244,6 @@ export function normalizeContext(raw) {
 export function normalizeSegments(raw) {
   const body = raw && typeof raw === 'object' ? raw : {};
   return Array.isArray(body.segments) ? body.segments.filter((s) => s && typeof s === 'object') : [];
-}
-
-/**
- * `/api/task-segments` 返回 → checkpoint 数组（v1.4.x）。
- * checkpoint 由 MCP memory_session_checkpoint 写在 items（不在 segments.jsonl），
- * 服务端已合并进响应；这里只做形状防御（缺字段/旧服务端 → []）。
- */
-export function normalizeCheckpoints(raw) {
-  const body = raw && typeof raw === 'object' ? raw : {};
-  return Array.isArray(body.checkpoints) ? body.checkpoints.filter((c) => c && typeof c === 'object') : [];
-}
-
-/** checkpoint 8 段 → UI 列表项（列表段取数组，文本段取字符串）。 */
-export function buildCheckpointRows(checkpoints) {
-  const LIST_KEYS = ['concepts', 'files', 'errorsAndFixes', 'pendingJobs', 'nextSteps'];
-  const TEXT_KEYS = ['intent', 'currentState', 'criticalContext'];
-  const rows = [];
-  for (const c of Array.isArray(checkpoints) ? checkpoints : []) {
-    const s = c?.sections && typeof c.sections === 'object' ? c.sections : null;
-    // 列表标题：intent 优先；intent 为空串/缺失回落 currentState，再回落 id
-    // （新式 checkpoint 可能只写 currentState/nextSteps——空标题会渲染成「（checkpoint）」）
-    const first = (typeof s?.intent === 'string' && s.intent.trim())
-      ? s.intent
-      : (typeof s?.currentState === 'string' && s.currentState.trim())
-        ? s.currentState
-        : (s?.intent ?? c?.id ?? '');
-    const excerpt = String(Array.isArray(first) ? first[0] ?? '' : first ?? '').slice(0, 60);
-    rows.push({
-      time: typeof c?.createdAt === 'string' ? c.createdAt.replace('T', ' ').slice(0, 19) : '—',
-      excerpt,
-      lists: LIST_KEYS.map((k) => ({ key: k, items: Array.isArray(s?.[k]) ? s[k].map((x) => String(x)) : [] })),
-      texts: TEXT_KEYS.map((k) => ({ key: k, text: typeof s?.[k] === 'string' ? s[k] : '' })),
-    });
-  }
-  return rows;
 }
 
 /** `/api/task-brief` 返回 → briefJson（顶层展开）；不像 briefJson 时返回 null。 */
@@ -333,6 +325,9 @@ export async function mountLedger(deps) {
   let segments = [];
   let checkpoints = [];
   let segmentsError = '';
+  let hiddenOldSegments = 0;
+  let showAllTranscripts = true;
+  let allSegments = [];
   let selectedId = '';
 
   // ② .ledger 段区块
@@ -342,6 +337,7 @@ export async function mountLedger(deps) {
   const count = el('span', 'faint mono ledger-count', '0 段');
   head.append(count);
   const acts = el('div', 'acts');
+  const scopeBtn = el('button', 'sm ghost', '只看当前会话');
   const captureBtn = el('button', 'sm', '捕获');
   const archiveBtn = el('button', 'sm ghost', '归档');
   const expandBtn = el('button', 'sm', '导出 expand');
@@ -349,14 +345,15 @@ export async function mountLedger(deps) {
     btn.disabled = ro.disabled;
     if (ro.disabled) btn.title = ro.hint;
   }
-  acts.append(captureBtn, archiveBtn, expandBtn);
+  acts.append(scopeBtn, captureBtn, archiveBtn, expandBtn);
   head.append(acts);
   const note = el('div', 'ledger-note faint');
+  const historyNote = el('div', 'ledger-note faint');
   const cmd = el('div', 'ledger-cmd mono');
   cmd.hidden = true;
   const segBox = el('div', 'ledger-segs');
   const cpBox = el('div', 'ledger-cps');
-  ledger.append(head, note, cmd, segBox, cpBox);
+  ledger.append(head, note, historyNote, cmd, segBox, cpBox);
 
   // ③ .ledger-brief 简报面板（正文默认折叠，按钮常驻可点）
   const brief = el('div', 'ledger-brief');
@@ -425,54 +422,34 @@ export async function mountLedger(deps) {
     }
   };
 
-  const CP_KEY_LABELS = {
-    concepts: '概念', files: '关键文件', errorsAndFixes: '错误与修复',
-    pendingJobs: '待办', nextSteps: '下一步',
-    intent: '意图', currentState: '当前状态', criticalContext: '关键上下文',
+  const applyTranscriptFilter = () => {
+    const hostSessionId = context.meta?.hostSessionId;
+    const kept = showAllTranscripts || !hostSessionId
+      ? allSegments
+      : allSegments.filter((s) => s?.source?.sessionId === hostSessionId);
+    hiddenOldSegments = allSegments.length - kept.length;
+    segments = kept;
+    context.segments = segments.length;
+    context.transcripts = transcriptCount();
+    // 全部转录混在一起时，顶栏不显示一个假的“连续覆盖”；区间在每行里各自成立。
+    context.covered = showAllTranscripts && transcriptCount() > 1 ? [] : coveredOf(segments);
+    scopeBtn.textContent = showAllTranscripts ? '只看当前会话' : `显示全部（${allSegments.length}）`;
+    scopeBtn.title = showAllTranscripts
+      ? '只显示任务当前绑定的宿主转录'
+      : '显示该任务所有历史转录的段（v1.x 开发记录都在这里）';
   };
-
-  const renderCheckpoints = () => {
-    cpBox.replaceChildren();
-    const rows = buildCheckpointRows(checkpoints);
-    if (rows.length === 0) {
-      cpBox.append(el('div', 'faint ledger-cp-empty', 'checkpoint 0 条（由 memory_session_checkpoint 写入，随段一起展示）'));
-      return;
-    }
-    const h = el('div', 'ledger-lg-h', `checkpoint（${rows.length}）`);
-    cpBox.append(h);
-    for (const row of rows) {
-      const item = el('details', 'ledger-seg ledger-cp');
-      const summary = el('summary', 'ledger-seg-h');
-      summary.append(el('span', 'mono ledger-range', row.time));
-      // 与段行视觉对齐（issue #241 用户反馈）：checkpoint 不是捕获段、没有 rules/llm 模式，
-      // 用独立的 cp 徽标占同一个位置，保持行结构一致。
-      const cpBadge = el('span', 'badge ledger-mode b-accent', 'cp');
-      cpBadge.setAttribute('title', 'memory_session_checkpoint 写入的检查点（非捕获段，无 rules/llm 模式）');
-      summary.append(cpBadge);
-      summary.append(el('span', 'ledger-excerpt', row.excerpt || '（checkpoint）'));
-      item.append(summary);
-      const body = el('div', 'ledger-seg-b');
-      for (const t of row.texts) {
-        if (t.text) body.append(el('p', 'ledger-summary', `${CP_KEY_LABELS[t.key] ?? t.key}：${t.text}`));
-      }
-      for (const l of row.lists) {
-        if (l.items.length > 0) {
-          const g = listGroup(CP_KEY_LABELS[l.key] ?? l.key, l.items);
-          if (g) body.append(g);
-        }
-      }
-      item.append(body);
-      cpBox.append(item);
-    }
-  };
+  const transcriptCount = () => new Set(allSegments.map((s) => s?.source?.sessionId).filter(Boolean)).size;
 
   const renderAll = () => {
     summarySlot?.replaceChildren?.(buildSummaryBar(context, { writeEnabled, hint }));
+    historyNote.textContent = hiddenOldSegments > 0
+      ? `已隐藏 ${hiddenOldSegments} 段旧转录（其它会话）；点「显示全部」查看 v1.x 历史开发账本。`
+      : (transcriptCount() > 1 ? `共 ${transcriptCount()} 个转录，段按捕获时间排列；每行的「会话」标签区分来源。` : '');
     count.textContent = checkpoints.length > 0
       ? `${segments.length} 段 · ${checkpoints.length} checkpoint`
       : `${segments.length} 段`;
     renderSegments();
-    renderCheckpoints();
+    renderCheckpointsInto(cpBox, checkpoints, { el, listGroup });
   };
 
   const load = async () => {
@@ -483,7 +460,8 @@ export async function mountLedger(deps) {
     }
     try {
       const segBody = await apiGet(`/task-segments?task=${encodeURIComponent(taskId)}`);
-      segments = normalizeSegments(segBody);
+      allSegments = normalizeSegments(segBody);
+      applyTranscriptFilter();
       checkpoints = normalizeCheckpoints(segBody);
       segmentsError = '';
     } catch (err) {
@@ -494,6 +472,12 @@ export async function mountLedger(deps) {
     if (!container.isConnected) return;
     renderAll();
   };
+
+  scopeBtn.addEventListener('click', () => {
+    showAllTranscripts = !showAllTranscripts;
+    applyTranscriptFilter();
+    renderAll();
+  });
 
   captureBtn.addEventListener('click', async () => {
     captureBtn.disabled = true;

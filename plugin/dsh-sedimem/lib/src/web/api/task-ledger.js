@@ -8,11 +8,13 @@
 //
 // 错误契约（SPEC §7）：task 非法（不匹配 TASK_ID_RE）→ E_INVALID_ARG(400)；任务不存在 → E_NOT_FOUND(404)。
 
-import { existsSync, readFileSync } from 'node:fs';
+import { existsSync, readFileSync, statSync } from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
 
 import { invalidArg, notFound } from '../../core/errors.js';
 import { coveredSeqs, readIndex, readSegments } from '../../session/ledger.js';
+import { readDshTranscript } from '../../session/transcript.js';
 import {
   DEFAULT_MAX_CHARS, briefJson, readTaskMeta,
 } from '../../session/ledger-brief.js';
@@ -121,6 +123,43 @@ export function readCheckpoints(memoHome, taskId) {
   return { checkpoints: out, badLines };
 }
 
+
+/** 段 → 实际对话时间。旧段没有 fromAt/toAt；按转录 turn 下标补，缓存按 sessionId+mtime。 */
+const TRANSCRIPT_CACHE = new Map();
+function turnsForSegment(seg) {
+  const sid = seg?.source?.sessionId;
+  if (!sid) return null;
+  const file = seg?.anchor?.path;
+  let mtime = 0;
+  try { mtime = statSync(file).mtimeMs; } catch { /* 没 anchor 就按 id 找 */ }
+  const key = `${sid}:${mtime}`;
+  if (TRANSCRIPT_CACHE.has(key)) return TRANSCRIPT_CACHE.get(key);
+  try {
+    const tx = readDshTranscript({
+      sessionsRoot: path.join(os.homedir(), '.dsh', 'sessions'),
+      cwd: process.cwd(),
+      sessionId: sid,
+    });
+    const value = { turns: tx.turns, mtime };
+    TRANSCRIPT_CACHE.set(key, value);
+    return value;
+  } catch {
+    return null;
+  }
+}
+
+function withConversationTime(seg) {
+  if (Number.isFinite(Date.parse(seg?.fromAt))) return seg;
+  const tx = turnsForSegment(seg);
+  const turns = tx?.turns;
+  if (!Array.isArray(turns) || turns.length === 0) return seg;
+  const first = turns[seg.fromSeq - 1]?.ts;
+  const last = turns[seg.toSeq - 2]?.ts;
+  if (first) seg.fromAt = first;
+  if (last) seg.toAt = last;
+  return seg;
+}
+
 /**
  * GET /api/task-segments?task=<id>
  * → { task, segments: 完整段记录[]（fromSeq 升序）, badLines, index, checkpoints, checkpointBadLines }
@@ -130,12 +169,13 @@ export async function apiTaskSegments(service, query) {
   const task = requireTask(service, query);
   const { segments, badLines } = readSegments({ memoHome: service.memoHome, taskId: task });
   const { checkpoints, badLines: checkpointBadLines } = readCheckpoints(service.memoHome, task);
+  const enriched = segments.map((s) => withConversationTime({ ...s }));
   return {
     task,
-    segments: [...segments].sort((a, b) => {
-      const fa = Number.isFinite(a?.fromSeq) ? a.fromSeq : 0;
-      const fb = Number.isFinite(b?.fromSeq) ? b.fromSeq : 0;
-      if (fa !== fb) return fa - fb;
+    segments: enriched.sort((a, b) => {
+      const ta = Date.parse(a?.fromAt) || Date.parse(a?.createdAt) || 0;
+      const tb = Date.parse(b?.fromAt) || Date.parse(b?.createdAt) || 0;
+      if (ta !== tb) return ta - tb;
       return String(a?.id ?? '').localeCompare(String(b?.id ?? ''));
     }),
     badLines,
