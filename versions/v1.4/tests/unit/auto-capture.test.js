@@ -51,12 +51,14 @@ function makeFixture() {
 
 test('maybeAutoCapture: 首次运行（账本在、转录在、无状态）→ 捕获并写状态', async () => {
   const f = makeFixture();
-  const r = await maybeAutoCapture(f.base);
+  // 显式 sessionId（模拟 bind 后的探测），并断言它透传到 captureTask（issue #230）
+  const r = await maybeAutoCapture({ ...f.base, sessionId: 'sess-1' });
   assert.equal(r.ran, true);
   assert.equal(r.reason, 'first-run');
   assert.equal(f.calls.length, 1);
   assert.equal(f.calls[0].mode, 'rules', '自动捕获必须 rules 模式（零 token）');
   assert.equal(f.calls[0].taskId, '20261114-2222-fix');
+  assert.equal(f.calls[0].sessionId, 'sess-1', 'sessionId 必须透传 captureTask（bind 探测的意义，issue #230）');
   const st = readAutoCaptureState(f.memoHome, '20261114-2222-fix');
   assert.ok(st, '状态文件已写');
   assert.equal(st.mtimeMs > 0, true);
