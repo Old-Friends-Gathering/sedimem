@@ -270,18 +270,24 @@ export function bindSession({ memoHome, taskId, hostSessionId, clock = systemClo
   const dir = path.join(memoHome, 'sessions', taskId);
   const metaFile = path.join(dir, 'meta.json');
   const legacyFile = path.join(memoHome, 'sessions', `${taskId}.json`);
-  const exists = existsSync(metaFile) || existsSync(path.join(dir, 'segments.jsonl')) || existsSync(legacyFile);
-  if (!exists) {
-    const e = new Error(`bindSession: 任务 ${taskId} 不存在（sessions/ 下无 meta、segments 与登记文件）`);
-    e.code = 'E_NOT_FOUND';
-    throw e;
-  }
+  // 任务存在性：账本标记（segments.jsonl / 旧版登记文件）或 meta 可读。
+  // 不做 existsSync(metaFile) 预检——CodeQL TOCTOU（检查与使用之间文件可能被改）；
+  // 直接读 + 按 errno 分流：ENOENT=没有 meta，其他错误=有 meta 但读不出（视为存在、重写）。
+  const hasLedgerMarker = existsSync(path.join(dir, 'segments.jsonl')) || existsSync(legacyFile);
   let meta = {};
+  let metaReadable = false;
   try {
     meta = JSON.parse(readFileSync(metaFile, 'utf8'));
     if (!meta || typeof meta !== 'object' || Array.isArray(meta)) meta = {};
-  } catch {
-    meta = {}; // 坏 meta → 重写为合法对象（绑定本身是显式维护动作）
+    metaReadable = true;
+  } catch (e) {
+    if ((e?.code ?? '') !== 'ENOENT') metaReadable = true; // 坏 meta → 重写为合法对象
+    meta = {};
+  }
+  if (!hasLedgerMarker && !metaReadable) {
+    const e = new Error(`bindSession: 任务 ${taskId} 不存在（sessions/ 下无 meta、segments 与登记文件）`);
+    e.code = 'E_NOT_FOUND';
+    throw e;
   }
   const previous = typeof meta.hostSessionId === 'string' && meta.hostSessionId !== '' ? meta.hostSessionId : null;
   meta.taskId = taskId;
