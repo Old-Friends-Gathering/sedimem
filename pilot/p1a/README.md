@@ -8,7 +8,7 @@
 pilot/p1a/
 ├── corpus/    语料（合成脱敏；exit 批次 218 场景/347 gold/对抗 10 类 test 各 10）
 ├── config/    eval-manifest.json（冻结数字，改须版本化 diff+签署）
-├── tools/     corpus-validate / baseline-runner / score / review / protocol-sim / split-corpus / annotation-pass / contract-guards / fix-r2-*
+├── tools/     corpus-validate / baseline-runner / score / review / protocol-sim / split-corpus / annotation-pass / contract-guards / exit-check / fix-r2-*
 ├── tests/     117 测试（TDD 先行）
 └── out/       运行输出（gitignore，每次带 runId）
 ```
@@ -16,6 +16,8 @@ pilot/p1a/
 ## 常用命令
 
 ```bash
+# 出口核验（一条命令看 P1a 放行条件是否齐备）
+node pilot/p1a/tools/exit-check.mjs .
 # 语料校验（配额全读 config/eval-manifest.json）
 node pilot/p1a/tools/corpus-validate.mjs pilot/p1a/corpus pilot/p1a/config/eval-manifest.json
 
@@ -52,6 +54,7 @@ node pilot/p1a/tools/review.mjs show pilot/p1a/out/baseline/<runId>/candidates.j
 | baseline-runner.mjs | 规则地板基线：证明评测管线可算 P/R 与七类严重错误 | 计划 D4 |
 | score.mjs | TP/FP/FN 一对一、子命题=FP+FN、mixed 双组、severe 计数；置信区间主口径=bootstrapCI（家族聚类 2000 次/95%/seed 可复现），Wilson 仅描述性；`stage!=='exit'` 时 verdict=null | 04-scoring-and-splits §3 |
 | review.mjs | 复核骨架（只读 list/show） | 计划 §8 |
+| exit-check.mjs | P1a 出口机算核验：语料/拆分/配额/冻结/双标注逐项判定（pending 与失败分开，输出阻塞项） | plans/v2.0-p1 §0.2/§7.1 + design/v2.0/README 冻结表 |
 | contract-guards.mjs | 三项冻结守卫：双时间互斥/asOf 穿越、tokenizer 计数快照与声明、成本闸门 | 01 §5 / adr-101 / adr-102 |
 | split-corpus.mjs | 家族分层 dev/test 切分 + 跨集近重复（Dice）校验 | 04-scoring-and-splits §1 |
 | annotation-pass.mjs | 双独立标注工作流：盲评包/导入校验/一致性报告/裁决工作表/goldset 生成（fail-closed，未裁决一律拒绝）；不出 pass/fail | 06-annotation-spec §2 |
