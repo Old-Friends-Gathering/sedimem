@@ -18,16 +18,18 @@
 |---|---|---|---|
 | 候选 claim precision | ≥98%（中英分别达标） | future-architecture §7.1 | 调低 = 计划级修订 + 对抗审核重审，禁止评测后下调 |
 | 候选 claim recall | ≥90%（中英分别达标） | future-architecture §7.1 | 同上 |
-| 语料场景总数 | ≥200（dev 100 / test 100，家族切分） | future-architecture §7.1 | 出口级语料不足 = P1a 不出出口 |
+| 语料场景总数 | ≥200（dev 100 / test 100，家族切分；pilot ≥40 全集） | future-architecture §7.1 / v2.0-p1 §3 D3 | 出口级语料不足 = P1a 不出出口 |
 | gold claims | ≥200（出口级） | future-architecture §7.1 | pilot 阶段 ≥60（D3 规模），出口级以本表为准 |
 | 无可记场景 | ≥50（出口级；pilot ≥6） | future-architecture §7.1 | 同上 |
-| 对抗样例 | 每类 ≥10（出口级；pilot 每类 ≥3） | future-architecture §7.1 | 同上 |
-| test 中/英 | 各 ≥40（出口级；pilot 各 ≥12） | future-architecture §7.1 | 同上 |
+| 对抗样例 | **test 集**每类 ≥10（出口级；pilot 每类 ≥3，作用于 pilot 全集） | future-architecture §7.1「每类 test 至少 10 例」 | 同上 |
+| test 中/英 | 各 ≥40（出口级，作用域 = test 集）；pilot 各 ≥12（作用域 = pilot 全集，pilot 未切分 dev/test） | future-architecture §7.1 | 同上 |
 | 近重复判定 | Dice ≥0.85（与主库判重口径一致） | future-architecture §7.1 | 变更口径需同步主库 config 并注明 |
 | 运行次数 | 每配置 ≥3 次 | [04-scoring](04-scoring-and-splits.md) §3 | 减少 = 评测口径修订 |
 | bootstrap | 家族聚类，B=2000 重采样，置信 95% | [04-scoring](04-scoring-and-splits.md) §3 | 参数写入 manifest，可调但须版本化 |
 | 严重错误逃逸 | 任一即阻断（七类，[04](04-scoring-and-splits.md) §4） | future-architecture §7.1 | 不可回滚——此为红线 |
 | 证据解析率 | 100% | future-architecture §7.1 | 不可回滚 |
+
+**范围声明（消除引用悬空）**：保留期、条数/字节上限、扫描路径等**数据治理数值不在本 manifest**——归属 docs/12-data-map.md，登记框架见 [02-evidence-and-deletion.md](02-evidence-and-deletion.md) §8 逐资产登记表。本 manifest 只冻结评测阈值。
 
 ## 3. 加载与校验
 

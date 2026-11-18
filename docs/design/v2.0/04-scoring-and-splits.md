@@ -23,6 +23,14 @@
 - 匹配是 claim 级不是场景级：一个场景内多条 gold 分别配对。
 - precision = TP/(TP+FP)；recall = TP/(TP+FN)。
 
+**匹配裁决与 tie-break**：
+
+1. 一对一匹配由**人工裁决**（对照 [06-annotation-spec.md](06-annotation-spec.md) §1 gold 与候选输出逐对判定），裁决记录随 gold 版本化存档、可追溯，不靠打分器自动配对。
+2. **tie-break**：同一 gold 命中多个候选时，「证据更完整者优先」——evidence 覆盖 span 更完整、quote 与 gold 引文一致性更高者得 TP，其余按重复候选计 FP；仍无法区分 → 该 gold 计 FN、全部相关候选计 FP（保守计分，宁可低报）。
+3. **子/超集命题计分**：候选是 gold 的子命题（信息缺失）→ 不计 TP，gold 计 FN、该候选计 FP；候选是超集（复合命题）→ 本应被 01 schema 校验拒绝，若逃逸到评分层计 FP；两种情形都在裁决记录中标注子/超集类型。
+
+**mixed 语言归组**：`language: mixed` 场景的成绩**同时计入 zh 与 en 两组**（保守口径：两组都必须独立达标，mixed 不允许成为任一组的盲区）；语料配额计数中 mixed 另算、不占中英各 ≥40 的名额（与 manifest 口径一致）。
+
 **零输出**：场景零输出（无任何候选）时，该场景 precision **未定义**，聚合口径整体按「未定义且不通过」处理——**禁止**把零输出场景记成 precision=100% 或从分母剔除。
 
 ## 3. 六条硬规则（R1 修订锚定）
@@ -46,15 +54,18 @@
 | 6 | 跨 scope 泄漏 | A scope 的内容进了 B scope 的候选/读取面 |
 | 7 | 撤回当当前 | retract 后的命题仍以当前有效口径输出 |
 
-- **拦住**：对抗样例中管线正确拒绝/标错的情形 → 拦截率分子。
+- **拦住**：对抗样例中管线正确拒绝或正确标记为错误的情形 → 拦截率分子。
 - **逃逸**：错误进入最终候选 → **任一逃逸即阻断**（manifest 阈值）；两类分开计数、分开报告。
 
 ## 5. 三层报告
 
 每轮评测报三层：① 原始抽取输出（含失败枚举）；② 机器校验后候选（schema/证据/闭集校验后的集合）；③ 人工复核后记录。层间差异本身是指标（过滤率、复核改动率），不得只报最好一层。
 
+**pilot fail-closed**：manifest `stage=pilot` 时，scorer **拒绝输出** pass/fail 达标结论（硬校验，输出只含过程指标）；pass/fail 判定仅 `stage=exit` 允许。pilot 语料的单标注局限见 [06-annotation-spec.md](06-annotation-spec.md) §3。
+
 ## 6. 防泄漏条款
 
+- **抽取/检索输入禁入清单**（对齐上位 §7.2 全文）：抽取与检索输入 = queryTime 前已授权历史 + 系统可见记忆，**逐项排除**：gold 与标准答案、queryTime 之后的事件与纠正、人工后处理内容、评测员说明。抽取输入清单（来源列表 + inputHash 集）随 runId 固化落盘、可审计——泄漏检查 = 对账 runId 输入清单与禁入清单。
 - `queryTime` 边界：评测请求带显式 queryTime，晚于 queryTime 的语料对本次评测不可见。
 - **评分器隔离**：打分器只读 gold 与候选输出，禁止读基线实现/提示词；标注者反向隔离见 [06-annotation-spec.md](06-annotation-spec.md)。
 - **test 暴露转 regression**：test 场景一经用于调优即视为暴露，转入 regression 集；泛化声明必须换新 holdout——**不得在同一测试集反复改到过关**再宣称泛化。

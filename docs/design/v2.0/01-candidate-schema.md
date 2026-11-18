@@ -44,7 +44,7 @@
   }],
   "relations": [{                   // 关系 ID 必须来自输入允许集合
     "kind": "supersedes|supports|contradicts",
-    "targetId": "ulid|null"
+    "targetId": "ulid|null"        // null 仅限一种含义，见下方空值语义
   }],
   "provenance": {                   // 血缘
     "provider": "glm|rule|human",
@@ -67,13 +67,15 @@
 
 **空值语义（未知不猜）**：所有 `null` 字段都是显式「未知」，校验器把「猜出来的默认值」当错误。`speaker=unknown`、`about=null`、`assertedValidFrom=null` 均合法；但 `evidence` 为空数组不合法（候选必须有可定位证据，否则状态应为 `failed` + 失败枚举 `evidence-unsupported`）。
 
+**relations.targetId=null 的唯一合法含义**（对齐上位 §4.1「跨段无身份绑定则弃权」条款）：目标实体在输入中出现了候选所需的参照（代词/别名/描述），但**无法解析为允许集合内的具体 ID**——此时关系记录弃权事实，必须附带漏抽原因（`unresolvedReason: "cross-range"|"alias-unresolvable"|"ambiguous"`），并计入评测漏抽统计。`targetId=null` + `unresolvedReason` 缺失 → schema 校验失败。除此之外任何情形下关系必须有非空 targetId。
+
 ## 2. 状态机（冻结决策 1a）
 
 ```
 pending ──accept──▶ accepted ──trust promote（独立动作）──▶ （真相层可信 facts，不在候选状态机内）
    │ ├──reject──▶ rejected（留作评测负例，不删除）
    │ └──retract──▶ cancelled（抽取器自我撤回或来源失效）
-   └──fail──▶ failed（含 failure 枚举，可重试生成新候选，新 candidateId）
+   └──fail──▶ failed（含 failure 枚举；重试语义见 §3.1 澄清）
 accepted ──supersede──▶ superseded（修订链：新候选 accept 时旧候选转此态）
 ```
 
@@ -89,6 +91,8 @@ accepted ──supersede──▶ superseded（修订链：新候选 accept 时�
 | rejected/cancelled/failed/superseded | （终态） | — | 禁止任何迁出；错误输入即抛错 |
 
 **非法迁移一律拒绝并返回冲突**（如 accept 已 rejected 的候选），不静默成功。
+
+**failed 重试澄清（消除与 §3 noop 的张力）**：failed 后重试若输入、模型、配置都未变，则按 §3 确定性 ID 规则命中**同一 candidateId** → noop，不产生新候选；只有 claim 内容、模型或配置变化时才产生新 candidateId（修订语义，见 §3.1）。
 
 ## 3. 幂等协议（冻结决策 1b）
 
@@ -112,6 +116,15 @@ accepted ──supersede──▶ superseded（修订链：新候选 accept 时�
 **锁边界**：数据锁不覆盖 LLM 网络调用。顺序 = 先固化输入（inputHash/rangeId）→ 锁外抽取（网络）→ 锁内核对（inputHash 未变 + candidateVersion CAS）→ 落盘。
 
 **recovery-required**：无法判定（如收据缺失但真相层疑似已追加）时，把该 opId 标 `recovery-required` 并**禁止自动重试成新写入**；恢复需人工按预先持久化的决定与目标版本核对后显式继续。
+
+### 3.1 修订语义（模型差异 / 跨运行修订）
+
+上位 §3.5：「同一输入范围/配置重试属于同一逻辑运行；模型差异保留为候选修订而非自动新事实。」落地口径：
+
+- **同一逻辑运行**（同 extractionRunKey，同模型同配置）：重放产出同一 candidateId 集 → noop（§3 写入幂等）。
+- **修订**（revision）：跨运行或跨模型产生的新候选，通过 `relations.kind=supersedes` 指向旧候选；旧候选在修订被 accept 时转 `superseded`（状态机）。修订是新 candidateId（内容变化的判定边界见下）——修订路径不冒充 noop，noop 也不吞并内容变化。
+- **candidateVersion 自增只由工作流操作触发**：人工编辑、修订链接建立、复核状态变更。抽取管线绝不自行 bump candidateVersion（版本是 CAS 锁，不是迭代计数器）。
+- **判定边界（R2-N1 修订，消除与 §3 写入幂等的矛盾）**：candidateId 派生**只含内容四元组**（sourceEpoch/rangeId/inputHash/claim 规范化形式），**不含 model/configHash**——这是重放幂等的关键不变量，不为此妥协。因此：模型/配置变化**且 claim 规范化形式不同** → 修订路径（新 candidateId + supersedes）；模型/配置变化但 **claim 相同** → 按 §3 写入幂等处理（同 candidateId → noop），**provenance 以首写为准**（首次写入的 model/configHash 落盘，后续 noop 不覆盖）。修订的本质是内容变化，不是执行环境变化。P1b 协议测试必含「跨模型同 claim → noop + provenance 不变」用例。
 
 **失败状态枚举（§3.4 对齐）**：`timeout` / `empty-response` / `parse-failure` / `token-truncated`（识别 finish_reason=length，不解析半截响应）/ `evidence-unsupported` / `no-recordable-content` / `policy-blocked`，附原始 finish_reason。`no-recordable-content` 不是错误——它是「无可记场景」的正常信号，进评测统计。
 

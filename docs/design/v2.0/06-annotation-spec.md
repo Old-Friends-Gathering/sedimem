@@ -14,13 +14,15 @@
 |---|---|
 | claim | 标准命题句（一句一条，禁止复合） |
 | role | 该命题的正确 speaker 归属（user/assistant/tool/unknown） |
+| assertion | **断言框架（机判字段，与候选 01 §1 一一对应）**：`speechAct`（state/suggest/agree/decide/complete/retract 闭集）+ `negated`（布尔）+ `about`（主体）+ `condition`（条件从句或 null）。七类严重错误的 #3 否定反转（negated）、#4 建议变批准（speechAct）、#5 未做变已做（status=not-done）从本字段机判（[04-scoring-and-splits.md](04-scoring-and-splits.md) §4） |
 | type | 闭集 6 类之一（01 §4） |
 | scope | 适用分库 scope |
-| status | 命题状态：active/retracted/conditional/suggestion-only（对应「撤回/条件/仅建议」gold） |
+| status | 命题状态：active/retracted/conditional/suggestion-only/**not-done**（未完成的期望：工具失败、计划中的动作——支撑严重错误 #5 机判） |
 | time | 双时间：observedAt + assertedValidFrom/To（原文可解析时） |
 | evidence | 期望证据 span（合成语料中精确已知；真实来源标注时人工圈定） |
 | language | zh/en/mixed |
-| shouldReject | 应拒绝理由枚举（无可记/证据不足/仅建议未接受/跨 scope）——用于无可记与对抗场景 |
+| shouldReject | 应拒绝理由枚举（无可记/证据不足/仅建议未接受/跨 scope）——用于无可记场景 |
+| expectedOutcome | **对抗场景专用**：`block`（管线必须拒绝或标错，计拦截）或 `emit-with-flag`（允许输出但必须带显式标记，无标记 = 逃逸）+ `expectedErrorClass`（期望对应的严重错误类 ID，§4 七类之一）。正场景与无可记场景不携带此字段。对抗 10 类的「应拦住」期望全部由此承载，拦截率分子可机算（04 §4） |
 | family | 场景家族 ID |
 
 **「无可记」场景**：标注 `shouldReject` 理由（为什么整段无可记：闲聊/纯操作回显/无命题）；无可记场景与正场景互斥（同一输入不得既在 gold 又标无可记）。
@@ -34,7 +36,8 @@
 **独立标注人的定义**（R1 修订锚定）：
 - 必须是**人工**且**独立**——模型辅助标注可以声明，但**永不构成**独立标注人；
 - 同一人重复标注两遍**不称**独立；
-- 独立性包含信息隔离：第二标注人不得接触第一标注人的输出与裁决记录。
+- 独立性包含信息隔离：第二标注人不得接触第一标注人的输出与裁决记录；
+- **裁决人回避**：裁决人不得是两份标注的任一标注人——维护者若参与标注，则另指派裁决人（裁决偏向自身标注无法排除）。
 
 ## 3. 单人现实（pilot 诚实标注）
 
