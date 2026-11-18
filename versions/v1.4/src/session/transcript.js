@@ -238,6 +238,19 @@ function findLooseSessionDir(sessionsRoot, cwd) {
   return best ? best.name : null;
 }
 
+
+/** 在 sessionsRoot 的任意 slug 目录下按 sessionId 找转录（cwd 无关）。 */
+function findTranscriptById(sessionsRoot, sessionId, fileName) {
+  let dirs;
+  try { dirs = readdirSync(sessionsRoot, { withFileTypes: true }); } catch { return null; }
+  for (const d of dirs) {
+    if (!d.isDirectory()) continue;
+    const f = path.join(sessionsRoot, d.name, sessionId, fileName);
+    if (existsSync(f)) return f;
+  }
+  return null;
+}
+
 /**
  * 读 DSH 会话转录：<sessionsRoot>/<cwd-slug>/<sessionId>/session.v4.jsonl.zstd。
  * 先按 cwdToSessionSlug 精确找；找不到再在 sessionsRoot 里线性扫目录做宽松兜底。
@@ -285,7 +298,13 @@ export function readDshTranscript({ sessionsRoot, cwd, sessionId }) {
     }
     resolvedId = cands[0].id;
   }
-  const file = path.join(baseDir, resolvedId, fileName);
+  let file = path.join(baseDir, resolvedId, fileName);
+  if (!existsSync(file)) {
+    // 指定了 sessionId 时，cwd 可能和宿主进程不一致（MCP watcher 的 cwd 是包目录）。
+    // 在 sessionsRoot 下按 id 找一遍，不能让 cwd 决定能否自动捕获。
+    const found = findTranscriptById(sessionsRoot, resolvedId, fileName);
+    if (found) file = found;
+  }
   if (!existsSync(file)) {
     throw err('E_TRANSCRIPT_UNAVAILABLE',
       `DSH 转录不存在（已尝试 ${tried.join(' ; ')} 下的 ${resolvedId}/${fileName}）`);
