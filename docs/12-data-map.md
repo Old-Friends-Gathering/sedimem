@@ -84,3 +84,5 @@ P1a 的评测资产存放在仓库 [`pilot/p1a/`](../pilot/p1a/corpus/README.md)
 | 自动决策记录 | `opId`、`decider=policy:<version>`、decision/reason/rulesHit、CAS 三元组快照 | 随候选生命周期失效；改动须策略版本化 diff | planned，P1b |
 | 聊天纠正记录 | 旧/新命题、生效区间、来源事件、裁决依据 | 继承来源撤销；历史 asOf 可查，当前读取面失效 | planned，P1b |
 | 提交收据与游标 | `opId → 目标记录`、`missingRanges`、`recovery-required` 标记 | 只存放目标标识与 hash，不存正文 | planned，P1b |
+| P1b 保护测试与模拟器 | `pilot/p1b/tools/r2-sim.mjs` + `tests/r2-*.test.mjs`（19 条），纯内存、不落真相层 | 测试产物不入资产面；模拟器不写文件、不联网 | 已落地（2026-11-19，pilot/p1b） |
+

@@ -71,7 +71,7 @@ export function createSim(opts = {}) {
     }
     truthRevision += 1;
     const recordId = `truth-${truthRevision}`;
-    truth.set(recordId, { candidateId: candidate.candidateId, claim: candidate.claim, trust: SEVERE_TRUST_CEILING, revision: truthRevision });
+    truth.set(recordId, { candidateId: candidate.candidateId, opId, claim: candidate.claim, trust: SEVERE_TRUST_CEILING, revision: truthRevision });
     return { recordId, revision: truthRevision };
   }
 
