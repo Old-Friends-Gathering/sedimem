@@ -85,7 +85,7 @@ export function buildSummaryBadges(context) {
   const segments = Number.isFinite(Number(ctx.segments)) ? Math.max(0, Math.trunc(Number(ctx.segments))) : 0;
   return [
     { key: 'segments', label: `${segments} 段`, cls: segments > 0 ? 'b-accent' : '' },
-    { key: 'covered', label: coveredLabel(ctx.covered), cls: '' },
+    { key: 'covered', label: ctx.transcripts > 1 ? `${ctx.transcripts} 个转录` : coveredLabel(ctx.covered), cls: '' },
     { key: 'brief', label: `简报 ${fmtBriefChars(ctx.briefChars)}`, cls: '' },
     { key: 'captured', label: `上次捕获 ${fmtClock(ctx.lastCapturedAt)}`, cls: '' },
   ];
@@ -154,13 +154,19 @@ export function buildSegmentRow(seg) {
     nextSteps: textList(rec.nextSteps),
     anchorShort: rec?.source?.sessionId ? `…${String(rec.source.sessionId).slice(-6)}` : '',
     anchorFull: rec?.source?.sessionId ? String(rec.source.sessionId) : '',
+    when: (() => { const t = Date.parse(rec?.fromAt) || Date.parse(rec?.createdAt); if (!Number.isFinite(t)) return ''; return new Intl.DateTimeFormat('sv-SE', { timeZone: 'Asia/Shanghai', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', hour12: false }).format(new Date(t)).slice(5).replace('T', ' '); })(),
+    ordinal: 0,
   };
 }
 
 /** 段数组 → 行视图模型数组（过滤非对象项）。 */
 export function buildSegmentRows(segments) {
   if (!Array.isArray(segments)) return [];
-  return segments.filter((s) => s && typeof s === 'object').map(buildSegmentRow);
+  return segments.filter((s) => s && typeof s === 'object').map((s, i) => {
+    const row = buildSegmentRow(s);
+    row.ordinal = i + 1;
+    return row;
+  });
 }
 
 /** 空账本提示模型。 */
@@ -497,6 +503,7 @@ export async function mountLedger(deps) {
     hiddenOldSegments = allSegments.length - kept.length;
     segments = kept;
     context.segments = segments.length;
+    context.transcripts = transcriptCount();
     // 全部转录混在一起时，顶栏不显示一个假的“连续覆盖”；区间在每行里各自成立。
     context.covered = showAllTranscripts && transcriptCount() > 1 ? [] : coveredOf(segments);
     scopeBtn.textContent = showAllTranscripts ? '只看当前会话' : `显示全部（${allSegments.length}）`;
