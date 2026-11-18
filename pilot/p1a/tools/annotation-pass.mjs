@@ -3,7 +3,7 @@
 // 红线（06-annotation-spec §2）：工具只做机械比对，绝不产出 pass/fail 裁决；
 // 独立性=盲评包必须剥离全部 gold 侧字段（gold/shouldReject/adversarial/split/expected*）。
 import { readFileSync, writeFileSync, mkdirSync } from 'node:fs';
-import { join, dirname } from 'node:path';
+import { join } from 'node:path';
 import { normalizeClaim } from './score.mjs';
 
 const GOLD_SIDE_KEYS = new Set([
