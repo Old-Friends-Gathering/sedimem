@@ -14,7 +14,7 @@
 - **语料**：218 场景（test 100 / dev 118），gold 347 条，对抗 10 类 test 每类恰 10（详见 B3 审核报告修订后验证节）。
 - **抽取器**：规则地板 baseline-runner（句子切分 + 线索词匹配，无 LLM 参与）。
 - **评分口径**：manifest v3（[04-scoring-and-splits.md](../../design/v2.0/04-scoring-and-splits.md) §3 六硬规则：TP/FP/FN 一对一匹配、零输出 precision 未定义、截断场景保留原分母）。**置信区间口径如实声明**：04 §3 规定 bootstrap 家族聚类为主口径，本版 score.mjs 仅实现 Wilson 区间（仅描述性，不得宣称独立样本置信）；bootstrap 家族聚类 CI 未实现，列为 P1a→P1b 过渡待办（见下「遗留缺口」）。
-- **运行**：实测于 2026-11-18T11:35Z，runId=`exit-20261118T113549Z`，产物在 [pilot/p1a/out/exit/exit-20261118T113549Z/](../../../pilot/p1a/out/exit/exit-20261118T113549Z/)（gitignored）。
+- **运行**：实测于 2026-11-18T11:35Z，runId=`exit-20261118T113549Z`，产物在 `pilot/p1a/out/exit/exit-20261118T113549Z/`（gitignored，按下方复现命令重建；目录不入库故不作站内链接）。
 - **复现命令**（仓库根）：
 
 ```
@@ -96,7 +96,7 @@ node pilot/p1a/tools/score.mjs <cand> pilot/p1a/corpus
 
 ## 复现与产物
 
-- 产物目录：[pilot/p1a/out/exit/exit-20261118T113549Z/](../../../pilot/p1a/out/exit/exit-20261118T113549Z/)（gitignored，本机留存）
+- 产物目录：`pilot/p1a/out/exit/exit-20261118T113549Z/`（gitignored，本机留存；重建见上方复现命令）
 - 复现命令（仓库根）：
 
 ```
