@@ -13,8 +13,9 @@
 
 - **语料**：218 场景（test 100 / dev 118），gold 347 条，对抗 10 类 test 每类恰 10（详见 B3 审核报告修订后验证节）。
 - **抽取器**：规则地板 baseline-runner（句子切分 + 线索词匹配，无 LLM 参与）。
-- **评分口径**：manifest v3（[04-scoring-and-splits.md](../../design/v2.0/04-scoring-and-splits.md) §3 六硬规则：TP/FP/FN 一对一匹配、零输出 precision 未定义、截断场景保留原分母）。**置信区间口径如实声明**：04 §3 规定 bootstrap 家族聚类为主口径，本版 score.mjs 仅实现 Wilson 区间（仅描述性，不得宣称独立样本置信）；bootstrap 家族聚类 CI 未实现，列为 P1a→P1b 过渡待办（见下「遗留缺口」）。
-- **运行**：实测于 2026-11-18T11:35Z，runId=`exit-20261118T113549Z`，产物在 `pilot/p1a/out/exit/exit-20261118T113549Z/`（gitignored，按下方复现命令重建；目录不入库故不作站内链接）。
+- **评分口径**：manifest v3（[04-scoring-and-splits.md](../../design/v2.0/04-scoring-and-splits.md) §3 六硬规则：TP/FP/FN 一对一匹配、零输出 precision 未定义、截断场景保留原分母）。**置信区间主口径 = 家族聚类 bootstrap**：`score.mjs` 已实现 `bootstrapCI`（重采样场景家族、保留簇内全部场景、percentile 法、2000 次、95%、seed=`20261118` 可复现）；Wilson 区间同时输出，仅作描述性对照，不得宣称独立样本置信。
+- **运行**：实测于 2026-11-18T12:21Z，产物在 `pilot/p1a/out/exit/exit-20261118T12-21-40Z/`（gitignored，按下方复现命令重建；目录不入库故不作站内链接）。
+- **固定配置 3 次运行（04 §3）**：连跑 3 次，`meta.contentDigest` 三次一致 = `e25c863db32635f3…`（摘要刻意剔除 `provenance.runId`，只覆盖抽取内容），证明规则地板在同一语料上逐字节可复现。
 - **复现命令**（仓库根）：
 
 ```
@@ -28,21 +29,22 @@ node pilot/p1a/tools/score.mjs <cand> pilot/p1a/corpus
 
 ### 全语料（218 场景，347 gold）
 
-| 指标 | 值 | Wilson 95% CI |
-|---|---|---|
-| tp / fp / fn | 2 / 888 / 345 | — |
-| Precision | 0.22% | 0.06%–0.82% |
-| Recall | 0.58% | 0.16%–2.08% |
-| 零输出场景 | 0 | — |
+| 指标 | 值 | bootstrap 家族聚类 95% CI（主口径） | Wilson 95% CI（描述性） |
+|---|---|---|---|
+| tp / fp / fn | 2 / 888 / 345 | — | — |
+| Precision | 0.22% | 0.00%–0.53% | 0.06%–0.82% |
+| Recall | 0.58% | 0.00%–1.42% | 0.16%–2.08% |
+| 零输出场景 | 0 | — | — |
 
-> 表注：Wilson 95% CI 仅描述性（04 §3），本版未实现 bootstrap 家族聚类 CI（score-*.json 内含 families 明细可供簇统计，见「遗留缺口」）。
+> 表注：bootstrap 分母为 15 个场景家族（聚类单位），2000 次重采样、seed=20261118（`score-all.json` 的 `bootstrap` 字段可逐项复核）。家族聚类口径下区间下界为 0，说明「家族间差异主导方差」——单家族内的稳定命中不能外推为总体置信。
 
 ### test 拆分（100 场景，门槛作用域）
 
-| 指标 | 值 |
-|---|---|
-| tp / fp / fn | 0 / 484 / 210 |
-| Precision / Recall | 0 / 0 |
+| 指标 | 值 | bootstrap 家族聚类 95% CI |
+|---|---|---|
+| tp / fp / fn | 0 / 484 / 210 | — |
+| Precision | 0 | [0, 0]（全程零 TP，簇内分母恒 >0） |
+| Recall | 0 | [0, 0] |
 
 按语言组：
 
@@ -65,10 +67,11 @@ node pilot/p1a/tools/score.mjs <cand> pilot/p1a/corpus
 
 ### dev 拆分（118 场景）
 
-| 指标 | 值 |
-|---|---|
-| tp / fp / fn | 2 / 404 / 135 |
-| Precision / Recall | 0.49% / 1.46% |
+| 指标 | 值 | bootstrap 家族聚类 95% CI |
+|---|---|---|
+| tp / fp / fn | 2 / 404 / 135 | — |
+| Precision | 0.49% | 0.00%–1.15% |
+| Recall | 1.46% | 0.00%–3.76% |
 
 ## 与门槛的差距分析
 
@@ -90,13 +93,13 @@ node pilot/p1a/tools/score.mjs <cand> pilot/p1a/corpus
 
 ## 遗留缺口（如实记录）
 
-1. **bootstrap 家族聚类 CI 未实现**：04 §3 的主口径要求按场景家族聚类重采样（2000 次/95%）。本版 score.mjs 只输出 Wilson 描述性区间；families 明细已在产物 JSON 中，P1b 前置需补实现并复算本报告。
+1. ~~bootstrap 家族聚类 CI 未实现~~ → **已补齐（2026-11-18）**：`score.mjs` 导出 `bootstrapCI`（家族聚类/percentile/2000 次/95%/seed 可复现），`scoreRun` 输出 `scenarioStats` 与 `bootstrap` 字段；本报告三段（全语料/dev/test）的 CI 已按该口径重算。剩余口径缺口：家族内场景相关性未做块内加权（当前簇内按场景等权），P1b 若引入加权需在 manifest 版本化。
 2. **gold 为单标注**：出口级 gold 需双人工独立标注（06 §2）；annotation-pass.mjs 已就绪，待第二标注人执行后 annotationMode 升为 dual-independent 再宣称出口级。
 3. **三项保护测试随 B4 补齐**：双时间守卫 / tokenizer 计数快照 / 成本闸门见 `pilot/p1a/tests/contract-guards.test.mjs`。
 
 ## 复现与产物
 
-- 产物目录：`pilot/p1a/out/exit/exit-20261118T113549Z/`（gitignored，本机留存；重建见上方复现命令）
+- 产物目录：`pilot/p1a/out/exit/exit-20261118T12-21-40Z/`（gitignored，本机留存；重建见上方复现命令），含 `candidates.jsonl` / `meta.json`（含 `contentDigest`）/ `score-{all,dev,test}.json`（含 `bootstrap` 与 `scenarioStats`）
 - 复现命令（仓库根）：
 
 ```

@@ -108,7 +108,12 @@ export function runBaseline(scenarios, { runId = 'baseline' } = {}) {
     // 只陈述抽取侧事实（零候选清单）；是否「正确零输出」由评分层对照 gold 判定
     if (c.length === 0) zeroOutputScenarios.push(s.scenarioId);
   }
-  return { candidates, meta: { runId, extractor: 'baseline-rules@pilot-1', processed: scenarios.length, zeroOutputScenarios } };
+  // 04 §3：固定配置多次运行要可复现——内容摘要刻意剔除 runId（运行身份不属于抽取内容）。
+  const digest = createHash('sha256').update(JSON.stringify(candidates.map((c) => ({ ...c, provenance: { ...c.provenance, runId: '' } })))).digest('hex');
+  return {
+    candidates,
+    meta: { runId, extractor: 'baseline-rules@pilot-1', processed: scenarios.length, zeroOutputScenarios, contentDigest: digest },
+  };
 }
 
 export async function main() {

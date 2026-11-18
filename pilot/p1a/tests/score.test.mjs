@@ -2,7 +2,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-import { normalizeClaim, scoreRun } from '../tools/score.mjs';
+import { normalizeClaim, scoreRun, bootstrapCI } from '../tools/score.mjs';
 
 const GOLD = (over = {}) => ({
   goldId: 'g1', claim: '连接池已提升到 200', role: 'user', type: 'fact', scope: 'repo:demo-a',
@@ -165,4 +165,58 @@ test('emit-with-flag：触碰 target 的未打标候选计违规（打标候选�
 test('家族计数按 scenario.family 聚合', () => {
   const r = scoreRun({ candidates: [CAND()], scenarios: [SCEN()], manifest: { stage: 'pilot' } });
   assert.deepEqual(r.families, [{ family: 'fam-a', scenarios: 1, tp: 1, fp: 0, fn: 0 }]);
+});
+
+
+// ---------- 04 §3：家族聚类 bootstrap（主口径 CI） ----------
+const STAT = (family, sid, tp, fp, fn) => ({ scenarioId: sid, family, tp, fp, fn });
+
+test('bootstrapCI：同 seed 结果完全一致（可复现），不同 seed 不同', () => {
+  const stats = [STAT('fam-a', 'S1', 3, 1, 0), STAT('fam-b', 'S2', 0, 2, 3), STAT('fam-c', 'S3', 1, 1, 1)];
+  const r1 = bootstrapCI(stats, { resamples: 200, seed: 7 });
+  const r2 = bootstrapCI(stats, { resamples: 200, seed: 7 });
+  const r3 = bootstrapCI(stats, { resamples: 200, seed: 8 });
+  assert.deepEqual(r1.precision, r2.precision);
+  assert.deepEqual(r1.recall, r2.recall);
+  assert.notDeepEqual(r1.precision, r3.precision);
+});
+
+test('bootstrapCI：全对的语料 → precision/recall 区间退化为 [1,1]', () => {
+  const stats = [STAT('fam-a', 'S1', 2, 0, 0), STAT('fam-b', 'S2', 1, 0, 0)];
+  const r = bootstrapCI(stats, { resamples: 100, seed: 1 });
+  assert.deepEqual(r.precision, { lo: 1, hi: 1, nullRate: 0 });
+  assert.deepEqual(r.recall, { lo: 1, hi: 1, nullRate: 0 });
+});
+
+test('bootstrapCI：家族聚类（不是场景独立重采样）——一个家族全错、一个全对时区间明显变宽', () => {
+  // 2 个家族：fam-a 全对 3 场景，fam-b 全错 3 场景。
+  const stats = [
+    STAT('fam-a', 'S1', 1, 0, 0), STAT('fam-a', 'S2', 1, 0, 0), STAT('fam-a', 'S3', 1, 0, 0),
+    STAT('fam-b', 'S4', 0, 2, 2), STAT('fam-b', 'S5', 0, 2, 2), STAT('fam-b', 'S6', 0, 2, 2),
+  ];
+  const r = bootstrapCI(stats, { resamples: 400, seed: 3 });
+  assert.equal(r.clusters, 2);
+  // 聚类重采样下，只会出现「两簇都抽到」或「只抽到一簇」两种情形 → 区间跨越 0.25~1。
+  assert.ok(r.precision.lo < 0.5 && r.precision.hi > 0.9, `区间应宽，实际 ${JSON.stringify(r.precision)}`);
+  assert.ok(r.recall.lo < 0.5 && r.recall.hi > 0.9, `区间应宽，实际 ${JSON.stringify(r.recall)}`);
+});
+
+test('bootstrapCI：分母恒 0 时 precision 未定义（nullRate=1）', () => {
+  const stats = [STAT('fam-a', 'S1', 0, 0, 3), STAT('fam-b', 'S2', 0, 0, 2)];
+  const r = bootstrapCI(stats, { resamples: 100, seed: 5 });
+  assert.equal(r.precision, null);
+  assert.equal(r.precisionNullRate, 1);
+  assert.ok(r.recall.lo === 0 && r.recall.hi === 0);
+});
+
+test('scoreRun：输出 bootstrap 且聚类数=家族数、逐场景统计与 totals 自洽', () => {
+  const r = scoreRun({
+    candidates: [CAND()],
+    scenarios: [SCEN(), SCEN({ scenarioId: 'S2', family: 'fam-b', events: [{ eventId: 'm9', role: 'user', ts: 't', text: '无关文本。' }], gold: [] })],
+    manifest: { stage: 'pilot' },
+  });
+  assert.equal(r.bootstrap.clusters, 2);
+  assert.equal(r.bootstrap.method, 'family-cluster percentile');
+  const sum = r.scenarioStats.reduce((a, x) => ({ tp: a.tp + x.tp, fp: a.fp + x.fp, fn: a.fn + x.fn }), { tp: 0, fp: 0, fn: 0 });
+  assert.deepEqual(sum, { tp: r.totals.tp, fp: r.totals.fp, fn: r.totals.fn });
 });
