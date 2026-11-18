@@ -13,7 +13,7 @@
 |---|---|---|---|
 | 真相层 | `~/.memo/items/<scope>.jsonl` | 记录快照（append-only，同 id 最后一行胜出） | 高：可能含个人事实、决策、引用 |
 | 事件/审计 | `~/.memo/events.jsonl` | 写入、检索、注入、删除、信任提升、任务库操作 | 高：只存 id/哈希/选择器，不存正文；注入审计存 packHash |
-| 任务库 | `~/.memo/sessions/<taskId>/segments.jsonl`、`<taskId>.json` | 任务账本段、8 段 checkpoint、简报 | 高：过程记录，永不进 facts |
+| 任务库 | `~/.memo/sessions/<taskId>/segments.jsonl`、`<taskId>.json`、`autocapture.json` | 任务账本段、8 段 checkpoint、简报、自动捕获运行状态（mtime/size/上次时间，可删） | 高：过程记录，永不进 facts |
 | 捕获待审 | `~/.memo/inbox/<scopeKey>.jsonl`、`*.quarantine.jsonl` | 候选；隔离区只存 `uri+hash+quote(≤200)` | 中：可能含第三方内容 |
 | 索引/视图 | `~/.memo/index/`、`views/`、`brief/`、`derive-queue/` | 可删可重建的派生层 | 中：由真相层派生 |
 | Web 运行时 | `~/.memo/web-token`（0600） | 每次 `memo serve` 启动随机生成 | 高：等同本机 API 凭据 |

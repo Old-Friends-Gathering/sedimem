@@ -18,6 +18,7 @@ import {
   LEDGER_EMPTY_HINT,
   READ_ONLY_HINT,
   buildBriefText,
+  buildCheckpointRows,
   buildSegmentRow,
   buildSegmentRows,
   buildSummaryBadges,
@@ -28,6 +29,7 @@ import {
   fmtClock,
   modeBadge,
   normalizeBrief,
+  normalizeCheckpoints,
   normalizeContext,
   normalizeSegments,
   segmentRange,
@@ -208,6 +210,21 @@ test('segments 归一化：非数组返回空数组', () => {
   assert.equal(normalizeSegments({ segments: [SEG] }).length, 1);
   assert.equal(normalizeSegments({ segments: 'oops' }).length, 0);
   assert.equal(normalizeSegments(null).length, 0);
+});
+
+test('checkpoints 归一化与行构建：缺字段/旧服务端不抛异常', () => {
+  const cp = { id: '01ABC', createdAt: '2026-11-18T06:28:16.000Z', sections: { intent: '完成 P1a', nextSteps: ['R2', '提交'] } };
+  assert.equal(normalizeCheckpoints({ checkpoints: [cp] }).length, 1);
+  assert.equal(normalizeCheckpoints({}).length, 0, '旧服务端无 checkpoints 字段 → []');
+  assert.equal(normalizeCheckpoints(null).length, 0);
+  const rows = buildCheckpointRows([cp, { createdAt: null, sections: null }]);
+  assert.equal(rows.length, 2);
+  assert.equal(rows[0].time, '2026-11-18 06:28');
+  assert.equal(rows[0].excerpt, '完成 P1a');
+  assert.equal(rows[0].lists.find((l) => l.key === 'nextSteps').items.length, 2);
+  assert.equal(rows[0].texts.find((t) => t.key === 'intent').text, '完成 P1a');
+  assert.equal(rows[1].time, '—', '缺 createdAt 给占位');
+  assert.equal(buildCheckpointRows('oops').length, 0);
 });
 
 /* ---------------- ④ 只读禁用 + 源码安全 ---------------- */

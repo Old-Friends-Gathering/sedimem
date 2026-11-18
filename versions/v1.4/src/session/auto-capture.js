@@ -1,0 +1,244 @@
+// session/auto-capture.js — 任务账本自动捕获（v1.4.x，issue #223）
+//
+// 设计（docs/06 §22.1）：v1.2 的账本捕获只有 CLI 手动入口，`captureOnClose`/`autoWatch`
+// 在 policy 里声明了但从未实现，任务库长期使用时账本停在最后一次手动捕获。
+// 本模块补两条自动路径：
+//   1) MCP 挂车捕获：tools/call 分发完成后（session scope + 候选工具），检查绑定转录是否
+//      增长；守卫链全部 stat 级（不解压 zstd、零 token），达阈值才 captureTask（rules 模式）。
+//   2) close 捕获：memory_session_close 成功后 force 一次（兑现 captureOnClose）。
+// fail-closed：任何失败只返回 {ran:false, reason}，绝不影响主工具调用。
+// 运行状态 $MEMO_HOME/sessions/<taskId>/autocapture.json：可删（删了重新积累守卫基线）。
+//
+// 硬规则：
+//   - 自动捕获一律 rules 模式（确定性零 token；LLM 模式只留给显式手动捕获）。
+//   - captureTask 自带幂等（covered 去重）与账本锁（防重叠），这里不重复加锁。
+//   - 非注入路径不产生任何记忆写入：本模块只写 sessions/<taskId>/autocapture.json 状态。
+
+import { existsSync, mkdirSync, readFileSync, readdirSync, statSync, writeFileSync } from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
+
+import { defaultPolicy } from '../config/policy.js';
+import { systemClock } from '../core/clock.js';
+import { cwdToSessionSlug } from './transcript.js';
+
+const TASK_ID_RE = /^[a-z0-9][a-z0-9._-]{0,63}$/;
+
+/**
+ * 默认阈值（可被 config/policy.json 的 session.ledger.autoCapture 整体覆盖）。
+ * captureTokens=30000 落实设计决定（docs/research/task-context-ledger-design.md §捕获时机）：
+ * 「--if-needed：按 policy.session.captureTokens（默认 30000，真正实现旧 hintTokens）判断」。
+ * 转录增长量在 stat 级只能拿到字节——用 bytesPerToken 折算阈值（中英混合 ≈4.4 B/token），
+ * 30000 × 4.4 ≈ 132000 字节。要精确 token 数必须解压 zstd 全量重读，违背零成本守卫。
+ */
+const DEFAULTS = Object.freeze({ enabled: true, captureTokens: 30_000, bytesPerToken: 4.4, minIntervalMs: 1_800_000, cooldownMs: 60_000 });
+
+/** 会触发挂车检查的工具（memory_session_close 的捕获走 handler 内部，不在挂车层）。 */
+export const AUTO_CAPTURE_TOOLS = Object.freeze(new Set([
+  'memory_write', 'memory_supersede', 'memory_search', 'memory_brief',
+  'memory_session_start', 'memory_session_checkpoint', 'memory_session_status',
+  'memory_session_brief', 'memory_session_segments',
+]));
+
+/** MCP server 进程 cwd 可能不等于转录 cwd；可用 MEMO_CAPTURE_CWD 显式指定。 */
+const CAPTURE_CWD = process.env.MEMO_CAPTURE_CWD || process.cwd();
+const MEMO_HOME = process.env.MEMO_HOME || path.join(os.homedir(), '.memo');
+
+function nowMs(clock = systemClock) {
+  const v = clock?.nowMs?.() ?? clock?.now?.() ?? Date.now();
+  return typeof v === 'number' ? v : Date.now();
+}
+
+export function autoCapturePolicy(policy = defaultPolicy) {
+  const raw = policy?.session?.ledger?.autoCapture;
+  return { ...DEFAULTS, ...(raw && typeof raw === 'object' ? raw : {}) };
+}
+
+export function captureOnCloseEnabled(policy = defaultPolicy) {
+  return policy?.session?.ledger?.captureOnClose !== false;
+}
+
+function ledgerDirExists(memoHome, taskId) {
+  const dir = path.join(memoHome, 'sessions', taskId);
+  return existsSync(path.join(dir, 'meta.json'))
+    || existsSync(path.join(dir, 'segments.jsonl'))
+    || existsSync(path.join(dir, 'index.json'));
+}
+
+/**
+ * stat 级探测绑定转录（不解压）。绑定顺序：
+ *   ① 显式 probe（仅测试注入）
+ *   ② DSH_SESSION_ID 环境变量 → sessionsRoot/<slug>/<sessionId>/session.v4.jsonl.zstd
+ *     （精确绑定——转录目录名唯一，与进程 cwd 是否等于会话 cwd 无关）
+ *   ③ cwd → cwdToSessionSlug(cwd) 下 mtime 最新的转录（进程 cwd = 会话 cwd 的部署形态）
+ * 找不到 → null。
+ */
+export function probeTranscript({ cwd, sessionsRoot, sessionId }) {
+  const root = sessionsRoot || path.join(process.env.HOME ?? os.homedir(), '.dsh', 'sessions');
+  if (!existsSync(root)) return null;
+  if (sessionId) {
+    let entries = [];
+    try {
+      entries = readdirSync(root, { withFileTypes: true }).filter((e) => e.isDirectory());
+    } catch {
+      return null;
+    }
+    for (const slug of entries) {
+      const f = path.join(root, slug.name, sessionId, 'session.v4.jsonl.zstd');
+      if (!existsSync(f)) continue;
+      try {
+        const st = statSync(f);
+        return { mtimeMs: st.mtimeMs, size: st.size, sessionId };
+      } catch {
+        /* stat 失败继续找下一个 slug */
+      }
+    }
+    return null; // 有 env 绑定但转录不存在：精确失败优于模糊猜测
+  }
+  const slugDir = path.join(root, cwdToSessionSlug(cwd));
+  if (!existsSync(slugDir)) return null;
+  let best = null;
+  let entries = [];
+  try {
+    entries = readdirSync(slugDir, { withFileTypes: true }).filter((e) => e.isDirectory());
+  } catch {
+    return null;
+  }
+  for (const e of entries) {
+    const f = path.join(slugDir, e.name, 'session.v4.jsonl.zstd');
+    if (!existsSync(f)) continue;
+    try {
+      const st = statSync(f);
+      if (!best || st.mtimeMs > best.mtimeMs) best = { mtimeMs: st.mtimeMs, size: st.size, sessionId: e.name };
+    } catch {
+      /* stat 失败的目录跳过 */
+    }
+  }
+  return best;
+}
+
+export function readAutoCaptureState(memoHome, taskId) {
+  const file = path.join(memoHome, 'sessions', taskId, 'autocapture.json');
+  if (!existsSync(file)) return null;
+  try {
+    const v = JSON.parse(readFileSync(file, 'utf8'));
+    return v && typeof v === 'object' ? v : null;
+  } catch {
+    return null; // 坏状态文件 = 重新积累
+  }
+}
+
+function writeAutoCaptureState(memoHome, taskId, patch) {
+  const dir = path.join(memoHome, 'sessions', taskId);
+  mkdirSync(dir, { recursive: true });
+  const prev = readAutoCaptureState(memoHome, taskId) ?? {};
+  const next = { ...prev, ...patch };
+  // 尾换行（Q8：文件末尾必须有换行符）
+  writeFileSync(path.join(dir, 'autocapture.json'), `${JSON.stringify(next)}\n`);
+  return next;
+}
+
+/**
+ * 守卫链（纯函数，便于单测）：
+ *   disabled > bad-task-id > no-transcript > no-ledger(非 force)
+ *   > first-run(ok) > unchanged > cooldown > threshold-reached(ok) > interval-elapsed(ok) > below-threshold
+ */
+export function decideAutoCapture({ memoHome, taskId, policy = defaultPolicy, clock, probe, state, force = false, requireLedger = true }) {
+  const pol = autoCapturePolicy(policy);
+  if (!pol.enabled) return { ok: false, reason: 'disabled' };
+  if (!TASK_ID_RE.test(String(taskId ?? ''))) return { ok: false, reason: 'bad-task-id' };
+  if (!probe) return { ok: false, reason: 'no-transcript' };
+  if (requireLedger && !force && !ledgerDirExists(memoHome, taskId)) return { ok: false, reason: 'no-ledger' };
+  if (!state) return { ok: true, reason: 'first-run' };
+  if (probe.mtimeMs === state.mtimeMs && probe.size === state.size) return { ok: false, reason: 'unchanged' };
+  const now = nowMs(clock);
+  if (!force && typeof state.lastSuccessAt === 'number' && now - state.lastSuccessAt < pol.cooldownMs) {
+    return { ok: false, reason: 'cooldown', waitMs: pol.cooldownMs - (now - state.lastSuccessAt) };
+  }
+  const growth = probe.size - (Number.isFinite(state.size) ? state.size : 0);
+  if (force) return { ok: true, reason: 'forced', growth };
+  const byteThreshold = Math.max(1, Math.round(pol.captureTokens * pol.bytesPerToken));
+  if (growth >= byteThreshold) return { ok: true, reason: 'threshold-reached', growth };
+  const last = Number.isFinite(state.lastSuccessAt) ? state.lastSuccessAt : state.lastAttemptAt;
+  if (growth > 0 && Number.isFinite(last) && now - last >= pol.minIntervalMs) {
+    return { ok: true, reason: 'interval-elapsed', growth };
+  }
+  return { ok: false, reason: 'below-threshold', growth };
+}
+
+/**
+ * 挂车自动捕获。返回（成功）：
+ *   { ran:true, reason, created, skipped, segments }
+ * （跳过/失败）：
+ *   { ran:false, reason, code?, message? }
+ * captureOnClose 场景传 force:true + captureOnClose:true —— 额外要求 policy 允许 close 捕获。
+ */
+export async function maybeAutoCapture({
+  memoHome, taskId, cwd = CAPTURE_CWD, sessionsRoot, sessionId, policy = defaultPolicy, clock = systemClock,
+  captureTaskImpl, probe, force = false, requireLedger = true, captureOnClose = false,
+} = {}) {
+  try {
+    if (captureOnClose && !captureOnCloseEnabled(policy)) return { ran: false, reason: 'capture-on-close-disabled' };
+    const state = readAutoCaptureState(memoHome, taskId);
+    const tx = probe ?? probeTranscript({ cwd, sessionsRoot, sessionId });
+    const d = decideAutoCapture({ memoHome, taskId, policy, clock, probe: tx, state, force, requireLedger });
+    if (!d.ok) return { ran: false, reason: d.reason, ...(d.waitMs !== undefined ? { waitMs: d.waitMs } : {}) };
+    const now = nowMs(clock);
+    const impl = captureTaskImpl ?? (await import('./capture.js')).captureTask;
+    const res = await impl({ memoHome, taskId, cwd, mode: 'rules' });
+    writeAutoCaptureState(memoHome, taskId, {
+      mtimeMs: tx.mtimeMs,
+      size: tx.size,
+      sessionId: res?.segments?.[0]?.source?.sessionId ?? state?.sessionId ?? tx.sessionId ?? null,
+      lastSuccessAt: now,
+      lastAttemptAt: now,
+    });
+    return { ran: true, reason: d.reason, created: res?.created ?? 0, skipped: res?.skipped ?? 0, segments: res?.segments?.length ?? 0 };
+  } catch (e) {
+    try {
+      const tx2 = probe ?? probeTranscript({ cwd, sessionsRoot, sessionId });
+      const now = nowMs(clock);
+      writeAutoCaptureState(memoHome, taskId, {
+        lastAttemptAt: now,
+        ...(tx2 && !readAutoCaptureState(memoHome, taskId) ? { mtimeMs: tx2.mtimeMs, size: tx2.size } : {}),
+      });
+    } catch {
+      /* 状态写失败不影响 fail-closed 返回 */
+    }
+    return { ran: false, reason: 'error', code: e?.code ?? 'E_CAPTURE_FAILED', message: e?.message ?? String(e) };
+  }
+}
+
+export function isAutoCaptureCandidateTool(name) {
+  return AUTO_CAPTURE_TOOLS.has(name);
+}
+
+/** 单次挂车检查硬超时：捕获慢（大 zstd）也不拖住工具响应。 */
+const POST_TOOL_TIMEOUT_MS = 15_000;
+
+/**
+ * server.js tools/call 成功路径的挂钩。非 session scope / 非候选工具 → null；
+ * 其余 → maybeAutoCapture（自带 try/catch + 超时，绝不抛出）。
+ * overrides 仅测试注入（memoHome/taskId/cwd/policy/clock/captureTaskImpl/probe）。
+ */
+export async function postToolAutoCapture({ state, toolName, overrides = {} } = {}) {
+  try {
+    const scope = state?.scope;
+    if (typeof scope !== 'string' || !scope.startsWith('session:')) return null;
+    if (!isAutoCaptureCandidateTool(toolName)) return null;
+    const taskId = scope.slice('session:'.length);
+    // MCP 层负责把宿主环境绑定进来：DSH 会话 id（精确）+ server 进程 cwd（兜底 slug）
+    const run = maybeAutoCapture({
+      memoHome: MEMO_HOME, taskId, cwd: CAPTURE_CWD,
+      sessionId: process.env.DSH_SESSION_ID || undefined,
+      ...overrides,
+    });
+    const timer = new Promise((resolve) => {
+      const t = setTimeout(() => resolve({ ran: false, reason: 'timeout' }), POST_TOOL_TIMEOUT_MS);
+      if (typeof t.unref === 'function') t.unref();
+    });
+    return await Promise.race([run, timer]);
+  } catch {
+    return null;
+  }
+}

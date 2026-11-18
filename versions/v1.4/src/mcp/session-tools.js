@@ -15,6 +15,7 @@ import {
 } from '../session/lifecycle.js';
 import { normalizeCheckpoint, parseDshSummary, writeCheckpoint } from '../session/checkpoint.js';
 import { renderHandoff, writeHandoff } from '../session/handoff.js';
+import { maybeAutoCapture } from '../session/auto-capture.js';
 import { PROMOTE_KINDS } from '../session/cli-support.js';
 import { readSegments } from '../session/ledger.js';
 import { briefJson, readTaskMeta, renderBriefText } from '../session/ledger-brief.js';
@@ -296,9 +297,24 @@ async function closeSessionTool(a, state) {
     await restoreScopeAfterClose(state, scope, mainScope);
     sessionOrigins.delete(scope);
 
+    // 收官捕获（issue #223，兑现 policy.session.ledger.captureOnClose）：关库前账本可能
+    // 落后于转录——force 一次自动捕获（绕过冷却/阈值，仍 rules 模式、仍 fail-closed）。
+    let closeCapture = null;
+    try {
+      closeCapture = await maybeAutoCapture({
+        memoHome: MEMO_HOME, taskId: sessionId, captureOnClose: true, force: true,
+        sessionId: process.env.DSH_SESSION_ID || undefined,
+      });
+    } catch {
+      closeCapture = null; // 绝不影响 close 本身
+    }
+
     return {
       text: `任务库 ${sessionId} 已关闭：晋升 ${promoted.length} 条到主库（${mainScope}），tombstone ${forgotten} 条；交接文档 ${handoffPath}`,
-      structured: { ok: true, scope, alreadyClosed: false, promoted, forgotten, handoffPath },
+      structured: {
+        ok: true, scope, alreadyClosed: false, promoted, forgotten, handoffPath,
+        ...(closeCapture ? { autoCapture: closeCapture } : {}),
+      },
     };
   } finally {
     if (owned) await svc.close().catch(() => {});

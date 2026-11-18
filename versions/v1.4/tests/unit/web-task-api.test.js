@@ -122,6 +122,19 @@ describe('web 任务账本 API（A1 只读 + A2 写）', () => {
   });
 
   test('GET /api/task-segments：完整段记录、fromSeq 升序、badLines/index', async () => {
+    // checkpoint 合并展示（issue #223）：MCP memory_session_checkpoint 写进 items/session:<taskId>.jsonl，
+    // 账本端点把它们并进响应（坏行容忍、tombstone 排除）。
+    const itemsDir = join(home, 'items');
+    mkdirSync(itemsDir, { recursive: true });
+    const cpFile = join(itemsDir, `session:${TASK}.jsonl`);
+    writeFileSync(cpFile, [
+      JSON.stringify({ id: 'cp1', kind: 'state', predicate: 'checkpoint', status: 'active', createdAt: '2026-11-18T06:00:00.000Z', value: JSON.stringify({ intent: '完成 P1a', nextSteps: ['R2 复核'] }) }),
+      'not-json-line',
+      JSON.stringify({ id: 'cp2', kind: 'state', predicate: 'checkpoint', status: 'tombstoned', createdAt: '2026-11-18T07:00:00.000Z', value: '{}' }),
+      JSON.stringify({ id: 'n1', kind: 'fact', predicate: null, status: 'active', createdAt: '2026-11-18T07:30:00.000Z', value: '非 checkpoint 不并入' }),
+      '',
+    ].join('\n'));
+
     const { status, body } = await get(writable, `task-segments?task=${TASK}`);
     assert.equal(status, 200, JSON.stringify(body));
     assert.equal(body.ok, true);
@@ -133,6 +146,12 @@ describe('web 任务账本 API（A1 只读 + A2 写）', () => {
     assert.equal(body.badLines, 0);
     assert.ok(body.index && Array.isArray(body.index.segments), 'index 应为 readIndex 的原始对象');
     assert.equal(body.index.segments.length, 2);
+    // checkpoint 断言：只收 active 的 predicate==='checkpoint'，sections 已解 JSON，createdAt 升序
+    assert.equal(body.checkpoints.length, 1);
+    assert.equal(body.checkpoints[0].id, 'cp1');
+    assert.equal(body.checkpoints[0].sections.intent, '完成 P1a');
+    assert.deepEqual(body.checkpoints[0].sections.nextSteps, ['R2 复核']);
+    assert.equal(body.checkpointBadLines, 1, '坏行计数进 checkpointBadLines，不抛 500');
   });
 
   test('GET /api/task-brief：briefJson 展开在顶层（task 是对象），asOf/maxChars 生效', async () => {

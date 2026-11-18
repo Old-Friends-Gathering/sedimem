@@ -8,7 +8,7 @@
  * 数据契约（src/web/handlers.js，query 一律 task=<taskId>）：
  * - GET  /task-context?task=<id>  → {task:String, segments:Number, covered:[[from,to]],
  *                                    briefChars:Number, lastCapturedAt:ISO|null}
- * - GET  /task-segments?task=<id> → {task:String, segments:[段记录], badLines, index}
+ * - GET  /task-segments?task=<id> → {task:String, segments:[段记录], checkpoints:[checkpoint], badLines, index}
  * - GET  /task-brief?task=<id>    → briefJson 顶层展开（task 为对象）
  * - POST /tasks/capture {task}    → {created, skipped, segments}
  * - POST /tasks/archive {task}    → {movedTo}
@@ -219,6 +219,35 @@ export function normalizeSegments(raw) {
   return Array.isArray(body.segments) ? body.segments.filter((s) => s && typeof s === 'object') : [];
 }
 
+/**
+ * `/api/task-segments` 返回 → checkpoint 数组（v1.4.x）。
+ * checkpoint 由 MCP memory_session_checkpoint 写在 items（不在 segments.jsonl），
+ * 服务端已合并进响应；这里只做形状防御（缺字段/旧服务端 → []）。
+ */
+export function normalizeCheckpoints(raw) {
+  const body = raw && typeof raw === 'object' ? raw : {};
+  return Array.isArray(body.checkpoints) ? body.checkpoints.filter((c) => c && typeof c === 'object') : [];
+}
+
+/** checkpoint 8 段 → UI 列表项（列表段取数组，文本段取字符串）。 */
+export function buildCheckpointRows(checkpoints) {
+  const LIST_KEYS = ['concepts', 'files', 'errorsAndFixes', 'pendingJobs', 'nextSteps'];
+  const TEXT_KEYS = ['intent', 'currentState', 'criticalContext'];
+  const rows = [];
+  for (const c of Array.isArray(checkpoints) ? checkpoints : []) {
+    const s = c?.sections && typeof c.sections === 'object' ? c.sections : null;
+    const first = s?.intent ?? c?.id ?? '';
+    const excerpt = String(Array.isArray(first) ? first[0] ?? '' : first ?? '').slice(0, 60);
+    rows.push({
+      time: typeof c?.createdAt === 'string' ? c.createdAt.replace('T', ' ').slice(0, 16) : '—',
+      excerpt,
+      lists: LIST_KEYS.map((k) => ({ key: k, items: Array.isArray(s?.[k]) ? s[k].map((x) => String(x)) : [] })),
+      texts: TEXT_KEYS.map((k) => ({ key: k, text: typeof s?.[k] === 'string' ? s[k] : '' })),
+    });
+  }
+  return rows;
+}
+
 /** `/api/task-brief` 返回 → briefJson（顶层展开）；不像 briefJson 时返回 null。 */
 export function normalizeBrief(raw) {
   const body = raw && typeof raw === 'object' ? raw : null;
@@ -296,6 +325,7 @@ export async function mountLedger(deps) {
   const ro = writeState(writeEnabled, hint);
   let context = normalizeContext(null);
   let segments = [];
+  let checkpoints = [];
   let segmentsError = '';
   let selectedId = '';
 
@@ -319,7 +349,8 @@ export async function mountLedger(deps) {
   const cmd = el('div', 'ledger-cmd mono');
   cmd.hidden = true;
   const segBox = el('div', 'ledger-segs');
-  ledger.append(head, note, cmd, segBox);
+  const cpBox = el('div', 'ledger-cps');
+  ledger.append(head, note, cmd, segBox, cpBox);
 
   // ③ .ledger-brief 简报面板（正文默认折叠，按钮常驻可点）
   const brief = el('div', 'ledger-brief');
@@ -388,10 +419,49 @@ export async function mountLedger(deps) {
     }
   };
 
+  const CP_KEY_LABELS = {
+    concepts: '概念', files: '关键文件', errorsAndFixes: '错误与修复',
+    pendingJobs: '待办', nextSteps: '下一步',
+    intent: '意图', currentState: '当前状态', criticalContext: '关键上下文',
+  };
+
+  const renderCheckpoints = () => {
+    cpBox.replaceChildren();
+    const rows = buildCheckpointRows(checkpoints);
+    if (rows.length === 0) {
+      cpBox.append(el('div', 'faint ledger-cp-empty', 'checkpoint 0 条（由 memory_session_checkpoint 写入，随段一起展示）'));
+      return;
+    }
+    const h = el('div', 'ledger-lg-h', `checkpoint（${rows.length}）`);
+    cpBox.append(h);
+    for (const row of rows) {
+      const item = el('details', 'ledger-seg ledger-cp');
+      const summary = el('summary', 'ledger-seg-h');
+      summary.append(el('span', 'mono ledger-range', row.time));
+      summary.append(el('span', 'ledger-excerpt', row.excerpt || '（checkpoint）'));
+      item.append(summary);
+      const body = el('div', 'ledger-seg-b');
+      for (const t of row.texts) {
+        if (t.text) body.append(el('p', 'ledger-summary', `${CP_KEY_LABELS[t.key] ?? t.key}：${t.text}`));
+      }
+      for (const l of row.lists) {
+        if (l.items.length > 0) {
+          const g = listGroup(CP_KEY_LABELS[l.key] ?? l.key, l.items);
+          if (g) body.append(g);
+        }
+      }
+      item.append(body);
+      cpBox.append(item);
+    }
+  };
+
   const renderAll = () => {
     summarySlot?.replaceChildren?.(buildSummaryBar(context, { writeEnabled, hint }));
-    count.textContent = `${segments.length} 段`;
+    count.textContent = checkpoints.length > 0
+      ? `${segments.length} 段 · ${checkpoints.length} checkpoint`
+      : `${segments.length} 段`;
     renderSegments();
+    renderCheckpoints();
   };
 
   const load = async () => {
@@ -401,10 +471,13 @@ export async function mountLedger(deps) {
       context = normalizeContext(null);
     }
     try {
-      segments = normalizeSegments(await apiGet(`/task-segments?task=${encodeURIComponent(taskId)}`));
+      const segBody = await apiGet(`/task-segments?task=${encodeURIComponent(taskId)}`);
+      segments = normalizeSegments(segBody);
+      checkpoints = normalizeCheckpoints(segBody);
       segmentsError = '';
     } catch (err) {
       segments = [];
+      checkpoints = [];
       segmentsError = err?.message ? String(err.message) : 'unknown';
     }
     if (!container.isConnected) return;
