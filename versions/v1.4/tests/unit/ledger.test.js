@@ -276,4 +276,24 @@ describe('ledger: 段文件是覆盖区间的唯一真相', () => {
     rmSync(segmentsFile(home, 'task-1'));
     assert.deepEqual(coveredSeqs({ memoHome: home, taskId: 'task-1' }), [], '段文件没了就必须回到「未覆盖」');
   });
+
+  test('coveredSeqs(anchorPath)：只合并锚在该转录上的段（换转录不继承旧覆盖）', async () => {
+    await append(1, 3); // anchor.path = anchorPath（A 转录）
+    const otherPath = join(home, 'other.jsonl');
+    writeFileSync(otherPath, '{"seq":1}\n');
+    await append(1, 4, {
+      anchor: { path: otherPath, fromSeq: 1, toSeq: 4 },
+      source: { kind: 'dsh', path: otherPath, sessionId: 'sess-2', frames: 1 },
+    });
+
+    // 不带 anchorPath → 任务级合并（旧行为不变）
+    assert.deepEqual(coveredSeqs({ memoHome: home, taskId: 'task-1' }), [[1, 4]]);
+    // 带 anchorPath → 只看锚在该转录上的段
+    assert.deepEqual(coveredSeqs({ memoHome: home, taskId: 'task-1', anchorPath }),
+      [[1, 3]], 'A 转录只被 [1,3) 覆盖');
+    assert.deepEqual(coveredSeqs({ memoHome: home, taskId: 'task-1', anchorPath: otherPath }),
+      [[1, 4]], 'B 转录只被自己的段覆盖');
+    assert.deepEqual(coveredSeqs({ memoHome: home, taskId: 'task-1', anchorPath: join(home, 'never.jsonl') }),
+      [], '没锚过的转录 = 未覆盖');
+  });
 });

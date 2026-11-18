@@ -462,8 +462,9 @@ export async function captureTask({
     : path.join(process.env.HOME ?? '', '.dsh', 'sessions');
   const tx = readDshTranscript({ sessionsRoot: root, cwd, sessionId });
 
-  // 2) 只捕获上次以来的新增区间
-  const covered = coveredSeqs({ memoHome, taskId });
+  // 2) 只捕获上次以来的新增区间（覆盖区间按转录锚过滤：换绑转录后新转录从自己的 turn 1 开始，
+  //    不会被旧转录的覆盖区间吞掉——issue #223 端到端）
+  const covered = coveredSeqs({ memoHome, taskId, anchorPath: tx.file });
   const plans = planSegments({
     turns: tx.turns,
     covered,
