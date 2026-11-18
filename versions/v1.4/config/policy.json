@@ -172,11 +172,11 @@
     }
   },
   "llm": {
-    "provider": "none",
+    "provider": "openai-compatible",
     "baseUrl": "https://open.bigmodel.cn/api/paas/v4",
     "apiKey": "",
     "model": "glm-5.3-flash",
-    "egress": "local-only",
+    "egress": "allowed",
     "timeoutMs": 20000,
     "maxRetries": 2,
     "dailyLimitCny": 5,

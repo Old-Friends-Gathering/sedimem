@@ -795,7 +795,9 @@ v1.2 的账本捕获只有 CLI 手动入口，任务库长期使用时账本会�
   守卫链全部是 stat 级检查（不解压 zstd、
   零 token）：转录 mtime/size 与 `sessions/<taskId>/autocapture.json` 记录一致 → 跳过；增长折算 token
   （`growth / bytesPerToken`）< `captureTokens` 且距上次 < `minIntervalMs` → 跳过；达阈值才真正
-  `captureTask`（**rules 模式**，确定性零 token；幂等：重复捕获 created=0；段写入走账本锁防重叠）。
+  `captureTask`（捕获模式按 `session.ledger.llmMode`：`llm`（默认策略值，key 解析
+  policy → `MEMO_LLM_API_KEY` → `~/.config/sedimem/llm-key`；key 未就绪自动回落 rules 并带
+  `fallbackReason`）或 `rules`（确定性零 token）；幂等：重复捕获 created=0；段写入走账本锁防重叠）。
   结果作为 `structuredContent.autoCapture` 附在响应里（`ran:false` 时带 `reason`）。
   覆盖区间按转录锚过滤：段序号是每条转录独立的，任务换绑转录后新转录从自己的 turn 1 重新折段，
   不会被旧转录的覆盖区间吞掉（重叠守卫也只对锚在同一转录上的段互斥）。

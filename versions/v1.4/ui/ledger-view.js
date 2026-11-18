@@ -236,10 +236,16 @@ export function buildCheckpointRows(checkpoints) {
   const rows = [];
   for (const c of Array.isArray(checkpoints) ? checkpoints : []) {
     const s = c?.sections && typeof c.sections === 'object' ? c.sections : null;
-    const first = s?.intent ?? c?.id ?? '';
+    // 列表标题：intent 优先；intent 为空串/缺失回落 currentState，再回落 id
+    // （新式 checkpoint 可能只写 currentState/nextSteps——空标题会渲染成「（checkpoint）」）
+    const first = (typeof s?.intent === 'string' && s.intent.trim())
+      ? s.intent
+      : (typeof s?.currentState === 'string' && s.currentState.trim())
+        ? s.currentState
+        : (s?.intent ?? c?.id ?? '');
     const excerpt = String(Array.isArray(first) ? first[0] ?? '' : first ?? '').slice(0, 60);
     rows.push({
-      time: typeof c?.createdAt === 'string' ? c.createdAt.replace('T', ' ').slice(0, 16) : '—',
+      time: typeof c?.createdAt === 'string' ? c.createdAt.replace('T', ' ').slice(0, 19) : '—',
       excerpt,
       lists: LIST_KEYS.map((k) => ({ key: k, items: Array.isArray(s?.[k]) ? s[k].map((x) => String(x)) : [] })),
       texts: TEXT_KEYS.map((k) => ({ key: k, text: typeof s?.[k] === 'string' ? s[k] : '' })),
