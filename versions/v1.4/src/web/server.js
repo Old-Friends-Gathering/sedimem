@@ -61,7 +61,11 @@ export async function createWebServer({
   const svc = service ?? await createMemoryService({ memoHome, scope });
   // B4：浏览器面与 MCP 面共用同一个 token 文件；每次启动重新生成（docs/plans/v1.4-p0b.md B4）。
   await ensureMemoDir(memoHome);
-  let sessionToken = typeof token === 'string' && token !== '' ? token : await issueWebToken(memoHome);
+  // 多个 serve/插件进程共享同一个 MEMO_HOME：后启动的不能轮换 token，否则先启动的页面立刻 401。
+  // 有 token 文件就复用；只有第一次（文件不存在）才生成。
+  let sessionToken = typeof token === 'string' && token !== ''
+    ? token
+    : (await readWebToken(memoHome).catch(() => null)) ?? await issueWebToken(memoHome);
   // 权限自查只告警不阻断：存量 `~/.memo` 多为 0755，阻断会把老用户挡在门外（docs/02 §3.24）。
   const permReport = await inspectMemoPerms(memoHome);
   for (const line of describePermIssues(permReport)) process.stderr.write(`${line}\n`);
