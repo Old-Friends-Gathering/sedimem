@@ -1,5 +1,6 @@
 // annotation-pass.mjs — 双独立标注工作流（P1a B4）
-// 四件套：盲评包导出 / 导入校验 / 一致性报告 / 裁决工作表。
+// 五件套：盲评包导出 / 导入校验 / 一致性报告 / 裁决工作表 / goldset 生成（裁决落地、版本化）。
+// 红线：goldset 只在两份标注都覆盖、且裁决表无待裁决行时才产出（fail-closed）。
 // 红线（06-annotation-spec §2）：工具只做机械比对，绝不产出 pass/fail 裁决；
 // 独立性=盲评包必须剥离全部 gold 侧字段（gold/shouldReject/adversarial/split/expected*）。
 import { readFileSync, writeFileSync, mkdirSync } from 'node:fs';
@@ -95,6 +96,19 @@ function fieldValue(g, field) {
   return g[field] ?? null;
 }
 
+/**
+ * 兼容 shouldReject 的两种落盘形态：布尔 + 同级 reason（当前 pass 文件），
+ * 或 { reason } 对象（早期样例/测试）。统一成 { flag, reason }。
+ */
+function rejectInfo(row) {
+  const r = row?.shouldReject;
+  if (typeof r === 'boolean') return { flag: r, reason: typeof row.reason === 'string' ? row.reason : '' };
+  if (r && typeof r === 'object') return { flag: true, reason: typeof r.reason === 'string' ? r.reason : '' };
+  return { flag: false, reason: '' };
+}
+
+const RESOLUTIONS = new Set(['a', 'b', 'merge', 'both']);
+
 /** 一致性报告：逐场景 claim 匹配 + 字段级一致率；永不产出 pass/fail。 */
 function collectPasses(pass) {
   // 同场景可能多行（分片标注），gold 合并。
@@ -102,12 +116,14 @@ function collectPasses(pass) {
   // 分歧记录以冲突值为准（a=首个非空，b=冲突的另一个值）。
   const m = new Map();
   for (const r of pass) {
-    const cur = m.get(r.scenarioId) ?? { gold: [], shouldReject: null, shouldRejectConflict: null };
+    const cur = m.get(r.scenarioId) ?? { gold: [], shouldReject: false, reason: '', shouldRejectConflict: null };
     cur.gold.push(...(r.gold ?? []));
-    const reason = r.shouldReject?.reason ?? null;
-    if (reason != null) {
-      if (cur.shouldReject == null) cur.shouldReject = reason;
-      else if (cur.shouldReject !== reason && cur.shouldRejectConflict == null) cur.shouldRejectConflict = reason;
+    const info = rejectInfo(r);
+    if (info.flag) {
+      if (!cur.shouldReject) { cur.shouldReject = true; cur.reason = info.reason; }
+      else if (info.reason && cur.reason && info.reason !== cur.reason && cur.shouldRejectConflict == null) {
+        cur.shouldRejectConflict = info.reason;
+      }
     }
     m.set(r.scenarioId, cur);
   }
@@ -167,9 +183,9 @@ export function agreementReport(passA, passB) {
     // F7①：同遍内多行 shouldReject 冲突。
     for (const [side, entry] of [['A', pair.a], ['B', pair.b]]) {
       if (entry?.shouldRejectConflict != null) {
-        const reasons = [entry.shouldReject, entry.shouldRejectConflict];
+        const reasons = [entry.reason ?? null, entry.shouldRejectConflict];
         shouldRejectConflicts.push({ scenarioId: sid, pass: side, reasons });
-        fieldDisagreements.push({ field: 'shouldReject', a: entry.shouldReject, b: entry.shouldRejectConflict });
+        fieldDisagreements.push({ field: 'shouldReject', a: entry.reason ?? null, b: entry.shouldRejectConflict });
       }
     }
     perScenario[sid] = { both: !!pair.a && !!pair.b, fieldDisagreements };
@@ -222,6 +238,120 @@ export function adjudicationWorksheet(passA, passB) {
     if (rejA !== rejB) rows.push({ scenarioId: sid, kind: 'reject-mismatch', rejectA: rejA, rejectB: rejB, resolution: null });
   }
   return { annotationMode: 'dual-independent', rows, pending: rows.filter((r) => r.resolution === null).length };
+}
+
+/** 裁决合并：文本取 A，字段级分歧取 B（"merge" 语义，逐字段可核对）。 */
+function mergeClaims(ga, gb) {
+  const out = structuredClone(ga);
+  for (const f of ALL_COMPARE_FIELDS) {
+    if (fieldValue(ga, f) === fieldValue(gb, f)) continue;
+    if (f.startsWith('assertion.')) {
+      out.assertion = { ...(out.assertion ?? {}), [f.slice('assertion.'.length)]: fieldValue(gb, f) };
+    } else {
+      out[f] = fieldValue(gb, f);
+    }
+  }
+  return out;
+}
+
+/**
+ * goldset 生成：把两份独立标注 + 裁决表落地成可版本化的 goldset-vN。
+ * fail-closed：任一行未裁决 / 非法 resolution / 场景只在一侧标注 → 不产出，只返错误。
+ */
+export function buildGoldset(passA, passB, worksheet = {}, { goldsetVersion = 'goldset-v1', clock = () => new Date() } = {}) {
+  const errors = [];
+  const rows = Array.isArray(worksheet?.rows) ? worksheet.rows.filter(Boolean) : [];
+  const pending = rows.filter((r) => r.resolution == null);
+  if (pending.length > 0) errors.push(`裁决表还有 ${pending.length} 条未裁决（resolution=null），不能生成 goldset`);
+  const bad = rows.filter((r) => r.resolution != null && !RESOLUTIONS.has(r.resolution));
+  if (bad.length > 0) {
+    const vals = [...new Set(bad.map((r) => r.resolution))].join('|');
+    errors.push(`裁决表有 ${bad.length} 条非法 resolution：${vals}（合法：a|b|merge|both）`);
+  }
+  const A = collectPasses(passA);
+  const B = collectPasses(passB);
+  const sids = new Set([...A.keys(), ...B.keys()]);
+  const missing = [...sids].filter((sid) => !A.has(sid) || !B.has(sid));
+  if (missing.length > 0) errors.push(`缺场景：${missing.join(',')} 只在一侧标注（双独立标注必须两边覆盖）`);
+  if (errors.length > 0) return { errors, goldset: null };
+
+  const bySid = new Map();
+  for (const r of rows) {
+    const arr = bySid.get(r.scenarioId) ?? [];
+    arr.push(r);
+    bySid.set(r.scenarioId, arr);
+  }
+  // 手工裁决行可能不带 claimA/claimB（单 claim 场景）——此时视为对该场景唯一键生效。
+  const pickRow = (sid, kind, key) => (bySid.get(sid) ?? []).find((r) => {
+    if (r.kind !== kind) return false;
+    if (key == null) return true;
+    const side = r.claimA ?? r.claimB ?? null;
+    return side == null || normalizeClaim(side) === key;
+  });
+
+  const scenarios = [];
+  let goldTotal = 0;
+  let adjudicated = 0;
+  let droppedA = 0;
+  let droppedB = 0;
+  for (const sid of [...sids].sort()) {
+    const a = A.get(sid);
+    const b = B.get(sid);
+    const idxA = indexByClaim(a.gold);
+    const idxB = indexByClaim(b.gold);
+    const gold = [];
+    for (const key of new Set([...idxA.keys(), ...idxB.keys()])) {
+      const gaList = idxA.get(key) ?? [];
+      const gbList = idxB.get(key) ?? [];
+      const paired = Math.min(gaList.length, gbList.length);
+      const mismatch = pickRow(sid, 'field-mismatch', key);
+      const res = mismatch?.resolution ?? 'a';
+      if (mismatch) adjudicated += 1;
+      for (let i = 0; i < paired; i += 1) {
+        const ga = gaList[i];
+        const gb = gbList[i];
+        if (res === 'b') gold.push(structuredClone(gb));
+        else if (res === 'merge') gold.push(mergeClaims(ga, gb));
+        else gold.push(structuredClone(ga));
+      }
+      for (let i = paired; i < gaList.length; i += 1) {
+        const row = pickRow(sid, 'claim-only-in-A', key);
+        const r = row?.resolution ?? 'a';
+        if (row) adjudicated += 1;
+        if (r === 'a' || r === 'both') gold.push(structuredClone(gaList[i]));
+        else droppedA += 1;
+      }
+      for (let i = paired; i < gbList.length; i += 1) {
+        const row = pickRow(sid, 'claim-only-in-B', key);
+        const r = row?.resolution ?? 'b';
+        if (row) adjudicated += 1;
+        if (r === 'b' || r === 'both') gold.push(structuredClone(gbList[i]));
+        else droppedB += 1;
+      }
+    }
+    let reject;
+    if (a.shouldReject === b.shouldReject) {
+      reject = a.shouldReject;
+    } else {
+      const row = pickRow(sid, 'reject-mismatch');
+      const r = row?.resolution ?? 'a';
+      if (row) adjudicated += 1;
+      reject = r === 'b' ? b.shouldReject : a.shouldReject;
+    }
+    if (reject) gold.length = 0; // 无可记场景不得携带 gold（防另一侧 claim 泄漏）
+    goldTotal += gold.length;
+    scenarios.push({ scenarioId: sid, shouldReject: reject, reason: reject ? (a.reason || b.reason || '') : '', gold });
+  }
+  return {
+    errors: [],
+    goldset: {
+      annotationMode: 'dual-independent',
+      goldsetVersion,
+      frozenAt: clock().toISOString(),
+      scenarios,
+      stats: { scenarios: scenarios.length, gold: goldTotal, adjudicated, droppedA, droppedB },
+    },
+  };
 }
 
 // ---------- CLI ----------
@@ -285,7 +415,21 @@ async function main() {
     console.log(JSON.stringify({ ok: true, rows: ws.rows.length, pending: ws.pending, out }));
     return;
   }
-  console.error('用法：node annotation-pass.mjs <export|import|compare|worksheet> [--corpus dir] [--out file] [--a file] [--b file] [--package dir]');
+  if (cmd === 'goldset') {
+    const a = loadJsonl(arg('--a'));
+    const b = loadJsonl(arg('--b'));
+    const ws = JSON.parse(readFileSync(arg('--worksheet'), 'utf8'));
+    const res = buildGoldset(a, b, ws, { goldsetVersion: arg('--version') ?? 'goldset-v1' });
+    if (res.errors.length > 0) {
+      console.error(JSON.stringify({ ok: false, errors: res.errors }, null, 2));
+      process.exit(1);
+    }
+    const out = arg('--out') ?? 'out/blind/goldset-v1.json';
+    writeFileSync(out, JSON.stringify(res.goldset, null, 2) + '\n');
+    console.log(JSON.stringify({ ok: true, ...res.goldset.stats, version: res.goldset.goldsetVersion, out }));
+    return;
+  }
+  console.error('用法：node annotation-pass.mjs <export|import|compare|worksheet|goldset> [--corpus dir] [--out file] [--a file] [--b file] [--worksheet file] [--version vN] [--package dir]');
   process.exit(2);
 }
 

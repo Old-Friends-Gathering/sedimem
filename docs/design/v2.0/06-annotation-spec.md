@@ -32,6 +32,11 @@
 1. 两份**互不可见**的人工独立标注（标注人 A 不看 B 的产物，反之亦然）。
 2. 维护者**裁决**分歧：逐条比对，产出裁决记录（谁对/为什么/最终版本）。
 3. **版本化**：裁决后的 gold 集 = 一个版本号（goldset-v1、goldset-v2……）；任何后续修订出新版本并保留旧版。
+4. **机具落地（`pilot/p1a/tools/annotation-pass.mjs`）**：`export` 出盲评包 → 两人各填 `import` 校验 → `compare` 一致性报告 → `worksheet` 裁决表（每行 `resolution` 初值 null）→ 人工裁决 → `goldset` 生成版本化 gold 集。
+   - **fail-closed**：裁决表存在任一 `resolution: null`、非法 `resolution`（合法仅 `a|b|merge|both`）、或场景只在一侧标注时，`goldset` 拒绝产出并列出错误——不允许「边生成边补裁决」。
+   - **裁决语义**：`a`/`b` = 采用该侧版本；`merge` = 文本取 A、字段级分歧取 B（逐字段可核对）；`both` = 两侧 claim 都保留（仅用于 claim-only 行）。
+   - **无可记一致性**：最终 `shouldReject: true` 的场景 `gold` 恒为空——不因另一侧标了 claim 而带出 gold。
+   - 产物 `goldset-vN.json` 含 `annotationMode: dual-independent`、`goldsetVersion`、`frozenAt`、逐场景 gold 与 `stats`；写入 `pilot/p1a/out/`（gitignored，登记于 [docs/12 §12.5](../../12-data-map.md)）。
 
 **独立标注人的定义**（R1 修订锚定）：
 - 必须是**人工**且**独立**——模型辅助标注可以声明，但**永不构成**独立标注人；
