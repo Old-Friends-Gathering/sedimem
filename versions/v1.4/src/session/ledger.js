@@ -121,6 +121,7 @@ export function readSegments({ memoHome, taskId } = {}) {
   if (!existsSync(file)) return { segments: [], badLines: 0 };
   const raw = readFileSync(file, 'utf8');
   const segments = [];
+  const tombstones = new Set();
   let badLines = 0;
   for (const line of raw.split('\n')) {
     const t = line.trim();
@@ -132,10 +133,58 @@ export function readSegments({ memoHome, taskId } = {}) {
       badLines++;
       continue;
     }
+    // 段删除是 append-only 的墓碑行：不物理改写历史，只让该 id 从读视图消失。
+    if (seg && seg.kind === 'segment-tombstone' && typeof seg.id === 'string' && seg.id !== '') {
+      tombstones.add(seg.id);
+      continue;
+    }
     if (!isSegmentShape(seg)) { badLines++; continue; }
     segments.push(seg);
   }
-  return { segments, badLines };
+  return { segments: segments.filter((s) => !tombstones.has(s.id)), badLines };
+}
+
+/**
+ * 删除一段（墓碑行；不物理删 segments.jsonl）。
+ * 幂等：已删除的 id 再删返回 alreadyDeleted=true，不追加第二行墓碑。
+ * @param {{memoHome:string, taskId:string, id:string, reason?:string, clock?:object}} args
+ * @returns {Promise<{id:string, alreadyDeleted:boolean}>}
+ */
+export async function deleteSegment({ memoHome, taskId, id, reason = '', clock = systemClock } = {}) {
+  requireMemoHome(memoHome);
+  requireTaskId(taskId);
+  if (typeof id !== 'string' || id === '') {
+    throw err('E_INVALID_ARG', `deleteSegment: id 必须是非空字符串，收到 ${JSON.stringify(id)}`);
+  }
+  return withLock(memoHome, async () => {
+    const { segments } = readSegments({ memoHome, taskId });
+    const target = segments.find((s) => s.id === id);
+    if (!target) {
+      // 可能是已删除（墓碑已存在）：区分「从未存在」与「已删」。
+      const raw = existsSync(segmentsFile(memoHome, taskId))
+        ? readFileSync(segmentsFile(memoHome, taskId), 'utf8')
+        : '';
+      const already = raw.split('\n').some((line) => {
+        try {
+          const r = JSON.parse(line.trim());
+          return r && r.kind === 'segment-tombstone' && r.id === id;
+        } catch { return false; }
+      });
+      if (already) return { id, alreadyDeleted: true };
+      throw err('E_SEGMENT_NOT_FOUND', `deleteSegment: 段 ${id} 不存在`);
+    }
+    const file = segmentsFile(memoHome, taskId);
+    appendFileSync(file, JSON.stringify({
+      kind: 'segment-tombstone',
+      id,
+      taskId,
+      deletedAt: clock.now(),
+      reason: typeof reason === 'string' ? reason : '',
+    }) + '\n');
+    const next = segments.filter((s) => s.id !== id);
+    writeIndex(memoHome, taskId, buildIndex(next, clock));
+    return { id, alreadyDeleted: false };
+  });
 }
 
 /**

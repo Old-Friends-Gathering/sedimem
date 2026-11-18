@@ -3,6 +3,7 @@
 ## [1.4.1] — 2026-11-18
 
 ### Added
+- **任务账本删除段**：向 `segments.jsonl` 追加 `segment-tombstone`，不物理改写历史；Web UI/API 可删单段，删除后从读视图消失，捕获时可重新生成。
 - **自动捕获周期扫描**：MCP server 启动 60s watcher，扫描所有 open 任务库，按任务 meta 的 `hostSessionId` 精确定位转录；增长达 `captureTokens`（30k）即捕获，不依赖 agent 调用 memory 工具。多端由 `$MEMO_HOME/autocapture-watch.pid` 单例去重。
 
 ### Fixed

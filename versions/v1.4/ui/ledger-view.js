@@ -408,6 +408,28 @@ export async function mountLedger(deps) {
       ]) {
         if (group) body.append(group);
       }
+      if (row.id) {
+        const actions = el('div', 'ledger-seg-actions');
+        const del = el('button', 'sm danger', '删除段');
+        del.type = 'button';
+        del.disabled = writeEnabled !== true;
+        del.title = writeEnabled === true ? '把这段从账本视图删除（追加墓碑，不改写历史文件）' : READ_ONLY_HINT;
+        del.addEventListener('click', async (ev) => {
+          ev.preventDefault();
+          ev.stopPropagation();
+          if (!window.confirm(`删除 ${row.range} 这段账本？\n只写墓碑，不物理删文件；捕获时可重新生成。`)) return;
+          del.disabled = true;
+          try {
+            await apiPost('/tasks/segment-remove', { task: taskId, id: row.id, reason: 'ui' });
+            await load();
+          } catch (err) {
+            del.disabled = writeEnabled !== true;
+            setNote(`删除失败 · ${err?.message || 'unknown'}`, true);
+          }
+        });
+        actions.append(del);
+        body.append(actions);
+      }
       item.append(body);
       if (row.id) {
         item.addEventListener('toggle', () => {
