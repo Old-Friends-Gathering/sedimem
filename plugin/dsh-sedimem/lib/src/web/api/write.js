@@ -12,7 +12,7 @@ import { invalid, invalidArg, notFound } from '../../core/errors.js';
 import { assertSameOriginStrict } from '../auth.js';
 import { captureTask } from '../../session/capture.js';
 import { readTaskMeta } from '../../session/ledger-brief.js';
-import { archiveTask } from '../../session/ledger.js';
+import { archiveTask, deleteSegment } from '../../session/ledger.js';
 import { isSessionScope, listSessions, renameSession, removeSession } from '../../session/lifecycle.js';
 import { TASK_ID_RE } from './task-ledger.js';
 
@@ -248,6 +248,17 @@ export async function apiTaskCapture(service, body) {
   return { created: result.created, skipped: result.skipped, segments: result.segments };
 }
 
+/** POST /api/tasks/segment-remove — body {task,id,reason?}；追加墓碑行，不物理删段。 */
+export async function apiTaskSegmentRemove(service, body) {
+  const task = requireTaskId(body, 'tasks/segment-remove');
+  const id = typeof body?.id === 'string' ? body.id.trim() : '';
+  if (id === '') throw invalidArg('tasks/segment-remove: id 必须是非空字符串');
+  const reason = typeof body?.reason === 'string' ? body.reason.slice(0, 200) : '';
+  const result = await deleteSegment({ memoHome: service.memoHome, taskId: task, id, reason });
+  await appendCaptureEvent(service, task, { removed: result.alreadyDeleted ? 0 : 1, id, mode: 'delete' });
+  return result;
+}
+
 /** POST /api/tasks/archive — body {task}；只回归档目录名（不把绝对路径递给浏览器）。 */
 export async function apiTaskArchive(service, body) {
   const task = requireTaskId(body, 'tasks/archive');
@@ -266,7 +277,8 @@ export async function apiTaskArchive(service, body) {
  */
 export async function handleWriteApi(service, pathname, body, opts) {
   const isTaskWrite = pathname === '/api/tasks/rename' || pathname === '/api/tasks/remove'
-    || pathname === '/api/tasks/capture' || pathname === '/api/tasks/archive'
+    || pathname === '/api/tasks/capture' || pathname === '/api/tasks/segment-remove'
+    || pathname === '/api/tasks/archive'
     || pathname === '/api/records/tombstone';
   if (isTaskWrite && opts?.write !== true) {
     throw coded('E_READ_ONLY', '服务处于只读模式：任务库写操作需启动时传 {write:true} 或设置 MEMO_WRITE=1');
@@ -280,6 +292,7 @@ export async function handleWriteApi(service, pathname, body, opts) {
     '/api/tasks/rename': apiTaskRename,
     '/api/tasks/remove': apiTaskRemove,
     '/api/tasks/capture': apiTaskCapture,
+    '/api/tasks/segment-remove': apiTaskSegmentRemove,
     '/api/tasks/archive': apiTaskArchive,
     '/api/records/tombstone': apiRecordTombstone,
   };

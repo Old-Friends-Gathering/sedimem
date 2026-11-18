@@ -292,7 +292,7 @@ Tool surface: 10 `memory_*` + 5 `memory_session_*`, identical across all three c
 
 ![Five gate layers: quality → security → coverage → docs-drift → pages-verify](docs/shots/diagrams/gates-en.png)
 
-Local scripts = CI scripts: 15 quality checks + 9 security checks + coverage (lines ≥ 85 / branches ≥ 70 / functions ≥ 90) + docs-drift + pages-verify, plus 858 tests and eval I1–I56.
+Local scripts = CI scripts: 15 quality checks + 9 security checks + coverage (lines ≥ 85 / branches ≥ 70 / functions ≥ 90) + docs-drift + pages-verify, plus 862 tests and eval I1–I56.
 
 ```bash
 node tools/quality-check.mjs && node tools/security-check.mjs && node tools/coverage-gate.mjs
