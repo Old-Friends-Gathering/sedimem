@@ -182,7 +182,8 @@ export function createQuarantine({ memoHome, scope = 'default', maxQueueBytes, t
     return read()
       .map((r) => {
         const at = Date.parse(String(r.at ?? ''));
-        const expired = Number.isFinite(at) && now - at > ttl;
+        // >=：ttlMs=0 表示零保留期，条目一旦入队即过期（同毫秒内也成立，修复 Node 24 竞态）
+        const expired = Number.isFinite(at) && now - at >= ttl;
         return { ...r, expired };
       })
       .filter((r) => (status ? r.status === status : true));
