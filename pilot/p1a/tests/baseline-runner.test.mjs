@@ -113,3 +113,20 @@ test('runBaseline: 记录型场景零候选 → 零输出违规列表', () => {
   const r = runBaseline([s], { runId: 'r1' });
   assert.deepEqual(r.meta.zeroOutputScenarios, ['S900']);
 });
+
+
+// 04 §3：固定配置 3 次运行需可复现——抽取内容摘要必须与 runId 无关。
+test('contentDigest：同输入两次运行内容摘要相同（runId 不参与），不同输入不同', async () => {
+  const { runBaseline } = await import('../tools/baseline-runner.mjs');
+  const mk = (id) => ({
+    scenarioId: id, family: 'fam-a', language: 'zh',
+    events: [{ eventId: `${id}-m001`, role: 'user', ts: 't', text: '把超时时间调到 30 秒' }],
+    gold: [], shouldReject: null, adversarial: null,
+  });
+  const r1 = runBaseline([mk('S1')], { runId: 'run-a' });
+  const r2 = runBaseline([mk('S1')], { runId: 'run-b' });
+  assert.equal(r1.meta.contentDigest, r2.meta.contentDigest);
+  assert.notEqual(r1.meta.runId, r2.meta.runId);
+  const r3 = runBaseline([mk('S1'), mk('S2')], { runId: 'run-a' });
+  assert.notEqual(r1.meta.contentDigest, r3.meta.contentDigest);
+});

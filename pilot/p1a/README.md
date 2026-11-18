@@ -50,7 +50,7 @@ node pilot/p1a/tools/review.mjs show pilot/p1a/out/baseline/<runId>/candidates.j
 | corpus-validate.mjs | 语料静态校验：单句/PII/span+hash/闭集/配额 | 06-annotation-spec |
 | protocol-sim.mjs | 候选协议内存模拟：幂等/CAS/收据/提交点/恢复（不写真相层） | 01-candidate-schema §3 |
 | baseline-runner.mjs | 规则地板基线：证明评测管线可算 P/R 与七类严重错误 | 计划 D4 |
-| score.mjs | TP/FP/FN 一对一、子命题=FP+FN、mixed 双组、severe 计数、Wilson 区间；`stage!=='exit'` 时 verdict=null | 04-scoring-and-splits |
+| score.mjs | TP/FP/FN 一对一、子命题=FP+FN、mixed 双组、severe 计数；置信区间主口径=bootstrapCI（家族聚类 2000 次/95%/seed 可复现），Wilson 仅描述性；`stage!=='exit'` 时 verdict=null | 04-scoring-and-splits §3 |
 | review.mjs | 复核骨架（只读 list/show） | 计划 §8 |
 | contract-guards.mjs | 三项冻结守卫：双时间互斥/asOf 穿越、tokenizer 计数快照与声明、成本闸门 | 01 §5 / adr-101 / adr-102 |
 | split-corpus.mjs | 家族分层 dev/test 切分 + 跨集近重复（Dice）校验 | 04-scoring-and-splits §1 |

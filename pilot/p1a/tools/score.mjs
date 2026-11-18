@@ -1,6 +1,7 @@
 // B2 评分器：实现 docs/design/v2.0/04-scoring-and-splits.md 的 pilot 子集。
 // 硬规则：一对一计分（TP/FP/FN）；子命题=FP+FN；零输出（记录型场景）单列；
 // 七类严重错误计数；mixed 计入 zh+en 两组；stage!=='exit' 时 verdict=null（fail-closed，04 §5）。
+// 04 §3 主口径：置信区间按「场景家族」聚类 bootstrap（percentile），Wilson 仅作描述性。
 import { normalizeClaim } from './baseline-runner.mjs';
 export { normalizeClaim };
 
@@ -13,6 +14,71 @@ function wilson(k, n, z = 1.96) {
   const center = p + z * z / (2 * n);
   const spread = z * Math.sqrt((p * (1 - p) + z * z / (4 * n)) / n);
   return { lo: Math.max(0, (center - spread) / denom), hi: Math.min(1, (center + spread) / denom) };
+}
+
+// 04 §3 主口径：家族聚类 bootstrap（重采样家族、保留簇内全部场景），确定性 PRNG 可复现。
+function mulberry32(seed) {
+  let a = seed >>> 0;
+  return () => {
+    a = (a + 0x6d2b79f5) >>> 0;
+    let t = a;
+    t = Math.imul(t ^ (t >>> 15), t | 1);
+    t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
+function quantile(sorted, q) {
+  if (sorted.length === 0) return null;
+  const pos = (sorted.length - 1) * q;
+  const lo = Math.floor(pos);
+  const hi = Math.ceil(pos);
+  if (lo === hi) return sorted[lo];
+  return sorted[lo] + (sorted[hi] - sorted[lo]) * (pos - lo);
+}
+
+/**
+ * 家族聚类 bootstrap 置信区间（04 §3 主口径）。
+ * @param {Array<{scenarioId:string, family:string, tp:number, fp:number, fn:number}>} scenarioStats
+ * @param {{resamples?:number, seed?:number, alpha?:number}} opts
+ */
+export function bootstrapCI(scenarioStats, { resamples = 2000, seed = 20261118, alpha = 0.05 } = {}) {
+  const clusters = new Map();
+  for (const s of scenarioStats) {
+    const arr = clusters.get(s.family) ?? [];
+    arr.push({ tp: s.tp ?? 0, fp: s.fp ?? 0, fn: s.fn ?? 0 });
+    clusters.set(s.family, arr);
+  }
+  const fams = [...clusters.keys()].sort();
+  const rand = mulberry32(seed);
+  const precisions = [];
+  const recalls = [];
+  if (fams.length > 0) {
+    for (let r = 0; r < resamples; r += 1) {
+      let tp = 0, fp = 0, fn = 0;
+      for (let k = 0; k < fams.length; k += 1) {
+        const pick = fams[Math.floor(rand() * fams.length)];
+        for (const row of clusters.get(pick)) { tp += row.tp; fp += row.fp; fn += row.fn; }
+      }
+      if (tp + fp > 0) precisions.push(tp / (tp + fp));
+      if (tp + fn > 0) recalls.push(tp / (tp + fn));
+    }
+  }
+  const pSorted = [...precisions].sort((a, b) => a - b);
+  const rSorted = [...recalls].sort((a, b) => a - b);
+  const pNullRate = resamples > 0 ? 1 - precisions.length / resamples : null;
+  return {
+    method: 'family-cluster percentile',
+    resamples,
+    seed,
+    alpha,
+    clusters: fams.length,
+    precision: pSorted.length === 0 ? null
+      : { lo: quantile(pSorted, alpha / 2), hi: quantile(pSorted, 1 - alpha / 2), nullRate: pNullRate },
+    precisionNullRate: pNullRate,
+    recall: rSorted.length === 0 ? null
+      : { lo: quantile(rSorted, alpha / 2), hi: quantile(rSorted, 1 - alpha / 2), nullRate: resamples > 0 ? 1 - recalls.length / resamples : null },
+  };
 }
 
 function pr(tp, fp, fn) {
@@ -64,6 +130,7 @@ export function scoreRun({ candidates, scenarios, manifest }) {
     candByScenario.get(s.scenarioId).push(c);
   }
   const famAgg = new Map();
+  const scenarioStats = [];
   const zeroOutput = [];
   const adv = { blockViolations: 0, emitFlagViolations: 0 };
   const totals = { tp: 0, fp: 0, fn: 0 };
@@ -131,6 +198,7 @@ export function scoreRun({ candidates, scenarios, manifest }) {
         if (unflaggedTouch) adv.emitFlagViolations++;
       }
     }
+    scenarioStats.push({ scenarioId: s.scenarioId, family: s.family, tp, fp: cands.length - tp, fn: gold.length - tp });
     const agg = famAgg.get(s.family) ?? { family: s.family, scenarios: 0, tp: 0, fp: 0, fn: 0 };
     agg.scenarios++;
     agg.tp += tp;
@@ -155,6 +223,9 @@ export function scoreRun({ candidates, scenarios, manifest }) {
     severe,
     adversarial: adv,
     families,
+    // 04 §3 主口径 CI（家族聚类 bootstrap）；Wilson 仍保留在 totals/groups 内作描述性
+    scenarioStats,
+    bootstrap: bootstrapCI(scenarioStats),
   };
 }
 
