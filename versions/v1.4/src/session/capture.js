@@ -17,7 +17,7 @@ import { newId } from '../core/ids.js';
 import { detectSuspicious } from '../hygiene/suspicious.js';
 import { redactText } from '../hygiene/redact.js';
 import { appendSegment, coveredSeqs, SEGMENT_LIMITS } from './ledger.js';
-import { compactTranscript, readDshTranscript } from './transcript.js';
+import { compactTranscript, readCodexSession, readDshTranscript } from './transcript.js';
 
 /** summary 每条 turn 取前多少字（SPEC §4：首尾各 2 条 turn 拼接；单条只取前 120 字防长 turn 吞预算） */
 const SUMMARY_EDGE_CHARS = 120;
@@ -434,17 +434,20 @@ export function extractSegment({
 }
 
 /**
- * 捕获任务：读最新 DSH 转录 → plan → 逐段 extract → append。
- * sessionId 省略即取该 cwd 下最新会话；sessionsRoot 缺省 $HOME/.dsh/sessions（测试可注入）。
+ * 捕获任务：读宿主转录（DSH / Codex）→ plan → 逐段 extract → append。
+ * sourceKind='dsh'（默认）读 ~/.dsh/sessions；sourceKind='codex' 读 ~/.codex/sessions 的 rollout。
+ * sessionId 省略即取该 cwd 下最新会话；Codex 需要 codexFile 或 sessionId。
  * dryRun=true 时只返回将写入的段，不落盘。无新 turn → {created:0, skipped:1, segments:[]}。
  * @param {{memoHome: string, taskId: string, cwd: string, mode?: string, llmPort?: object,
  *          dryRun?: boolean, sessionId?: string, sessionsRoot?: string, policy?: object,
- *          clock?: object, maxTurnsPerSegment?: number}} args
+ *          clock?: object, maxTurnsPerSegment?: number, sourceKind?: 'dsh'|'codex',
+ *          codexSessionsRoot?: string, codexFile?: string}} args
  * @returns {Promise<{created: number, skipped: number, segments: object[]}>}
  */
 export async function captureTask({
   memoHome, taskId, cwd, mode = 'rules', llmPort, dryRun = false,
   sessionId, sessionsRoot, policy, clock = systemClock, maxTurnsPerSegment,
+  sourceKind = 'dsh', codexSessionsRoot, codexFile,
 } = {}) {
   if (typeof memoHome !== 'string' || memoHome === '') {
     throw err('E_INVALID_ARG', 'captureTask: memoHome 必填');
@@ -457,10 +460,18 @@ export async function captureTask({
   }
 
   // 1) 读转录（失败抛 E_TRANSCRIPT_UNAVAILABLE；此时零写入 = fail-closed）
-  const root = typeof sessionsRoot === 'string' && sessionsRoot !== ''
-    ? sessionsRoot
-    : path.join(process.env.HOME ?? '', '.dsh', 'sessions');
-  const tx = readDshTranscript({ sessionsRoot: root, cwd, sessionId });
+  let tx;
+  if (sourceKind === 'codex') {
+    const root = typeof codexSessionsRoot === 'string' && codexSessionsRoot !== ''
+      ? codexSessionsRoot
+      : path.join(process.env.HOME ?? '', '.codex', 'sessions');
+    tx = readCodexSession({ sessionsRoot: root, file: codexFile, sessionId });
+  } else {
+    const root = typeof sessionsRoot === 'string' && sessionsRoot !== ''
+      ? sessionsRoot
+      : path.join(process.env.HOME ?? '', '.dsh', 'sessions');
+    tx = readDshTranscript({ sessionsRoot: root, cwd, sessionId });
+  }
 
   // 2) 只捕获上次以来的新增区间（覆盖区间按转录锚过滤：换绑转录后新转录从自己的 turn 1 开始，
   //    不会被旧转录的覆盖区间吞掉——issue #223 端到端）
@@ -477,7 +488,9 @@ export async function captureTask({
   let created = 0;
   for (const plan of plans) {
     const anchor = { path: tx.file, fromSeq: plan.fromSeq, toSeq: plan.toSeq };
-    const source = { kind: 'dsh', path: tx.file, sessionId: tx.sessionId, frames: tx.frames };
+    const source = sourceKind === 'codex'
+      ? { kind: 'codex', path: tx.file, sessionId: tx.sessionId, events: tx.events }
+      : { kind: 'dsh', path: tx.file, sessionId: tx.sessionId, frames: tx.frames };
     let extracted = extractSegment({
       turns: plan.turns,
       fromSeq: plan.fromSeq,

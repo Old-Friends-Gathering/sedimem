@@ -22,6 +22,7 @@ import { defaultPolicy } from '../config/policy.js';
 import { systemClock } from '../core/clock.js';
 import { cwdToSessionSlug } from './transcript.js';
 import { readBoundSessionIds, rememberSession } from './ledger.js';
+import { findCodexRolloutById, findLatestCodexRollout } from './transcript.js';
 import { createLlmPort } from '../llm/port.js';
 
 const TASK_ID_RE = /^[a-z0-9][a-z0-9._-]{0,63}$/;
@@ -125,6 +126,49 @@ export function probeTranscript({ cwd, sessionsRoot, sessionId }) {
   return best;
 }
 
+/** Codex 转录根（~/.codex/sessions；测试可注入）。 */
+function codexSessionsRoot() {
+  return path.join(process.env.HOME ?? os.homedir(), '.codex', 'sessions');
+}
+
+/** 探测 Codex rollout 的 stat（不存在返回 null）。 */
+export function probeCodexTranscript({ file } = {}) {
+  if (!file) return null;
+  try {
+    const st = statSync(file);
+    return { mtimeMs: st.mtimeMs, size: st.size, sessionId: codexIdFromPath(file), file, kind: 'codex' };
+  } catch {
+    return null;
+  }
+}
+
+/** 从 rollout 文件名取 Codex session id（rollout-...-<uuid>.jsonl）。 */
+export function codexIdFromPath(file) {
+  const m = /([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})(?:_[0-9a-f-]{36})?\.jsonl$/i.exec(String(file));
+  return m ? m[1] : path.basename(String(file)).replace(/^rollout-/, '').replace(/\.jsonl$/, '');
+}
+
+/**
+ * 解析一个绑定会话的来源：先 DSH，再 Codex。
+ * 返回 {kind:'dsh'|'codex', file?} 或 null；不读全文，只做 stat/文件名。
+ */
+export function resolveSessionSource({ sessionId, cwd, sessionsRoot, codexRoot, lookbackDays = 2, now = Date.now() } = {}) {
+  if (sessionId) {
+    const dsh = probeTranscript({ cwd, sessionsRoot, sessionId });
+    if (dsh) return { kind: 'dsh', probe: dsh };
+    const file = findCodexRolloutById(codexRoot || codexSessionsRoot(), sessionId);
+    if (file) return { kind: 'codex', file, probe: probeCodexTranscript({ file }) };
+    return null;
+  }
+  if (cwd) {
+    const dsh = probeTranscript({ cwd, sessionsRoot });
+    if (dsh) return { kind: 'dsh', probe: dsh };
+    const file = findLatestCodexRollout({ sessionsRoot: codexRoot || codexSessionsRoot(), cwd, lookbackDays, now });
+    if (file) return { kind: 'codex', file, probe: probeCodexTranscript({ file }), sessionId: codexIdFromPath(file) };
+  }
+  return null;
+}
+
 export function readAutoCaptureState(memoHome, taskId, sessionId) {
   const file = path.join(memoHome, 'sessions', taskId, 'autocapture.json');
   if (!existsSync(file)) return null;
@@ -202,6 +246,7 @@ export function decideAutoCapture({ memoHome, taskId, policy = defaultPolicy, cl
 export async function maybeAutoCapture({
   memoHome, taskId, cwd = CAPTURE_CWD, sessionsRoot, sessionId, policy = defaultPolicy, clock = systemClock,
   captureTaskImpl, probe, force = false, requireLedger = true, captureOnClose = false, llmPort,
+  sourceKind, codexFile, codexRoot,
 } = {}) {
   try {
     if (captureOnClose && !captureOnCloseEnabled(policy)) return { ran: false, reason: 'capture-on-close-disabled' };
@@ -209,7 +254,14 @@ export async function maybeAutoCapture({
     // 绑定优先级：显式参数/env（MCP 层注入）→ meta.json.hostSessionId（memo session bind，agent shell
     // 里有 DSH_SESSION_ID 而宿主 spawn 的 server 进程没有——issue #225 后续）。都不在才退 cwd slug。
     const sid = sessionId ?? readBoundSessionId(memoHome, taskId) ?? undefined;
-    const tx = probe ?? probeTranscript({ cwd, sessionsRoot, sessionId: sid });
+    const resolved = sourceKind
+      ? { kind: sourceKind, file: codexFile }
+      : resolveSessionSource({ sessionId: sid, cwd, sessionsRoot, codexRoot, now: nowMs(clock) });
+    const kind = resolved?.kind ?? 'dsh';
+    const resolvedFile = resolved?.file ?? codexFile;
+    const tx = probe ?? (kind === 'codex'
+      ? probeCodexTranscript({ file: resolvedFile })
+      : probeTranscript({ cwd, sessionsRoot, sessionId: sid }));
     const d = decideAutoCapture({ memoHome, taskId, policy, clock, probe: tx, state, force, requireLedger });
     if (!d.ok) return { ran: false, reason: d.reason, ...(d.waitMs !== undefined ? { waitMs: d.waitMs } : {}) };
     const now = nowMs(clock);
@@ -227,7 +279,12 @@ export async function maybeAutoCapture({
       const ready = typeof port?.ready === 'function' ? port.ready() : port?.ready;
       if (ready === false) port = undefined;
     }
-    const res = await impl({ memoHome, taskId, cwd, mode, sessionId: sid, ...(port ? { llmPort: port } : {}) });
+    const res = await impl({
+      memoHome, taskId, cwd, mode, sessionId: sid,
+      sourceKind: kind,
+      ...(kind === 'codex' ? { codexFile: resolvedFile, codexSessionsRoot: codexRoot } : {}),
+      ...(port ? { llmPort: port } : {}),
+    });
     writeAutoCaptureState(memoHome, taskId, {
       mtimeMs: tx.mtimeMs,
       size: tx.size,
@@ -303,14 +360,27 @@ export async function postToolAutoCapture({ state, toolName, args, overrides = {
     if (!scope.startsWith('session:')) return null;
     if (!isAutoCaptureCandidateTool(toolName)) return null;
     const taskId = scope.slice('session:'.length);
-    // MCP 层负责把宿主环境绑定进来：DSH 会话 id（精确）+ server 进程 cwd（兜底 slug）
-    const sid = overrides.sessionId || process.env.DSH_SESSION_ID || state?.sessionId || undefined;
+    // MCP 层负责把宿主环境绑定进来：DSH 会话 id（精确）+ server 进程 cwd（兜底 slug）。
+    // Codex 没有 DSH_SESSION_ID，按「该 cwd 最近活跃的 Codex rollout」兜底；找到后同样自动登记。
+    let sid = overrides.sessionId || process.env.DSH_SESSION_ID || state?.sessionId || undefined;
+    let source = {};
+    if (!sid) {
+      const file = findLatestCodexRollout({
+        sessionsRoot: codexSessionsRoot(),
+        cwd: (typeof state?.cwd === 'string' && state.cwd) || CAPTURE_CWD,
+      });
+      if (file) {
+        sid = codexIdFromPath(file);
+        source = { sourceKind: 'codex', codexFile: file };
+      }
+    }
     // agent 一旦在任务库上调用候选工具，就把当前会话登记进 meta.hostSessionIds：
     // 后续 watcher 会按全部已登记会话逐个捕获，不需要人工 bind。
     if (sid) rememberSession({ memoHome: MEMO_HOME, taskId, hostSessionId: sid });
     const run = maybeAutoCapture({
       memoHome: MEMO_HOME, taskId, cwd: CAPTURE_CWD,
       sessionId: sid,
+      ...source,
       ...overrides,
     });
     const timer = new Promise((resolve) => {

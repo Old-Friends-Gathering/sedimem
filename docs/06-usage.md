@@ -778,6 +778,7 @@ memo session remove --scope session:<id> --yes     # 移到 $MEMO_HOME/trash/<ts
 ```bash
 memo session start "加语义检索"            # 建任务库（已有则复用）
 memo session capture                       # 规则抽取（零 token）；--llm 走模型，失败自动回落
+memo session capture --codex <rollout.jsonl>  # 从 Codex 会话导入（v1.4.3）；--session-id <id> 可按 id 找
 memo session segments                      # 看段：区间 / 模式 / 是否隔离 / 摘要
 memo session brief                         # 生成简报（pack schema 子集，默认 ≤4000 字）
 memo session expand --segment <segId>      # 按 anchor 还原该段原文
@@ -809,6 +810,12 @@ v1.2 的账本捕获只有 CLI 手动入口，任务库长期使用时账本会�
   结果作为 `structuredContent.autoCapture` 附在响应里（`ran:false` 时带 `reason`）。
   覆盖区间按转录锚过滤：段序号是每条转录独立的，任务换绑转录后新转录从自己的 turn 1 重新折段，
   不会被旧转录的覆盖区间吞掉（重叠守卫也只对锚在同一转录上的段互斥）。
+- **跨 harness（v1.4.3）**：捕获源现在分 `dsh` / `codex` 两种。Codex 走 `~/.codex/sessions/**/rollout-*.jsonl`，
+  `readCodexSession()` 把 rollout 记录转成统一 turns，段写 `source.kind='codex'`。手工入口是
+  `memo session capture --codex <file>`（或 `--codex --session-id <id>` 按文件名找）；自动捕获先按
+  `DSH_SESSION_ID` / 绑定 id 解析 DSH，找不到再按 id 找 Codex rollout，再兜底「该 cwd 最近活跃的
+  Codex rollout」。Codex 调 `memory_*` 工具时会自动把当前 Codex 会话登记进 `hostSessionIds`，
+  watcher 下一轮按 id 捕获。Codex 没有 DSH 那种进程内 hook，所以不承诺实时，只保证工具调用 / 60s 周期内入账。
 - **close 捕获**（兑现 v1.2 声明过的 `captureOnClose`）：`memory_session_close` 成功关闭后执行一次
   rules 模式捕获（best-effort，失败不阻塞 close）。
 
