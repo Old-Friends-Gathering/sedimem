@@ -18,19 +18,20 @@
  */
 import { el } from './dom.js';
 import { apiPost } from './api.js';
+import { buildSegmentRows, fmtNum, textList } from './ledger-rows.js';
+export {
+  SUMMARY_MAX, truncateSummary, segmentRange, modeBadge, buildSegmentRow, buildSegmentRows,
+} from './ledger-rows.js';
 
 export const READ_ONLY_HINT = '用 memo serve --write 启动才可写';
 export const BRIEF_BLOCK_TAG = 'pre';
 export const BRIEF_BLOCK_CLASS = 'md';
-export const SUMMARY_MAX = 60;
 export const LEDGER_EMPTY_BIG = '还没有账本段';
 export const LEDGER_EMPTY_HINT = '点「捕获」把本任务已消费的上下文折叠成段，或在 CLI 跑 memo session capture。';
 export const BRIEF_EMPTY = '还没有简报。点「生成简报」按当前账本生成。';
 export const EXPAND_NO_SELECT = '先点开一个段，再点「导出 expand」。';
 export const EXPAND_NO_TASK = '缺少任务 id，无法生成 expand 命令。';
 
-const MODE_LABEL = { rules: 'rules', llm: 'llm' };
-const MODE_CLASS = { rules: 'b-accent', llm: 'b-info' };
 
 /** taskId 从 scope（`session:<id>`）里取；非法返回 ''。 */
 export function taskIdFromScope(scope) {
@@ -66,11 +67,6 @@ export function coveredLabel(covered) {
   return `覆盖 ${fmtNum(min)}–${fmtNum(max - 1)}`;
 }
 
-function fmtNum(n) {
-  const v = Number(n);
-  return Number.isFinite(v) ? String(Math.trunc(v)) : '?';
-}
-
 /** ISO → 本地 HH:MM（两位）；非法/空 → '—'。 */
 export function fmtClock(iso) {
   const ts = iso ? Date.parse(String(iso)) : NaN;
@@ -95,78 +91,6 @@ export function buildSummaryBadges(context) {
 export function writeState(writeEnabled, hint = READ_ONLY_HINT) {
   const ok = writeEnabled === true;
   return { disabled: !ok, hint: ok ? '' : hint };
-}
-
-/** 60 字截断（按码点，避免切断代理对）；空白折叠。 */
-export function truncateSummary(text, max = SUMMARY_MAX) {
-  const clean = String(text ?? '').replace(/\s+/g, ' ').trim();
-  const chars = Array.from(clean);
-  if (chars.length <= max) return clean;
-  return `${chars.slice(0, max).join('')}…`;
-}
-
-/** 段区间文案（半开区间 → 闭区间展示）：`1–121`；异常 → '—'。 */
-export function segmentRange(seg) {
-  const from = Number(seg?.fromSeq);
-  const to = Number(seg?.toSeq);
-  if (!Number.isFinite(from) || !Number.isFinite(to) || to <= from) return '—';
-  return `${fmtNum(from)}–${fmtNum(to - 1)}`;
-}
-
-/** 段来源徽标：rules / llm（未知模式兜底 rules）。 */
-export function modeBadge(mode) {
-  const m = String(mode ?? '');
-  const key = m === 'llm' ? 'llm' : 'rules';
-  return { key, label: MODE_LABEL[key], cls: MODE_CLASS[key] };
-}
-
-/** 段正文里的字符串列表（decisions/gotchas/nextSteps 可能为字符串或 {text}）。 */
-function textList(value) {
-  if (!Array.isArray(value)) return [];
-  const out = [];
-  for (const item of value) {
-    if (typeof item === 'string') {
-      const t = item.trim();
-      if (t) out.push(t);
-      continue;
-    }
-    const t = item && typeof item === 'object' && typeof item.text === 'string' ? item.text.trim() : '';
-    if (t) out.push(t);
-  }
-  return out;
-}
-
-/** 单段 → 行视图模型。 */
-export function buildSegmentRow(seg) {
-  const rec = seg && typeof seg === 'object' ? seg : {};
-  const quarantined = rec.quarantined === true;
-  const summary = String(rec.summary ?? '');
-  return {
-    id: typeof rec.id === 'string' ? rec.id : '',
-    range: segmentRange(rec),
-    mode: modeBadge(rec.mode),
-    quarantined,
-    quarantineLabel: quarantined ? '⚠ 隔离' : '',
-    excerpt: truncateSummary(summary),
-    summary,
-    decisions: textList(rec.decisions),
-    gotchas: textList(rec.gotchas),
-    nextSteps: textList(rec.nextSteps),
-    anchorShort: rec?.source?.sessionId ? `…${String(rec.source.sessionId).slice(-6)}` : '',
-    anchorFull: rec?.source?.sessionId ? String(rec.source.sessionId) : '',
-    when: (() => { const t = Date.parse(rec?.fromAt) || Date.parse(rec?.createdAt); if (!Number.isFinite(t)) return ''; return new Intl.DateTimeFormat('sv-SE', { timeZone: 'Asia/Shanghai', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', hour12: false }).format(new Date(t)).slice(5).replace('T', ' '); })(),
-    ordinal: 0,
-  };
-}
-
-/** 段数组 → 行视图模型数组（过滤非对象项）。 */
-export function buildSegmentRows(segments) {
-  if (!Array.isArray(segments)) return [];
-  return segments.filter((s) => s && typeof s === 'object').map((s, i) => {
-    const row = buildSegmentRow(s);
-    row.ordinal = i + 1;
-    return row;
-  });
 }
 
 /** 空账本提示模型。 */
@@ -438,6 +362,28 @@ export async function mountLedger(deps) {
         listGroup('下一步', row.nextSteps),
       ]) {
         if (group) body.append(group);
+      }
+      if (row.id) {
+        const actions = el('div', 'ledger-seg-actions');
+        const del = el('button', 'sm danger', '删除段');
+        del.type = 'button';
+        del.disabled = writeEnabled !== true;
+        del.title = writeEnabled === true ? '把这段从账本视图删除（追加墓碑，不改写历史文件）' : READ_ONLY_HINT;
+        del.addEventListener('click', async (ev) => {
+          ev.preventDefault();
+          ev.stopPropagation();
+          if (!window.confirm(`删除 ${row.range} 这段账本？\n只写墓碑，不物理删文件；捕获时可重新生成。`)) return;
+          del.disabled = true;
+          try {
+            await apiPost('/tasks/segment-remove', { task: taskId, id: row.id, reason: 'ui' });
+            await load();
+          } catch (err) {
+            del.disabled = writeEnabled !== true;
+            setNote(`删除失败 · ${err?.message || 'unknown'}`, true);
+          }
+        });
+        actions.append(del);
+        body.append(actions);
       }
       item.append(body);
       if (row.id) {

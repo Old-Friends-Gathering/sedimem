@@ -284,7 +284,7 @@ claude mcp add --scope user memo -e MEMO_HOME=$HOME/.memo -- \
 
 ![五层门禁：质量 → 安全 → 覆盖率 → docs-drift → pages-verify](docs/shots/diagrams/gates.png)
 
-本地脚本 = CI 脚本：质量 15 项 + 安全 9 项 + 覆盖率（lines ≥ 85 / branches ≥ 70 / functions ≥ 90）+ docs-drift + pages-verify，另含 858 tests 与 eval I1–I56。
+本地脚本 = CI 脚本：质量 15 项 + 安全 9 项 + 覆盖率（lines ≥ 85 / branches ≥ 70 / functions ≥ 90）+ docs-drift + pages-verify，另含 862 tests 与 eval I1–I56。
 
 ```bash
 node tools/quality-check.mjs && node tools/security-check.mjs && node tools/coverage-gate.mjs
