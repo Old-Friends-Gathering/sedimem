@@ -1,10 +1,9 @@
-# ADR-101 · tokenizer 选型与计数口径（v2.0 规格草案）
+# ADR-101 · tokenizer 选型与计数口径（v2.0）
 
 > doc-kind: history
 > doc-version: 2.0
-> status: proposed
 
-状态：**proposed**——随 [v2.0 规格包](README.md) 冻结转 accepted。来源：[v2.0-p1.md](../../plans/v2.0-p1.md) §2 冻结决策 6、§6 预研。
+状态：**accepted（2026-11-18，随九项冻结）**——随 [v2.0 规格包](README.md) 九项冻结转正。来源：[v2.0-p1.md](../../plans/v2.0-p1.md) §2 冻结决策 6、§6 预研。
 
 ## 决策
 

@@ -6,10 +6,10 @@
 
 ```
 pilot/p1a/
-├── corpus/    语料 v0（合成脱敏，44 场景/72 gold/对抗 10 类）
+├── corpus/    语料（合成脱敏；exit 批次 218 场景/347 gold/对抗 10 类 test 各 10）
 ├── config/    eval-manifest.json（冻结数字，改须版本化 diff+签署）
-├── tools/     corpus-validate / baseline-runner / score / review / protocol-sim
-├── tests/     56 测试（TDD 先行）
+├── tools/     corpus-validate / baseline-runner / score / review / protocol-sim / split-corpus / annotation-pass / contract-guards / fix-r2-*
+├── tests/     101 测试（TDD 先行）
 └── out/       运行输出（gitignore，每次带 runId）
 ```
 
@@ -26,6 +26,16 @@ node pilot/p1a/tools/baseline-runner.mjs pilot/p1a/corpus
 # 评分（pilot 阶段 fail-closed：只报指标不出 pass/fail）
 node pilot/p1a/tools/score.mjs pilot/p1a/out/baseline/<runId>/candidates.jsonl pilot/p1a/corpus
 
+# 切分：按家族分层分配 dev/test（--check 校验配额/家族两端/跨集近重复）
+node pilot/p1a/tools/split-corpus.mjs pilot/p1a/corpus pilot/p1a/config/eval-manifest.json --check
+node pilot/p1a/tools/split-corpus.mjs pilot/p1a/corpus pilot/p1a/config/eval-manifest.json --apply --seed 20261118
+
+# 双独立标注工作流（出口级 gold）：导出盲评包 → 第二标注人独立标注 → 导入校验 → 一致性 → 裁决工作表
+node pilot/p1a/tools/annotation-pass.mjs export --corpus pilot/p1a/corpus --out pilot/p1a/out/blind
+node pilot/p1a/tools/annotation-pass.mjs import --file pilot/p1a/out/blind/pass2.jsonl --package pilot/p1a/out/blind
+node pilot/p1a/tools/annotation-pass.mjs compare --a pilot/p1a/out/blind/pass1.jsonl --b pilot/p1a/out/blind/pass2.jsonl
+node pilot/p1a/tools/annotation-pass.mjs worksheet --a pilot/p1a/out/blind/pass1.jsonl --b pilot/p1a/out/blind/pass2.jsonl --out pilot/p1a/out/blind/adjudication.json
+
 # 复核骨架（只读；accept/reject 属 P1b）
 node pilot/p1a/tools/review.mjs list pilot/p1a/out/baseline/<runId>/candidates.jsonl [--status s] [--scope sc]
 node pilot/p1a/tools/review.mjs show pilot/p1a/out/baseline/<runId>/candidates.jsonl <candidateId>
@@ -40,6 +50,9 @@ node pilot/p1a/tools/review.mjs show pilot/p1a/out/baseline/<runId>/candidates.j
 | baseline-runner.mjs | 规则地板基线：证明评测管线可算 P/R 与七类严重错误 | 计划 D4 |
 | score.mjs | TP/FP/FN 一对一、子命题=FP+FN、mixed 双组、severe 计数、Wilson 区间；`stage!=='exit'` 时 verdict=null | 04-scoring-and-splits |
 | review.mjs | 复核骨架（只读 list/show） | 计划 §8 |
+| contract-guards.mjs | 三项冻结守卫：双时间互斥/asOf 穿越、tokenizer 计数快照与声明、成本闸门 | 01 §5 / adr-101 / adr-102 |
+| split-corpus.mjs | 家族分层 dev/test 切分 + 跨集近重复（Dice）校验 | 04-scoring-and-splits §1 |
+| annotation-pass.mjs | 双独立标注工作流：盲评包/导入校验/一致性报告/裁决工作表；不出 pass/fail | 06-annotation-spec §2 |
 
 ## 红线
 

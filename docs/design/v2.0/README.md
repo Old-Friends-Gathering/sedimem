@@ -23,16 +23,23 @@
 
 ## 九项冻结核验表（对齐计划 §2）
 
-| # | 冻结决策 | 规格/ADR | 状态 |
-|---|---|---|---|
-| 1a | 候选状态机 | [01](01-candidate-schema.md) §2 | planned（未冻结） |
-| 1b | 幂等协议 | [01](01-candidate-schema.md) §3 | planned（未冻结） |
-| 2 | 证据范围与删除语义 | [02](02-evidence-and-deletion.md) | planned（未冻结） |
-| 3 | 双时间字段 | [01](01-candidate-schema.md) §5 | planned（未冻结） |
-| 4 | kind 映射（闭集 6 类） | [01](01-candidate-schema.md) §4 | planned（未冻结） |
-| 5 | 信任提升路径 | [03](03-trust-promotion.md) | planned（未冻结） |
-| 6 | tokenizer | [adr-101](adr-101-tokenizer.md) | proposed（未冻结） |
-| 7 | 成本/容量上限 | [adr-102](adr-102-cost-quota.md) | proposed（未冻结） |
-| 8 | 测试切分与打分规约 | [04](04-scoring-and-splits.md) + [05](05-threshold-manifest.md) | planned（未冻结） |
+| # | 冻结决策 | 规格/ADR | 冻结证据 | 状态 |
+|---|---|---|---|---|
+| 1a | 候选状态机 | [01](01-candidate-schema.md) §2 | [01 §2](01-candidate-schema.md) + [protocol-sim.test.mjs](../../../pilot/p1a/tests/protocol-sim.test.mjs)（状态机非法迁移/终态用例） | frozen（2026-11-18） |
+| 1b | 幂等协议 | [01](01-candidate-schema.md) §3 | [01 §3](01-candidate-schema.md) + [protocol-sim.test.mjs](../../../pilot/p1a/tests/protocol-sim.test.mjs)（同输入重放 noop / CAS 冲突 / 收据重放） | frozen（2026-11-18） |
+| 2 | 证据范围与删除语义 | [02](02-evidence-and-deletion.md) | [02](02-evidence-and-deletion.md) + [corpus-validate.test.mjs](../../../pilot/p1a/tests/corpus-validate.test.mjs)（span 解析/PII/quote 唯一） | frozen（2026-11-18） |
+| 3 | 双时间字段 | [01](01-candidate-schema.md) §5 | [01 §5](01-candidate-schema.md) + [contract-guards.test.mjs](../../../pilot/p1a/tests/contract-guards.test.mjs)（双时间守卫：asserted* 不得作系统区间、asOf 穿越反例） | frozen（2026-11-18） |
+| 4 | kind 映射（闭集 6 类） | [01](01-candidate-schema.md) §4 | [01 §4](01-candidate-schema.md) + [corpus-validate.test.mjs](../../../pilot/p1a/tests/corpus-validate.test.mjs)（闭集枚举校验） | frozen（2026-11-18） |
+| 5 | 信任提升路径 | [03](03-trust-promotion.md) | [03](03-trust-promotion.md) + [protocol-sim.test.mjs](../../../pilot/p1a/tests/protocol-sim.test.mjs)（真相层 trust 恒 T2） | frozen（2026-11-18） |
+| 6 | tokenizer | [adr-101](adr-101-tokenizer.md) | [adr-101](adr-101-tokenizer.md)（accepted）+ [contract-guards.test.mjs](../../../pilot/p1a/tests/contract-guards.test.mjs)（计数快照：同输入同计数 + TOKENIZER_DECLARATION）+ [v2.0-p1.md §6](../../plans/v2.0-p1.md) 查证记录 | frozen（2026-11-18） |
+| 7 | 成本/容量上限 | [adr-102](adr-102-cost-quota.md) | [adr-102](adr-102-cost-quota.md)（accepted）+ [contract-guards.test.mjs](../../../pilot/p1a/tests/contract-guards.test.mjs)（闸门：无配置拒绝发起 / 超上限显式停机）+ [eval-manifest.json](../../../pilot/p1a/config/eval-manifest.json) | frozen（2026-11-18） |
+| 8 | 测试切分与打分规约 | [04](04-scoring-and-splits.md) + [05](05-threshold-manifest.md) | [04](04-scoring-and-splits.md) + [05](05-threshold-manifest.md) + [score.test.mjs](../../../pilot/p1a/tests/score.test.mjs) + [split-corpus.test.mjs](../../../pilot/p1a/tests/split-corpus.test.mjs) | frozen（2026-11-18） |
 
 冻结动作 = 维护者把对应行状态改为 **frozen + 日期**，并回填 [v2.0-p1.md](../../plans/v2.0-p1.md) §10 执行结果表；保护测试绿是冻结前置。九项齐备 + 出口级 gold + 语料达标才开 P1b（计划 §0）。
+
+## 冻结说明（2026-11-18）
+
+- **冻结日期**：2026-11-18（九项全部 frozen，见上表逐行状态）。
+- **冻结前置 = 保护测试绿**，实测：pilot 测试 79/79 绿（`pilot/p1a/tests/` 下 protocol-sim、corpus-validate、baseline-runner、score、review、split-corpus、annotation-pass 七个文件）；exit 语料校验 0 errors（218 场景 / 347 gold / split 校验通过）；门禁 quality 15/15 + security 9/9 + docs-drift 无 finding。设计审核 R1/R2/R3 三轮通过（[REVIEW.md](../../reviews/v2.0-design-spec-2026-11-18/REVIEW.md)）。
+- **冻结 ≠ 实现完成**：P1b 起按本规格包实现；任何规格修订须出新版本并保留旧版（[docs/11](../../11-doc-governance.md) 规划契约暂存区条款）。
+- **出口级 gold 双人工标注**仍待第二标注人执行（用户自任），不阻塞规格冻结。
