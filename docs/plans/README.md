@@ -5,7 +5,7 @@
 
 | 计划 | 对应需求 | 状态 | 覆盖版本 |
 |---|---|---|---|
-| [`v1.4.2-multi-session.md`](v1.4.2-multi-session.md) | 任务库多会话关联：自动登记全部开发会话 | 已完成（待 PR） | v1.4.2 |
+| [`v1.4.2-multi-session.md`](v1.4.2-multi-session.md) | 任务库多会话关联：自动登记全部开发会话 | 已完成（PR #261） | v1.4.2 |
 | [`v1.4.1-auto-capture-watch.md`](v1.4.1-auto-capture-watch.md) | issue #223 后续：周期扫描触发自动捕获 | 执行中 | v1.4.1 |
 | [`v1.4-p0b.md`](v1.4-p0b.md) | m02899：P0b 安全与信任最小集 + 英文视觉资产 / README 站点链接 | 已完成（PR #215） | v1.4.0 |
 | [`v1.3-p0a.md`](v1.3-p0a.md) | P0a 地基：CI/文档/版本真值化（v1.3） | 已完成（PR #208） | v1.3.0 |
