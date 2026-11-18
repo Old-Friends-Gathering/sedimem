@@ -26,6 +26,8 @@
 
 `docs/00–11` 中每个文件在头部元信息里声明自己的 kind；未声明按 manual 对待（会被 R1 拦下）。
 
+**规划契约暂存区（docs/design/）**：未来版本的契约规格先落 `docs/design/<目标版本>/*.md`，头部写 `doc-kind: contract`、`doc-version` 写**目标版本**（如 `2.0`），并加 `> status: planned` 行。该目录下文档豁免 R2–R5（同 `adr-*.md` 机制）——它描述的是目标版本契约而非 CURRENT 行为；R1 头部元信息仍必填。规格冻结并随 CURRENT 切换同步进现行契约文档后，同步结果按现行规则核对，design/ 内原件转 history 或随同步更新。
+
 ## 三、头部元信息四行
 
 紧跟一级标题之后、正文之前，格式：
@@ -65,7 +67,7 @@ history 类文档四行可选——冻结文档不做现状核对，写上也只
 
 ### R1 头部元信息缺失
 - **拦什么**：contract、manual 文档缺 `doc-kind` 或 `doc-version` 行；history 豁免。
-- **判定规则**：**递归**遍历 `docs/` 下所有 `*.md`（含子目录），正文存在 `> doc-kind:` 且 `> doc-version:` 才放行。豁免目录只有三个：`docs/research/`、`docs/plans/`、`docs/marketing/`（整体不扫）；`adr-*.md` 只豁免 R2–R5，R1 仍查。其他任何子目录一律扫描——放进子目录不能绕过门禁。
+- **判定规则**：**递归**遍历 `docs/` 下所有 `*.md`（含子目录），正文存在 `> doc-kind:` 且 `> doc-version:` 才放行。豁免目录只有三个：`docs/research/`、`docs/plans/`、`docs/marketing/`（整体不扫）；`adr-*.md` 与 `docs/design/**`（规划契约暂存区）只豁免 R2–R5，R1 仍查。其他任何子目录一律扫描——放进子目录不能绕过门禁。
 - **失败示例**：docs/05-process.md 头部只有标题直接开正文 → `R1 缺头部元信息（doc-kind/doc-version）`；docs/diagrams/rogue.md 无头部 → 同样报 R1。
 
 ### R2 contract 的 doc-version 必须等于 CURRENT 小版本
@@ -75,7 +77,7 @@ history 类文档四行可选——冻结文档不做现状核对，写上也只
 
 ### R3 正文不得出现与 CURRENT 不同的 versions/vX.Y 路径
 - **拦什么**：手册/契约正文引用旧版本目录，读者照做落错目录。
-- **判定规则**：正则匹配 `versions/v\d+\.\d+`，凡不等于 CURRENT 路径即报；`docs/research/**`、`docs/plans/**`、`docs/adr-*` 与 history 类文档豁免。
+- **判定规则**：正则匹配 `versions/v\d+\.\d+`，凡不等于 CURRENT 路径即报；`docs/research/**`、`docs/plans/**`、`docs/adr-*`、`docs/design/**` 与 history 类文档豁免。
 - **失败示例**：docs/06 写 `cd sedimem/versions/v0.3`（CURRENT 是 v0.6）→ `R3 引用非当前版本路径 versions/v0.3`。
 
 ### R4 测试数与 I 用例数一致
