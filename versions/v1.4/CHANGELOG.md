@@ -1,5 +1,14 @@
 # CHANGELOG · v1.4
 
+## [1.4.1] — 2026-11-18
+
+### Added
+- **自动捕获周期扫描**：MCP server 启动 60s watcher，扫描所有 open 任务库，按任务 meta 的 `hostSessionId` 精确定位转录；增长达 `captureTokens`（30k）即捕获，不依赖 agent 调用 memory 工具。多端由 `$MEMO_HOME/autocapture-watch.pid` 单例去重。
+
+### Fixed
+- `decideAutoCapture` 不再用 `interval-elapsed` 在任意增长时兜底捕获；只有达 30k 阈值才落段，避免大量小段。
+- 新增 `memo session auto-capture on|off|status`：`$MEMO_HOME/autocapture.off` 哨兵可暂停全部自动捕获（不浪费 token）。
+
 ## [1.4.0] — 2026-11-17
 
 ### Added
