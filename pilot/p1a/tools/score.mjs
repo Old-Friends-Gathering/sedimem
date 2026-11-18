@@ -119,9 +119,17 @@ export function scoreRun({ candidates, scenarios, manifest }) {
     // 零输出清单只收「记录型却零候选」（shouldReject 场景零候选是正确行为，评分层可读 gold 判定）
     if (!s.shouldReject && cands.length === 0) zeroOutput.push(s.scenarioId);
     if (s.adversarial?.target) {
-      const touched = cands.some((c) => c.evidence?.[0]?.eventId === s.adversarial.target.eventId);
-      if (touched && s.adversarial.expectedOutcome === 'block') adv.blockViolations++;
-      if (touched && s.adversarial.expectedOutcome === 'emit-with-flag' && !cands.some((c) => c.flagged)) adv.emitFlagViolations++;
+      const targetId = s.adversarial.target.eventId;
+      // R2-F1：TP（精确 gold 匹配）触碰 target 不计 block 违规——bait 与 gold 证据共享句子时完美抽取不受罚。
+      if (s.adversarial.expectedOutcome === 'block') {
+        const badTouch = cands.some((c, i) => !used.has(i) && c.evidence?.[0]?.eventId === targetId);
+        if (badTouch) adv.blockViolations++;
+      }
+      // emit-with-flag：触碰 target 的「未打标」候选才违规；打标候选（含 TP）通过，不被无关打标候选遮蔽。
+      if (s.adversarial.expectedOutcome === 'emit-with-flag') {
+        const unflaggedTouch = cands.some((c) => c.evidence?.[0]?.eventId === targetId && !c.flagged);
+        if (unflaggedTouch) adv.emitFlagViolations++;
+      }
     }
     const agg = famAgg.get(s.family) ?? { family: s.family, scenarios: 0, tp: 0, fp: 0, fn: 0 };
     agg.scenarios++;

@@ -25,8 +25,8 @@ export function checkSingleSentence(claim) {
   // 英文句点后跟空格+大写/数字开头的新句视为复合（缩写 i.e./e.g. 排除）
   const inner2 = s.slice(0, Math.max(0, s.length - 1)).replace(/\b(e\.g|i\.e|etc|vs|approx|fig|no)\./gi, '');
   if (/[a-zA-Z0-9)]\. [A-Z0-9(]/.test(inner2)) return false;
-  // 小数点/版本号（digit.digit）不是句末终结符
-  const sansDecimal = s.replace(/\d\.\d/g, 'DD');
+  // 小数点/版本号（digit.digit 或多段 3.2.1）不是句末终结符
+  const sansDecimal = s.replace(/\d+(\.\d+)+/g, 'V');
   return /^[.!?。？！]$/.test(sansDecimal.slice(-1)) || !/[.!?。？！]/.test(sansDecimal);
 }
 
@@ -68,6 +68,9 @@ export function validateScenario(s, { manifest } = {}) {
   const errs = [];
   const severes = manifest?.thresholds?.severeErrorEscape?.classes || [];
   const adversarialClasses = manifest?.thresholds?.adversarialClasses || [];
+  const claimMax = manifest?.thresholds?.claimMaxChars?.value || 100;
+  const outcomeMap = manifest?.thresholds?.adversarialOutcomeMap || {};
+  const comboRules = manifest?.thresholds?.candidateComboRules || {};
 
   assertCond(errs, typeof s.scenarioId === 'string' && /^S\d{3,}$/.test(s.scenarioId), `${s.scenarioId}: scenarioId 必须是 S+3 位以上数字`);
   assertCond(errs, typeof s.family === 'string' && s.family.length > 0, `${s.scenarioId}: family 必填`);
@@ -99,7 +102,20 @@ export function validateScenario(s, { manifest } = {}) {
     assertCond(errs, typeof g.goldId === 'string' && !goldIds.has(g.goldId), `${tag}: goldId 必填且场景内唯一`);
     goldIds.add(g.goldId);
     assertCond(errs, typeof g.claim === 'string' && g.claim.length > 0, `${tag}: claim 必填`);
+    assertCond(errs, typeof g.claim === 'string' && g.claim.length <= claimMax, `${tag}: claim 超 ${claimMax} 字符（claimMaxChars，单句上限）`);
     assertCond(errs, checkSingleSentence(g.claim), `${tag}: 复合命题禁止（一句一条）`);
+    // R2-F7：status×speechAct×type 最小合法组合表（manifest thresholds.candidateComboRules）
+    const comboBad = [];
+    if (g.assertion?.speechAct && comboRules.suggest?.status && g.assertion.speechAct === 'suggest') {
+      assertCond(errs, comboRules.suggest.status.includes(g.status), `${tag}: 组合非法 speechAct=suggest ⇒ status ∈ ${comboRules.suggest.status.join('|')}`);
+    }
+    if (g.assertion?.speechAct && comboRules.retract?.status && g.assertion.speechAct === 'retract') {
+      assertCond(errs, comboRules.retract.status.includes(g.status), `${tag}: 组合非法 speechAct=retract ⇒ status ∈ ${comboRules.retract.status.join('|')}`);
+    }
+    if (g.assertion?.speechAct && comboRules.complete?.type && g.assertion.speechAct === 'complete') {
+      assertCond(errs, comboRules.complete.type.includes(g.type), `${tag}: 组合非法 speechAct=complete ⇒ type ∈ ${comboRules.complete.type.join('|')}`);
+    }
+    if (comboBad.length) errs.push(...comboBad);
     assertCond(errs, ROLE_SET.includes(g.role), `${tag}: role 闭集`);
     assertCond(errs, TYPE_CLOSED_SET.includes(g.type), `${tag}: type 闭集 6 类`);
     assertCond(errs, STATUS_SET.includes(g.status), `${tag}: status 闭集`);
@@ -131,10 +147,24 @@ export function validateScenario(s, { manifest } = {}) {
       assertCond(errs, n === 1, `${s.scenarioId}: adversarial.target.quote 必须恰好出现 1 次`);
     }
     assertCond(errs, ['block', 'emit-with-flag'].includes(s.adversarial.expectedOutcome), `${s.scenarioId}: expectedOutcome ∈ block|emit-with-flag`);
+    // R2-F2：expectedOutcome 必须等于类映射（manifest thresholds.adversarialOutcomeMap）
+    if (outcomeMap[s.adversarial.class]) {
+      assertCond(errs, s.adversarial.expectedOutcome === outcomeMap[s.adversarial.class], `${s.scenarioId}: expectedOutcome 与类映射不符（${s.adversarial.class} ⇒ ${outcomeMap[s.adversarial.class]}）`);
+    }
     assertCond(errs, severes.includes(s.adversarial.expectedErrorClass), `${s.scenarioId}: expectedErrorClass 必须在七类严重错误闭集内`);
     assertCond(errs, gold.length >= 1, `${s.scenarioId}: 对抗场景仍需 ≥1 条 gold（应被抽取的真命题）；被拦截内容不得进 gold`);
   }
   return errs;
+}
+
+// —— 建议性警告（不阻断；R2-F1：block bait 与 gold 证据共享句子是合法结构，评分侧 TP 豁免兜底）——
+export function collectWarnings(s) {
+  const warnings = [];
+  const goldEv = new Set((s.gold || []).flatMap((g) => (g.evidence || []).map((e) => e.eventId)));
+  if (s.adversarial?.expectedOutcome === 'block' && s.adversarial.target && goldEv.has(s.adversarial.target.eventId)) {
+    warnings.push(`${s.scenarioId}: block 对抗 target 在 gold evidence 内（bait 与证据共享句子）——确认评分侧 TP 豁免生效`);
+  }
+  return warnings;
 }
 
 // —— 语料级校验（跨场景唯一性等）——

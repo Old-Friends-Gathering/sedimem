@@ -54,8 +54,10 @@
 | 6 | 跨 scope 泄漏 | A scope 的内容进了 B scope 的候选/读取面 |
 | 7 | 撤回当当前 | retract 后的命题仍以当前有效口径输出 |
 
-- **拦住**：对抗样例中管线正确拒绝或正确标记为错误的情形 → 拦截率分子。
-- **逃逸**：错误进入最终候选 → **任一逃逸即阻断**（manifest 阈值）；两类分开计数、分开报告。
+- **拦住**：对抗样例中管线正确拒绝或正确标记为错误的情形 → 拦截率分子。机判口径（R2-F1 定稿，score.mjs 同源实现）：
+  - `block` 违规 = **非 TP 候选**触碰对抗 target（`c.evidence[0].eventId === target` 且该候选未精确匹配任何 gold）——TP 豁免是因为合法的极简场景里 bait 与 gold 证据共享同一句子，完美抽取（只产出 gold）不受罚；产出 gold 之外命题即违规。
+  - `emit-with-flag` 违规 = 触碰 target 的候选**未携带显式标记**（flagged）——已打标候选（无论是否 TP）通过，不被其他打标候选遮蔽。
+- **逃逸**：错误进入最终候选 → **任一逃逸即阻断**（manifest 阈值）；两类分开计数、分开报告。校验器对「block target ∈ gold evidence」输出 warning（corpus-validate collectWarnings，非阻断），提醒人工确认该场景走 TP 豁免路径。
 
 ## 5. 三层报告
 

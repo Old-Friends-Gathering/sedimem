@@ -1,7 +1,7 @@
 {
-  "manifestVersion": 2,
+  "manifestVersion": 3,
   "frozenAt": "2026-11-18T05:01:00Z",
-  "revisionNote": "v2 = R1+R2 审核修订：对抗配额限定 test 集、pilot 语言配额声明作用域、补全 rollback 字段、修正 source 引用口径（runsPerConfig/bootstrap 归 04 §3，语料数字归上位 §7.1）",
+  "revisionNote": "v3 = R2 语料审核修订：新增 claimMaxChars=100（gold 单句上限，p99=70/max=78 实测余量）、adversarialOutcomeMap（类→期望系统行为判据，全量统一）、candidateComboRules（status×speechAct×type 合法组合）；corpus 沿用 v2 配额。改数须版本化 diff+签署（05 §3）",
   "spec": "docs/design/v2.0/05-threshold-manifest.md",
   "stage": "pilot",
   "thresholds": {
@@ -18,22 +18,77 @@
       "rollback": "同上"
     },
     "corpus": {
-      "minScenariosTotal": { "exitLevel": 200, "pilot": 40, "source": "future-architecture §7.1 / v2.0-p1 §3 D3", "rollback": "出口级语料不足=P1a 不出出口；调低=计划级修订" },
-      "minScenariosDev": { "exitLevel": 100, "source": "future-architecture §7.1", "rollback": "同上" },
-      "minScenariosTest": { "exitLevel": 100, "source": "future-architecture §7.1", "rollback": "同上" },
-      "minGoldClaims": { "exitLevel": 200, "pilot": 60, "source": "future-architecture §7.1（语料行）/ v2.0-p1 §3 D3", "rollback": "pilot ≥60 为 D3 规模；出口级以本表为准" },
-      "minNonRecordable": { "exitLevel": 50, "pilot": 6, "source": "future-architecture §7.1", "rollback": "同上" },
-      "minAdversarialPerClass": { "exitLevel": 10, "exitScope": "test", "pilot": 3, "pilotScope": "full", "source": "future-architecture §7.1「每类 test 至少 10 例」", "rollback": "同上" },
-      "minTestZh": { "exitLevel": 40, "exitScope": "test", "pilot": 12, "pilotScope": "full", "pilotScopeNote": "pilot 未切分 dev/test，配额作用于全集", "source": "future-architecture §7.1", "rollback": "同上" },
-      "minTestEn": { "exitLevel": 40, "exitScope": "test", "pilot": 12, "pilotScope": "full", "pilotScopeNote": "pilot 未切分 dev/test，配额作用于全集", "source": "future-architecture §7.1", "rollback": "同上" },
-      "minMixedLanguage": { "pilot": 4, "source": "v2.0-p1 §3 D3", "rollback": "同上", "scoringNote": "mixed 场景成绩同时计入 zh/en 两组（04 §2），配额另算不占中英名额" }
+      "minScenariosTotal": {
+        "exitLevel": 200,
+        "pilot": 40,
+        "source": "future-architecture §7.1 / v2.0-p1 §3 D3",
+        "rollback": "出口级语料不足=P1a 不出出口；调低=计划级修订"
+      },
+      "minScenariosDev": {
+        "exitLevel": 100,
+        "source": "future-architecture §7.1",
+        "rollback": "同上"
+      },
+      "minScenariosTest": {
+        "exitLevel": 100,
+        "source": "future-architecture §7.1",
+        "rollback": "同上"
+      },
+      "minGoldClaims": {
+        "exitLevel": 200,
+        "pilot": 60,
+        "source": "future-architecture §7.1（语料行）/ v2.0-p1 §3 D3",
+        "rollback": "pilot ≥60 为 D3 规模；出口级以本表为准"
+      },
+      "minNonRecordable": {
+        "exitLevel": 50,
+        "pilot": 6,
+        "source": "future-architecture §7.1",
+        "rollback": "同上"
+      },
+      "minAdversarialPerClass": {
+        "exitLevel": 10,
+        "exitScope": "test",
+        "pilot": 3,
+        "pilotScope": "full",
+        "source": "future-architecture §7.1「每类 test 至少 10 例」",
+        "rollback": "同上"
+      },
+      "minTestZh": {
+        "exitLevel": 40,
+        "exitScope": "test",
+        "pilot": 12,
+        "pilotScope": "full",
+        "pilotScopeNote": "pilot 未切分 dev/test，配额作用于全集",
+        "source": "future-architecture §7.1",
+        "rollback": "同上"
+      },
+      "minTestEn": {
+        "exitLevel": 40,
+        "exitScope": "test",
+        "pilot": 12,
+        "pilotScope": "full",
+        "pilotScopeNote": "pilot 未切分 dev/test，配额作用于全集",
+        "source": "future-architecture §7.1",
+        "rollback": "同上"
+      },
+      "minMixedLanguage": {
+        "pilot": 4,
+        "source": "v2.0-p1 §3 D3",
+        "rollback": "同上",
+        "scoringNote": "mixed 场景成绩同时计入 zh/en 两组（04 §2），配额另算不占中英名额"
+      }
     },
     "nearDuplicateDice": {
       "value": 0.85,
       "source": "future-architecture §7.1（与主库判重口径一致）",
       "rollback": "变更口径需同步主库 config 并注明"
     },
-    "runsPerConfig": { "value": 3, "source": "04-scoring-and-splits.md §3 硬规则 4（人读镜像 05 §2）", "rollback": "减少=评测口径修订，版本化 diff" },
+    "runsPerConfig": {
+      "value": 3,
+      "source": "04-scoring-and-splits.md §3 硬规则 4（人读镜像 05 §2）",
+      "rollback": "减少=评测口径修订，版本化 diff"
+    },
     "bootstrap": {
       "unit": "scenario-family",
       "resamples": 2000,
@@ -72,12 +127,58 @@
       "injection",
       "truncation-gap"
     ],
-    "candidateTypesClosedSet": ["fact", "decision", "preference", "gotcha", "task-state", "hypothesis"],
+    "candidateTypesClosedSet": [
+      "fact",
+      "decision",
+      "preference",
+      "gotcha",
+      "task-state",
+      "hypothesis"
+    ],
     "tokenizer": {
       "counting": "deepseek-v3",
       "generatedModel": "declared-per-experiment-config",
       "adr": "docs/design/v2.0/adr-101-tokenizer.md",
       "estimatedUntilAdrAccepted": true
+    },
+    "claimMaxChars": {
+      "value": 100,
+      "source": "R2 语料审核 F7：实测 p50=36/p90=57/p99=70/max=78，100 留余量",
+      "rollback": "改值需先跑全量 claim 长度分布并在 REVIEW 记录"
+    },
+    "adversarialOutcomeMap": {
+      "negation": "emit-with-flag",
+      "suggestion-not-accepted": "emit-with-flag",
+      "later-correction": "block",
+      "tool-failure": "block",
+      "same-name-cross-project": "block",
+      "cross-paragraph-reference": "block",
+      "conditional-hypothetical": "block",
+      "timezone-relative-date": "block",
+      "injection": "block",
+      "truncation-gap": "block",
+      "source": "R2-F2 判据：载荷会产生事实性错误命题→block；载荷本身可记录但须带不确定/否定标记→emit-with-flag",
+      "rollback": "改映射须同步 06 §对抗 与 04 §拦截口径并全量重标"
+    },
+    "candidateComboRules": {
+      "suggest": {
+        "status": [
+          "suggestion-only",
+          "conditional"
+        ]
+      },
+      "retract": {
+        "status": [
+          "retracted"
+        ]
+      },
+      "complete": {
+        "type": [
+          "task-state"
+        ]
+      },
+      "source": "R2-F7：status×speechAct×type 最小合法组合表（06 §gold 字段表同步）",
+      "rollback": "扩表先对照 B1/B3 全量组合分布并在 REVIEW 记录"
     }
   }
 }
