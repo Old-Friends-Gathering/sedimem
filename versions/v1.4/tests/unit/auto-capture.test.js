@@ -215,6 +215,30 @@ test('路由：session scope + 候选工具才挂车；其他 scope/工具 → n
   assert.equal(miss1, null, '非 session scope 不触发');
   const miss2 = await postToolAutoCapture({ state: { scope: 'session:20261114-2222-fix' }, toolName: 'memory_scope', overrides: f.base });
   assert.equal(miss2, null, '非候选工具不触发');
+  // 连接级 scope 是分库、调用参数显式带 session scope → 仍触发（memory_write scope: 参数场景）
+  const viaArgs = await postToolAutoCapture({
+    state: { scope: 'repo:sedimem' },
+    toolName: 'memory_write',
+    args: { scope: 'session:20261114-2222-fix' },
+    overrides: { ...f.base, sessionId: 'sess-1', force: true },
+  });
+  assert.equal(viaArgs?.ran, true, '参数 scope=session:* 优先于连接级 scope');
+  // memory_session_* 的 --task 参数形态同样生效
+  const viaTask = await postToolAutoCapture({
+    state: { scope: 'repo:sedimem' },
+    toolName: 'memory_session_status',
+    args: { task: '20261114-2222-fix' },
+    overrides: { ...f.base, sessionId: 'sess-1', force: true },
+  });
+  assert.equal(viaTask?.ran, true, '参数 task=<taskId> → session:<task>');
+  // 参数给了非 session scope → 回退连接级（repo）→ 不触发
+  const viaBadArgs = await postToolAutoCapture({
+    state: { scope: 'repo:sedimem' },
+    toolName: 'memory_write',
+    args: { scope: 'repo:other' },
+    overrides: f.base,
+  });
+  assert.equal(viaBadArgs, null, '非 session 参数 scope 回退连接级判定');
   rmSync(f.memoHome, { recursive: true, force: true });
   rmSync(f.cwd, { recursive: true, force: true });
 });

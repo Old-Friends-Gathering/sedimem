@@ -150,7 +150,7 @@ export function decideAutoCapture({ memoHome, taskId, policy = defaultPolicy, cl
   if (!probe) return { ok: false, reason: 'no-transcript' };
   if (requireLedger && !force && !ledgerDirExists(memoHome, taskId)) return { ok: false, reason: 'no-ledger' };
   if (!state) return { ok: true, reason: 'first-run' };
-  if (probe.mtimeMs === state.mtimeMs && probe.size === state.size) return { ok: false, reason: 'unchanged' };
+  if (!force && probe.mtimeMs === state.mtimeMs && probe.size === state.size) return { ok: false, reason: 'unchanged' };
   const now = nowMs(clock);
   if (!force && typeof state.lastSuccessAt === 'number' && now - state.lastSuccessAt < pol.cooldownMs) {
     return { ok: false, reason: 'cooldown', waitMs: pol.cooldownMs - (now - state.lastSuccessAt) };
@@ -248,10 +248,18 @@ const POST_TOOL_TIMEOUT_MS = 15_000;
  * 其余 → maybeAutoCapture（自带 try/catch + 超时，绝不抛出）。
  * overrides 仅测试注入（memoHome/taskId/cwd/policy/clock/captureTaskImpl/probe）。
  */
-export async function postToolAutoCapture({ state, toolName, overrides = {} } = {}) {
+export async function postToolAutoCapture({ state, toolName, args, overrides = {} } = {}) {
   try {
-    const scope = state?.scope;
-    if (typeof scope !== 'string' || !scope.startsWith('session:')) return null;
+    // 生效 scope：调用参数显式给的就优先（memory_write --scope / memory_session_* --task），
+    // 否则退回连接级 scope。只认 session:<taskId>——挂车捕获只维护任务账本。
+    let scope = typeof state?.scope === 'string' ? state.scope : '';
+    const argScope = typeof args?.scope === 'string' ? args.scope : '';
+    if (argScope.startsWith('session:')) {
+      scope = argScope;
+    } else if (typeof args?.task === 'string' && /^[a-z0-9][a-z0-9._-]{0,63}$/.test(args.task)) {
+      scope = `session:${args.task}`;
+    }
+    if (!scope.startsWith('session:')) return null;
     if (!isAutoCaptureCandidateTool(toolName)) return null;
     const taskId = scope.slice('session:'.length);
     // MCP 层负责把宿主环境绑定进来：DSH 会话 id（精确）+ server 进程 cwd（兜底 slug）

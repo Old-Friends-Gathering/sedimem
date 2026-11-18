@@ -139,7 +139,7 @@ async function handleMessage(msg, _service, state) {
         // 挂车自动捕获（issue #223）：session scope + 候选工具调用成功后，检查绑定转录是否
         // 增长并按守卫链决定是否入账。fail-closed —— 任何失败只记进 structuredContent.autoCapture，
         // 绝不影响主调用的返回（docs/06 §22.1）。
-        const autoCap = await postToolAutoCapture({ state, toolName });
+        const autoCap = await postToolAutoCapture({ state, toolName, args });
         if (autoCap) result.structuredContent = { ...(result.structuredContent ?? {}), autoCapture: autoCap };
         return rpcResult(id, result);
       } catch (err) {
