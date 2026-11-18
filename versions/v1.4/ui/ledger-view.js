@@ -152,6 +152,8 @@ export function buildSegmentRow(seg) {
     decisions: textList(rec.decisions),
     gotchas: textList(rec.gotchas),
     nextSteps: textList(rec.nextSteps),
+    anchorShort: rec?.source?.sessionId ? `…${String(rec.source.sessionId).slice(-6)}` : '',
+    anchorFull: rec?.source?.sessionId ? String(rec.source.sessionId) : '',
   };
 }
 
@@ -349,6 +351,8 @@ export async function mountLedger(deps) {
   let checkpoints = [];
   let segmentsError = '';
   let hiddenOldSegments = 0;
+  let showAllTranscripts = true;
+  let allSegments = [];
   let selectedId = '';
 
   // ② .ledger 段区块
@@ -358,6 +362,7 @@ export async function mountLedger(deps) {
   const count = el('span', 'faint mono ledger-count', '0 段');
   head.append(count);
   const acts = el('div', 'acts');
+  const scopeBtn = el('button', 'sm ghost', '只看当前会话');
   const captureBtn = el('button', 'sm', '捕获');
   const archiveBtn = el('button', 'sm ghost', '归档');
   const expandBtn = el('button', 'sm', '导出 expand');
@@ -365,7 +370,7 @@ export async function mountLedger(deps) {
     btn.disabled = ro.disabled;
     if (ro.disabled) btn.title = ro.hint;
   }
-  acts.append(captureBtn, archiveBtn, expandBtn);
+  acts.append(scopeBtn, captureBtn, archiveBtn, expandBtn);
   head.append(acts);
   const note = el('div', 'ledger-note faint');
   const historyNote = el('div', 'ledger-note faint');
@@ -483,11 +488,29 @@ export async function mountLedger(deps) {
     }
   };
 
+
+  const applyTranscriptFilter = () => {
+    const hostSessionId = context.meta?.hostSessionId;
+    const kept = showAllTranscripts || !hostSessionId
+      ? allSegments
+      : allSegments.filter((s) => s?.source?.sessionId === hostSessionId);
+    hiddenOldSegments = allSegments.length - kept.length;
+    segments = kept;
+    context.segments = segments.length;
+    // 全部转录混在一起时，顶栏不显示一个假的“连续覆盖”；区间在每行里各自成立。
+    context.covered = showAllTranscripts && transcriptCount() > 1 ? [] : coveredOf(segments);
+    scopeBtn.textContent = showAllTranscripts ? '只看当前会话' : `显示全部（${allSegments.length}）`;
+    scopeBtn.title = showAllTranscripts
+      ? '只显示任务当前绑定的宿主转录'
+      : '显示该任务所有历史转录的段（v1.x 开发记录都在这里）';
+  };
+  const transcriptCount = () => new Set(allSegments.map((s) => s?.source?.sessionId).filter(Boolean)).size;
+
   const renderAll = () => {
     summarySlot?.replaceChildren?.(buildSummaryBar(context, { writeEnabled, hint }));
     historyNote.textContent = hiddenOldSegments > 0
-      ? `已隐藏 ${hiddenOldSegments} 段旧转录（其它会话）；checkpoint 是任务级，不受影响。`
-      : '';
+      ? `已隐藏 ${hiddenOldSegments} 段旧转录（其它会话）；点「显示全部」查看 v1.x 历史开发账本。`
+      : (transcriptCount() > 1 ? `共 ${transcriptCount()} 个转录，段按捕获时间排列；每行的「会话」标签区分来源。` : '');
     count.textContent = checkpoints.length > 0
       ? `${segments.length} 段 · ${checkpoints.length} checkpoint`
       : `${segments.length} 段`;
@@ -503,17 +526,8 @@ export async function mountLedger(deps) {
     }
     try {
       const segBody = await apiGet(`/task-segments?task=${encodeURIComponent(taskId)}`);
-      const allSegments = normalizeSegments(segBody);
-      const hostSessionId = context.meta?.hostSessionId;
-      if (hostSessionId) {
-        segments = allSegments.filter((s) => s?.source?.sessionId === hostSessionId);
-        hiddenOldSegments = allSegments.length - segments.length;
-      } else {
-        segments = allSegments;
-        hiddenOldSegments = 0;
-      }
-      context.segments = segments.length;
-      context.covered = coveredOf(segments);
+      allSegments = normalizeSegments(segBody);
+      applyTranscriptFilter();
       checkpoints = normalizeCheckpoints(segBody);
       segmentsError = '';
     } catch (err) {
@@ -524,6 +538,12 @@ export async function mountLedger(deps) {
     if (!container.isConnected) return;
     renderAll();
   };
+
+  scopeBtn.addEventListener('click', () => {
+    showAllTranscripts = !showAllTranscripts;
+    applyTranscriptFilter();
+    renderAll();
+  });
 
   captureBtn.addEventListener('click', async () => {
     captureBtn.disabled = true;
