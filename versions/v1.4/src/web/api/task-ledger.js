@@ -69,7 +69,6 @@ function requireTask(service, query) {
 export function readCheckpoints(memoHome, taskId) {
   const file = path.join(memoHome, 'items', itemsFileName(`session:${taskId}`));
   if (!existsSync(file)) return [];
-  const out = [];
   let badLines = 0;
   let raw;
   try {
@@ -77,6 +76,7 @@ export function readCheckpoints(memoHome, taskId) {
   } catch {
     return [];
   }
+  const seen = [];
   for (const line of raw.split('\n')) {
     const t = line.trim();
     if (!t) continue;
@@ -88,6 +88,23 @@ export function readCheckpoints(memoHome, taskId) {
       continue;
     }
     if (rec?.predicate !== 'checkpoint' || rec?.status === 'tombstoned') continue;
+    seen.push(rec);
+  }
+  // 去重（issue #233）：① 同 id 重复行只保留最后一行（与存储层「同 id 最后一行胜出」语义一致）；
+  // ② 同「createdAt 分钟 + value」的不同 id（历史双写换过 id）也只保留最后一行。
+  // 两把钥匙都取「最后出现者胜」；一个记录必须同时是两把钥匙的最后一行才保留。
+  const lastById = new Map();
+  const lastByContent = new Map();
+  for (let i = 0; i < seen.length; i++) {
+    const rec = seen[i];
+    if (typeof rec.id === 'string' && rec.id) lastById.set(rec.id, i);
+    lastByContent.set(`${String(rec.createdAt ?? '').slice(0, 16)}\u0000${String(rec.value ?? '')}`, i);
+  }
+  const out = [];
+  for (let i = 0; i < seen.length; i++) {
+    const rec = seen[i];
+    if (typeof rec.id === 'string' && rec.id && lastById.get(rec.id) !== i) continue;
+    if (lastByContent.get(`${String(rec.createdAt ?? '').slice(0, 16)}\u0000${String(rec.value ?? '')}`) !== i) continue;
     let sections = null;
     try {
       sections = typeof rec.value === 'string' ? JSON.parse(rec.value) : rec.value;

@@ -154,6 +154,30 @@ describe('web 任务账本 API（A1 只读 + A2 写）', () => {
     assert.equal(body.checkpointBadLines, 1, '坏行计数进 checkpointBadLines，不抛 500');
   });
 
+  test('GET /api/task-segments：checkpoint 去重（同 id 双写取最后一行；同分钟同内容不同 id 也收敛）', async () => {
+    // issue #233：历史写入里同一 checkpoint 记录被追加两行（同 id），存储语义是「同 id 最后一行胜出」，
+    // 账本读取面必须与之一致；另对「同 createdAt 分钟 + 同 value」的不同 id 重复做内容级收敛（防御双写换 id）。
+    const itemsDir = join(home, 'items');
+    mkdirSync(itemsDir, { recursive: true });
+    const cpFile = join(itemsDir, `session:${TASK}.jsonl`);
+    const cpA1 = JSON.stringify({ id: 'ca1', kind: 'state', predicate: 'checkpoint', status: 'active', createdAt: '2026-11-18T14:22:00.000Z', value: JSON.stringify({ intent: 'A 意图' }) });
+    const cpA2 = JSON.stringify({ id: 'ca2', kind: 'state', predicate: 'checkpoint', status: 'active', createdAt: '2026-11-18T14:22:30.000Z', value: JSON.stringify({ intent: 'A 意图' }) }); // 同分钟同内容、不同 id
+    writeFileSync(cpFile, [
+      cpA1,
+      cpA1, // 同 id 双写 → 只出一条
+      cpA2,
+      JSON.stringify({ id: 'cb1', kind: 'state', predicate: 'checkpoint', status: 'active', createdAt: '2026-11-18T15:00:00.000Z', value: JSON.stringify({ intent: 'B 意图' }) }),
+      JSON.stringify({ id: 'cb2', kind: 'state', predicate: 'checkpoint', status: 'active', createdAt: '2026-11-18T15:00:40.000Z', value: JSON.stringify({ intent: 'B2 意图' }) }),
+      '',
+    ].join('\n'));
+
+    const { status, body } = await get(writable, `task-segments?task=${TASK}`);
+    assert.equal(status, 200, JSON.stringify(body));
+    const ids = body.checkpoints.map((c) => c.id);
+    assert.deepEqual(ids, ['ca2', 'cb1', 'cb2'], `应去重为 3 条且升序，实际 ${JSON.stringify(ids)}`);
+    assert.equal(body.checkpoints[0].sections.intent, 'A 意图', '同分钟同内容重复保留最后一行（ca2）');
+  });
+
   test('GET /api/task-brief：briefJson 展开在顶层（task 是对象），asOf/maxChars 生效', async () => {
     const full = await get(writable, `task-brief?task=${TASK}`);
     assert.equal(full.status, 200, JSON.stringify(full.body));
