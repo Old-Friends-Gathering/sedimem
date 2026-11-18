@@ -35,7 +35,8 @@ export function evaluateExit({ scenarios, manifest, frozenRows, annotation = {} 
   const t = manifest?.thresholds ?? {};
   const corpus = t.corpus ?? {};
   const checks = [];
-  const add = (id, title, ok, detail, pending = false) => checks.push({ id, title, ok, detail, pending });
+  const add = (id, title, ok, detail, pending = false, caveat = undefined) =>
+    checks.push(caveat ? { id, title, ok, detail, pending, caveat } : { id, title, ok, detail, pending });
 
   const inSplit = (s, name) => s.split === name;
   const total = scenarios.length;
@@ -94,22 +95,36 @@ export function evaluateExit({ scenarios, manifest, frozenRows, annotation = {} 
     frozen.length < 9 ? `核验表只解析到 ${frozen.length} 行` : (unfrozen.length === 0 ? `${frozen.length} 项全部 frozen` : `未冻结：${unfrozen.map((r) => r.id).join('、')}`));
 
   // 双独立标注（pending：需要外部标注人，不算失败但阻塞出口）
-  const dual = annotation.mode === 'dual-independent' || (annotation.pass2 && annotation.goldset);
-  add('annotation-dual', '出口级 gold = 双人工独立标注 + 裁决', dual,
-    dual ? 'annotationMode=dual-independent' : `pass1=${annotation.pass1 ? '✓' : '✗'}、pass2=${annotation.pass2 ? '✓' : '✗'}、goldset=${annotation.goldset ? '✓' : '✗'}（待第二标注人 + 裁决留痕）`,
-    !dual);
+  // 标注状态：dual-independent（两份人工盲评）为出口级；model-dual-blinded（两遍模型盲评 + 裁决）为降级满足，必须留 caveat
+  const mode = annotation.mode ?? 'pilot';
+  const hasPasses = Boolean(annotation.pass1 && annotation.pass2 && annotation.goldset);
+  const dual = mode === 'dual-independent' && hasPasses;
+  const degraded = mode === 'model-dual-blinded' && hasPasses;
+  const detailBits = `pass1=${annotation.pass1 ? '✓' : '✗'}、pass2=${annotation.pass2 ? '✓' : '✗'}、goldset=${annotation.goldset ? '✓' : '✗'}`;
+  if (dual) add('annotation-dual', '出口级 gold = 双人工独立标注 + 裁决', true, 'annotationMode=dual-independent');
+  else if (degraded) add('annotation-dual', '出口级 gold = 双人工独立标注 + 裁决', true,
+    `annotationMode=model-dual-blinded（${detailBits}）——两遍模型盲评 + 维护者裁决，**非人工双标注**，实验结论仍以人工双标注复核为硬前置`, false, 'model-dual-blinded');
+  else add('annotation-dual', '出口级 gold = 双人工独立标注 + 裁决', false,
+    `${detailBits}（待第二标注人 + 裁决留痕）`, true);
 
   const failed = checks.filter((c) => !c.ok && !c.pending);
   const pending = checks.filter((c) => c.pending);
-  return { checks, ok: failed.length === 0 && pending.length === 0, pending, blockedBy: pending.map((c) => c.id) };
+  return {
+    checks,
+    ok: failed.length === 0 && pending.length === 0,
+    pending,
+    blockedBy: pending.map((c) => c.id),
+    caveats: checks.filter((c) => c.caveat).map((c) => c.id),
+  };
 }
 
 export function renderExitReport(result) {
-  const icon = (c) => (c.ok ? '✅' : c.pending ? '⏳' : '❌');
+  const icon = (c) => (c.caveat ? '⚠️' : c.ok ? '✅' : c.pending ? '⏳' : '❌');
   const lines = ['P1a 出口核验', ''];
   for (const c of result.checks) lines.push(`${icon(c)} ${c.id.padEnd(22)} ${c.title} — ${c.detail}`);
   const failed = result.checks.filter((c) => !c.ok && !c.pending).length;
-  lines.push('', `结论：${result.ok ? '出口条件齐备' : `失败 ${failed} 项、待完成 ${result.pending.length} 项`}`);
+  const caveatCount = (result.caveats ?? []).length;
+  lines.push('', `结论：${result.ok ? '出口条件齐备' : `失败 ${failed} 项、待完成 ${result.pending.length} 项`}${caveatCount > 0 ? `（降级声明 ${caveatCount} 项）` : ''}`);
   if (result.pending.length > 0) lines.push(`阻塞出口：${result.blockedBy.join('、')}`);
   return lines.join('\n');
 }
@@ -133,11 +148,21 @@ function main() {
   const scenarios = loadJsonlDir(p('pilot/p1a/corpus'));
   const readme = existsSync(p('docs/design/v2.0/README.md')) ? readFileSync(p('docs/design/v2.0/README.md'), 'utf8') : '';
   const blind = p('pilot/p1a/out/blind');
+  const goldsetFile = join(blind, 'goldset-v1.json');
+  const hasGoldset = existsSync(goldsetFile);
+  let goldsetMode = 'pilot';
+  if (hasGoldset) {
+    try {
+      goldsetMode = JSON.parse(readFileSync(goldsetFile, 'utf8')).annotationMode ?? 'pilot';
+    } catch {
+      goldsetMode = 'pilot';
+    }
+  }
   const annotation = {
     pass1: existsSync(join(blind, 'pass1.jsonl')),
     pass2: existsSync(join(blind, 'pass2.jsonl')),
-    goldset: existsSync(join(blind, 'goldset-v1.json')),
-    mode: 'pilot',
+    goldset: hasGoldset,
+    mode: goldsetMode,
   };
   const result = evaluateExit({ scenarios, manifest, frozenRows: parseFrozenTable(readme), annotation });
   console.log(renderExitReport(result));

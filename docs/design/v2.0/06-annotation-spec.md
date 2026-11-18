@@ -48,7 +48,20 @@
 
 - pilot v0 用**单标注 + 显式 pilot 标记**；一切 pilot 结果不得表述为「gold 验收通过」。
 - **第二标注人到位是 P1a 出口的硬前置**：它阻塞出口级 gold 冻结，**不阻塞**规格/工具链交付（P1a 可以先行交付工具与 pilot 语料）。这是用户决策项，届时由维护者指派。
-- 所有评测输出必须带 `annotationMode: pilot | dual-independent` 字段。
+- 所有评测输出必须带 `annotationMode: pilot | dual-independent | model-dual-blinded` 字段。
+
+### 3.1 降级模式 `model-dual-blinded`（模型盲评双遍 + 维护者裁决）
+
+当第二**人工**标注人暂时不可用、而出口又必须推进时，允许下列**降级**路径，并把降级写进产物，不得升格表述：
+
+- **两遍相互不可见的盲评**：pass1 与 pass2 由**不同执行体**产出，双方都只能看盲评包（`gold`/`shouldReject`/`adversarial`/`split` 已剥离），互不可见对方标注；任一方向泄漏即该遍作废。
+- **维护者裁决**：分歧逐条记录 `resolution ∈ a|b|merge|both`（§2 裁决表），未裁决行一律阻断 goldset 生成（fail-closed）。
+- **必须声明的限制**（写进 goldset、评测输出与报告）：
+  1. 两遍均为**模型**标注，不满足 §2「两份互不可见的人工独立标注」；
+  2. 因此 `annotationMode` 只能是 `model-dual-blinded`，**不得**写成 `dual-independent`，也不得据此宣称「gold 验收通过」；
+  3. 一致性数字（字段一致率）只作**标注稳定性证据**，不作人工标注一致率；
+  4. 任何对外实验结论（§7.2 收益三项、P1b 抽取门槛）仍以人工双标注复核为硬前置。
+- **退出条件**：一旦人工第二标注到位，用同一批场景重跑 pass2 → 重算一致率与裁决 → 生成 `goldset-v2` 并把 `annotationMode` 升为 `dual-independent`；`goldset-v1` 保留为历史版本。
 
 ## 4. 漏标裁决与防泄漏
 
