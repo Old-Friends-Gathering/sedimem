@@ -47,3 +47,16 @@
 - 日历/邮件等第三方内容（P2 起）：只保留与本人相关的字段（from/to/attendee/subject/time），正文默认哈希或不存；共享日历需告知参与者。
 - 任务账本段过 `redactText` + `detectSuspicious`；命中注入证据的段标 `quarantined=true`、`taint` 含 `suspicious`，不进简报。
 - 本机边界：`~/.memo` 权限 0700/0600 只挡其它本机用户；同 UID 进程仍可读，这是本地优先模型的已知边界，不承诺机密性对抗同 UID。
+
+## 12.5 P1a pilot 评测资产（v2.0 规划期）
+
+P1a 的评测资产存放在仓库 [`pilot/p1a/`](../pilot/p1a/corpus/README.md)（不在 `~/.memo`），是开发/评测数据，不是运行时数据。新资产按 [`design/v2.0/02-evidence-and-deletion.md`](design/v2.0/02-evidence-and-deletion.md) §8 登记：保留期/条数上限框架冻结、数值归 P1b 填；在此之前按 fail-closed 处理（不自动清理、不自动重新 capture、删除动作人工留痕）。
+
+| 资产 | 路径 | 内容 | 状态 |
+|---|---|---|---|
+| 语料 v0 | `pilot/p1a/corpus/*.jsonl` | 合成脱敏场景 + gold + 对抗标注（44 场景/72 gold/对抗 10 类） | 已提交（PR #221） |
+| 校验/基线/评分/复核工具 | `pilot/p1a/tools/` | corpus-validate / baseline-runner / score / review / protocol-sim | 已提交（PR #221、B2） |
+| 冻结配置 | `pilot/p1a/config/eval-manifest.json` | 门槛与配额（改数须版本化 diff + 签署） | 已提交（PR #220） |
+| 验证轨输出 | `pilot/p1a/out/`（gitignore） | 候选 jsonl / meta / 评分报告；本地可重建，不入库 | 每次运行带 runId |
+
+要求：baseline/score 每次运行输出必须带 runId 落盘（输入与结论成对保留）；语料场景删除/修改须在对应 REVIEW 留痕；pilot 阶段评分器不得输出 pass/fail（fail-closed）。

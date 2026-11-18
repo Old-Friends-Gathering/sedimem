@@ -9,6 +9,7 @@
 | [`v1.3-p0a.md`](v1.3-p0a.md) | P0a 地基：CI/文档/版本真值化（v1.3） | 已完成（PR #208） | v1.3.0 |
 | [`v1.3.1-task-library-naming.md`](v1.3.1-task-library-naming.md) | [#210](https://github.com/Old-Friends-Gathering/sedimem/issues/210)：任务库术语与 MCP 入口修复（session-99680927 复盘） | 已完成（PR [#211](https://github.com/Old-Friends-Gathering/sedimem/pull/211) 已合并） | v1.3.1 |
 | [`future-architecture.md`](future-architecture.md) | 2026-11-18 用户：AI-Native 求职作品，重点规划上下文抽取准确性；开源复核后更新路线 | 单 agent 对抗检查修订完成（[报告](../reviews/future-architecture-2026-11-18/REVIEW.md)）；P1a 待执行 | P0a/P0b 完成；P1 v2.0 起 |
+| [`v2.0-p1.md`](v2.0-p1.md) | issue [#218](https://github.com/Old-Friends-Gathering/sedimem/issues/218)：P1a v2.0 第一波（标注规范/冻结测试集/基线/证据 schema 规格/九项冻结），规格包见 [`design/v2.0/`](../design/v2.0/README.md) | 执行中：B0 计划+三审完成（PR #219，[R1/R2/R3 报告](../reviews/v2.0-p1a-2026-11-18/REVIEW.md)）；规格包 R1/R2/R3 完成（PR #220，[报告](../reviews/v2.0-design-spec-2026-11-18/REVIEW.md)）；B1 语料+工具完成（PR #221）；B2 进行中 | v2.0（规划中，未切 CURRENT） |
 | [`future-architecture-final-state.html`](future-architecture-final-state.html) | 终态架构可视化（图 1 分层总览 / 图 2 候选生命周期交互图），随上表计划更新 | 可视化随计划更新 | 推演至 P2/P3/P5 终态 |
 | [`v0.2-web-ui-plan.md`](v0.2-web-ui-plan.md) | issue [#10](https://github.com/Old-Friends-Gathering/sedimem/issues/10) 只读 Web UI（设计见 [`08-web-ui.md`](../08-web-ui.md)） | 待执行 | v0.1.3 + v0.2.0 |
 
