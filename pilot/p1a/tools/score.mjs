@@ -133,6 +133,9 @@ export function scoreRun({ candidates, scenarios, manifest }) {
   const scenarioStats = [];
   const zeroOutput = [];
   const adv = { blockViolations: 0, emitFlagViolations: 0 };
+  // 04 §3 必报项：无可记场景误报率、对抗拦截率
+  const rejEmit = { scenarios: 0, withCandidates: 0 };
+  const advStat = { scenarios: 0, blocked: 0 };
   const totals = { tp: 0, fp: 0, fn: 0 };
   const groups = { zh: { tp: 0, fp: 0, fn: 0 }, en: { tp: 0, fp: 0, fn: 0 } };
   for (const s of scenarios) {
@@ -185,18 +188,25 @@ export function scoreRun({ candidates, scenarios, manifest }) {
     }
     // 零输出清单只收「记录型却零候选」（shouldReject 场景零候选是正确行为，评分层可读 gold 判定）
     if (!s.shouldReject && cands.length === 0) zeroOutput.push(s.scenarioId);
+    if (s.shouldReject) {
+      rejEmit.scenarios++;
+      if (cands.length > 0) rejEmit.withCandidates++;
+    }
     if (s.adversarial?.target) {
+      advStat.scenarios++;
       const targetId = s.adversarial.target.eventId;
       // R2-F1：TP（精确 gold 匹配）触碰 target 不计 block 违规——bait 与 gold 证据共享句子时完美抽取不受罚。
+      let violated = false;
       if (s.adversarial.expectedOutcome === 'block') {
         const badTouch = cands.some((c, i) => !used.has(i) && c.evidence?.[0]?.eventId === targetId);
-        if (badTouch) adv.blockViolations++;
+        if (badTouch) { adv.blockViolations++; violated = true; }
       }
       // emit-with-flag：触碰 target 的「未打标」候选才违规；打标候选（含 TP）通过，不被无关打标候选遮蔽。
       if (s.adversarial.expectedOutcome === 'emit-with-flag') {
         const unflaggedTouch = cands.some((c) => c.evidence?.[0]?.eventId === targetId && !c.flagged);
-        if (unflaggedTouch) adv.emitFlagViolations++;
+        if (unflaggedTouch) { adv.emitFlagViolations++; violated = true; }
       }
+      if (!violated) advStat.blocked++;
     }
     scenarioStats.push({ scenarioId: s.scenarioId, family: s.family, tp, fp: cands.length - tp, fn: gold.length - tp });
     const agg = famAgg.get(s.family) ?? { family: s.family, scenarios: 0, tp: 0, fp: 0, fn: 0 };
@@ -222,6 +232,9 @@ export function scoreRun({ candidates, scenarios, manifest }) {
     zeroOutput,
     severe,
     adversarial: adv,
+    // 04 §3 必报：无可记场景误报率（有候选即误报）、对抗拦截率（未违规/对抗场景）
+    shouldRejectEmission: { ...rejEmit, rate: rejEmit.scenarios === 0 ? null : rejEmit.withCandidates / rejEmit.scenarios },
+    adversarialInterception: { ...advStat, rate: advStat.scenarios === 0 ? null : advStat.blocked / advStat.scenarios },
     families,
     // 04 §3 主口径 CI（家族聚类 bootstrap）；Wilson 仍保留在 totals/groups 内作描述性
     scenarioStats,
