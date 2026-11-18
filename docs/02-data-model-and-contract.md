@@ -1066,7 +1066,7 @@ v1.0 是重构版本，**行为不改，只改结构与文档**。以下五条�
 ## §3.22 v1.1 内部导出登记（第十二轮）
 Q5 契约覆盖按「导出名必须出现在 docs/」判定，这里逐模块登记 v1.1 新增与历史遗漏的导出；语义以各模块顶部注释为准。
 
-**会话（`src/session/`）**：`listSessions`、`renameSession`、`removeSession`、`readSessionRegistry`、`writeSessionRegistry`、`updateSessionRegistry`、`sessionRegistryPath`、`resolveParentScope`、`assertSessionOpen`、`SCRATCH_FORBIDDEN_KINDS`、`autoCheckpoint`、`readDshTranscript`、`readCodexRollout`、`toTurns`、`parseJsonl`、`compactTranscript`。
+**会话（`src/session/`）**：`listSessions`、`renameSession`、`removeSession`、`readSessionRegistry`、`writeSessionRegistry`、`updateSessionRegistry`、`sessionRegistryPath`、`resolveParentScope`、`assertSessionOpen`、`SCRATCH_FORBIDDEN_KINDS`、`autoCheckpoint`、`readDshTranscript`、`readCodexRollout`、`readCodexSession`、`findCodexRolloutById`、`findLatestCodexRollout`、`toTurns`、`parseJsonl`、`compactTranscript`。
 
 **写入/生命周期（`src/api/`）**：`init`、`reload`、`_policy`。
 

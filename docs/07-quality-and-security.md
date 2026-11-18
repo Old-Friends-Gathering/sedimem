@@ -23,7 +23,7 @@ cd "$(cat versions/CURRENT)" && node eval/run.js   # 行为（I1–I56）
 
 | 项 | 指标 | 阈值 | 失败含义 |
 |---|---|---|---|
-| `test (22)` / `test (24)` | `node --test 'tests/**/*.test.js'` | **0 失败**（2026-11-18 实测 866 用例） | 行为回归，或测试自身有竞态（历史上 I8 就因此偶发红，已修根因） |
+| `test (22)` / `test (24)` | `node --test 'tests/**/*.test.js'` | **0 失败**（2026-11-18 实测 870 用例） | 行为回归，或测试自身有竞态（历史上 I8 就因此偶发红，已修根因） |
 | `eval (I1–I56)` | `eval/run.js` 退出码 | **全 PASS**（最近一次见 `eval/results/LATEST.json`） | 注入式行为契约破了：重复/冲突/过时/删除/投毒/配额/改写/并发/时区/遮蔽/裁决回路/中文改写等 56 条 |
 | `windows-smoke` | `node tools/windows-smoke.mjs`（`windows-latest`） | **全部 PASS** | Windows 真相层文件名 / 分库枚举 / `compact` / `nightly` 之一回归（见 §一.1） |
 | 关键指标 | `dupRatio` / `conflictRate` | `dupRatio = 0`；`conflictRate` 只允许由**真冲突用例**产生 | 冗余或冲突治理失效 |
@@ -53,9 +53,9 @@ cd "$(cat versions/CURRENT)" && node eval/run.js   # 行为（I1–I56）
 
 | 指标 | 当前基线 | 阈值 | 备注 |
 |---|---|---|---|
-| lines | 90.30% | **≥ 85%** | 未覆盖的主要是 MCP 协议边界、交互式分支与 UI i18n |
-| branches | 82.69% | **≥ 70%** | |
-| functions | 91.23% | **≥ 90%** | |
+| lines | 90.31% | **≥ 85%** | 未覆盖的主要是 MCP 协议边界、交互式分支与 UI i18n |
+| branches | 82.62% | **≥ 70%** | |
+| functions | 91.27% | **≥ 90%** | |
 
 统计方式：`npm run test:coverage`（排除 `src/cli/memo.js` 进程外壳，理由见 §七）。
 
@@ -157,7 +157,7 @@ Pages 构建是异步的（实测 2–5 分钟），脚本默认重试 20×15s�
 
 | 门禁 | 结果 |
 |---|---|
-| 单元 + 注入式 | **866 tests pass**（1 skipped，Windows 权限用例）（`node --test 'tests/**/*.test.js'`） |
+| 单元 + 注入式 | **870 tests pass**（1 skipped，Windows 权限用例）（`node --test 'tests/**/*.test.js'`） |
 | 评测 | **eval I1–I56 全 PASS**（`node eval/run.js`；最近一次结果归档于 `eval/results/LATEST.json`，2026-11-17T04:06Z，56/56 通过） |
 | 质量 | **15/15**（Q1–Q11 + Q13–Q16） |
 | 安全 | 9/9（含 S9：src/web 无写接口、只绑回环） |

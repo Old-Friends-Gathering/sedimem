@@ -321,6 +321,91 @@ export function readDshTranscript({ sessionsRoot, cwd, sessionId }) {
  *   date 形如 'YYYY-MM-DD'（省略 file 时按日期定位目录，取目录里第一个 rollout-*.jsonl）
  * @returns {{records: object[], badLines: number, file: string}}
  */
+
+/**
+ * 读 Codex 会话并转成统一 turns。
+ * 优先 file；否则按 sessionId 在 sessionsRoot 下找 rollout-*<id>*.jsonl。
+ * @param {{sessionsRoot: string, file?: string, sessionId?: string}} args
+ * @returns {{turns: Array<{role: string, text: string, ts?: string}>, events: number, file: string, sessionId: string}}
+ */
+export function readCodexSession({ sessionsRoot, file, sessionId } = {}) {
+  if (!sessionsRoot) throw err('E_INVALID_ARG', 'readCodexSession: sessionsRoot 必填');
+  let target = file;
+  if (!target && sessionId) {
+    target = findCodexRolloutById(sessionsRoot, sessionId);
+  }
+  if (!target) throw err('E_INVALID_ARG', 'readCodexSession: 需要 file 或 sessionId');
+  if (!existsSync(target)) throw err('E_TRANSCRIPT_UNAVAILABLE', `Codex rollout 不存在: ${target}`);
+  const { records, badLines } = parseJsonl(readFileSync(target, 'utf8'));
+  const { turns } = toTurns(records);
+  const meta = records.find((r) => r && r.type === 'session_meta')?.payload ?? {};
+  return {
+    turns,
+    events: records.length,
+    badLines,
+    file: target,
+    sessionId: String(meta.session_id ?? meta.id ?? sessionId ?? path.basename(target)),
+  };
+}
+
+/** 在 sessionsRoot 下按 sessionId 精确找 rollout 文件（文件名自带 id）。 */
+export function findCodexRolloutById(sessionsRoot, sessionId) {
+  if (!sessionId) return null;
+  const needle = String(sessionId);
+  const years = safeDirs(sessionsRoot).filter((n) => /^\d{4}$/.test(n)).sort().reverse();
+  for (const y of years) {
+    for (const m of safeDirs(path.join(sessionsRoot, y)).sort().reverse()) {
+      for (const d of safeDirs(path.join(sessionsRoot, y, m)).sort().reverse()) {
+        for (const n of safeDirFiles(path.join(sessionsRoot, y, m, d))) {
+          if (n.startsWith('rollout-') && n.endsWith('.jsonl') && n.includes(needle)) {
+            return path.join(sessionsRoot, y, m, d, n);
+          }
+        }
+      }
+    }
+  }
+  return null;
+}
+
+/**
+ * 找某个 cwd 最近活跃的 Codex rollout（自动捕获用：Codex 没有 DSH_SESSION_ID）。
+ * 只扫最近 lookbackDays 天；按 mtime 降序，读首条 session_meta 的 cwd 匹配。
+ */
+export function findLatestCodexRollout({ sessionsRoot, cwd, lookbackDays = 2, now = Date.now() } = {}) {
+  if (!sessionsRoot || !cwd) throw err('E_INVALID_ARG', 'findLatestCodexRollout: sessionsRoot/cwd 必填');
+  const want = path.resolve(cwd);
+  const seen = [];
+  for (let i = 0; i < Math.max(1, lookbackDays); i += 1) {
+    const t = new Date(now - i * 86_400_000);
+    const dir = path.join(sessionsRoot, String(t.getFullYear()), String(t.getMonth() + 1).padStart(2, '0'), String(t.getDate()).padStart(2, '0'));
+    for (const n of safeDirFiles(dir)) {
+      if (n.startsWith('rollout-') && n.endsWith('.jsonl')) seen.push(path.join(dir, n));
+    }
+  }
+  const scored = seen.map((f) => { let mtime = 0; try { mtime = statSync(f).mtimeMs; } catch {} return { f, mtime }; })
+    .sort((a, b) => b.mtime - a.mtime);
+  for (const { f } of scored) {
+    const meta = readFirstCodexMeta(f);
+    if (meta && meta.cwd && path.resolve(meta.cwd) === want) return f;
+  }
+  return null;
+}
+
+function safeDirs(p) {
+  try { return readdirSync(p, { withFileTypes: true }).filter((d) => d.isDirectory()).map((d) => d.name); } catch { return []; }
+}
+function safeDirFiles(p) {
+  try { return readdirSync(p, { withFileTypes: true }).filter((d) => d.isFile()).map((d) => d.name); } catch { return []; }
+}
+function readFirstCodexMeta(file) {
+  try {
+    const text = readFileSync(file, 'utf8');
+    const first = text.split('\n', 1)[0];
+    const rec = JSON.parse(first);
+    return rec?.payload && typeof rec.payload === 'object' ? rec.payload : null;
+  } catch { return null; }
+}
+
 export function readCodexRollout({ sessionsRoot, date, file }) {
   if (!sessionsRoot) throw err('E_INVALID_ARG', 'readCodexRollout: sessionsRoot 必填');
   let target = file;

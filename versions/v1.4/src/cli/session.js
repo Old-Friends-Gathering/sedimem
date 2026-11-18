@@ -28,6 +28,7 @@ const USAGE = `memo session —— 会话临时记忆库（可丢弃、可晋升
 用法:
   memo session start --title <t> [--repo <path>] [--json]        建临时库，返回 scope 与提示
   memo session checkpoint --scope session:<id> (--file <json> | --from-summary <dsh.json> | --auto [--transcript <path>] [--llm]) [--json]
+  memo session capture --scope session:<id> [--cwd <path>] [--session-id <id>] [--codex <file>] [--llm|--rules] [--dry-run] [--json]
   memo session status --scope session:<id> [--json]
   memo session close --scope session:<id> [--json]               晋升 decision/gotcha → 主库 + 写交接 + 其余 tombstone
   memo session sweep [--older-than 14d] [--json]                 只报告僵尸 session 候选，不删
@@ -378,11 +379,17 @@ export async function sessionCli(args, { service, memoHome, clock = systemClock,
           writeOut('提示：LLM 未就绪（缺 key 或 provider=none），本次将回落到规则抽取\n');
         }
       }
+      // --codex <file>：从 Codex rollout 捕获；--codex 不带值则配合 --session-id 按 id 找。
+      const codexOpt = opts.codex;
+      const sourceKind = codexOpt === undefined || codexOpt === false ? 'dsh' : 'codex';
+      const codexFile = typeof codexOpt === 'string' ? codexOpt : undefined;
       const res = await captureTask({
         memoHome,
         taskId,
         cwd: typeof opts.cwd === 'string' ? opts.cwd : process.cwd(),
         sessionId: typeof opts['session-id'] === 'string' ? opts['session-id'] : undefined,
+        sourceKind,
+        codexFile,
         mode,
         llmPort,
         dryRun: opts['dry-run'] === true,

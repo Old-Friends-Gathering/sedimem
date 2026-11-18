@@ -284,7 +284,7 @@ claude mcp add --scope user memo -e MEMO_HOME=$HOME/.memo -- \
 
 ![五层门禁：质量 → 安全 → 覆盖率 → docs-drift → pages-verify](docs/shots/diagrams/gates.png)
 
-本地脚本 = CI 脚本：质量 15 项 + 安全 9 项 + 覆盖率（lines ≥ 85 / branches ≥ 70 / functions ≥ 90）+ docs-drift + pages-verify，另含 866 tests 与 eval I1–I56。
+本地脚本 = CI 脚本：质量 15 项 + 安全 9 项 + 覆盖率（lines ≥ 85 / branches ≥ 70 / functions ≥ 90）+ docs-drift + pages-verify，另含 870 tests 与 eval I1–I56。
 
 ```bash
 node tools/quality-check.mjs && node tools/security-check.mjs && node tools/coverage-gate.mjs
@@ -308,7 +308,8 @@ node tools/quality-check.mjs && node tools/security-check.mjs && node tools/cove
 |---|---|---|
 | **v1.4.0** | P0b 启动：英文 README/项目站（英文示意图 + `?lang=en` UI）、两版 README 加项目站链接 | ✅ 已发布 |
 | **v1.4.1** | 自动捕获周期扫描：open 任务每 60s 检查，30k 上下文自动落段（不依赖 memory 工具调用） | ✅ 已发布 |
-| **v1.4.2** | 任务库多会话关联：自动登记全部开发会话，watcher 逐会话捕获，不再手动 bind | 🚧 进行中 |
+| **v1.4.2** | 任务库多会话关联：自动登记全部开发会话，watcher 逐会话捕获，不再手动 bind | ✅ 已发布 |
+| **v1.4.3** | Codex 会话捕获：`--codex` 手工导入 + 按 id/cwd 自动登记，段标 `source.kind=codex` | 🚧 进行中 |
 | v1.3.1 | 任务库术语与入口修复：MCP 统一「任务库=临时记忆库」、`memory_write` 支持 `scope`、`memory_scope` 补 session 示例 | ✅ 已发布 |
 | v1.3.0 | P0a 地基：CI 跑 CURRENT、覆盖率/Windows 冒烟去硬编码、engines 22.15、文档与门禁对齐 | ✅ 已发布 |
 | v1.2.2 | 文档同步门禁 Q16 + README/项目站补「任务账本」章节与 CLI 速查 | ✅ 已发布 |

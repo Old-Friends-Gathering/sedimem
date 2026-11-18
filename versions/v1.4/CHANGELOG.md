@@ -1,5 +1,12 @@
 # CHANGELOG · v1.4
 
+## 1.4.3
+
+- 跨 harness：`captureTask` 支持 `sourceKind="codex"`，从 `~/.codex/sessions/**/rollout-*.jsonl` 捕获。
+- `memo session capture --codex <file>` / `--codex --session-id <id>` 手工导入 Codex 会话。
+- 自动捕获按 id 解析 DSH→Codex，再按 cwd 找最近活跃 Codex 会话；工具调用时自动登记 `hostSessionIds`。
+- 段 `source.kind="codex"`，UI 显示 `codex` 来源。
+
 ## 1.4.2
 
 - 任务库多会话关联：`meta.hostSessionIds` 记录全部开发会话，`hostSessionId` 保留最近主会话。

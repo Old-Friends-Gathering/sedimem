@@ -156,6 +156,7 @@ export function buildSegmentRow(seg) {
     decisions: textList(rec.decisions),
     gotchas: textList(rec.gotchas),
     nextSteps: textList(rec.nextSteps),
+    sourceKind: rec?.source?.kind === 'codex' ? 'codex' : '',
     anchorShort: rec?.source?.sessionId ? `…${String(rec.source.sessionId).slice(-6)}` : '',
     anchorFull: rec?.source?.sessionId ? String(rec.source.sessionId) : '',
     when: (() => { const t = Date.parse(rec?.fromAt) || Date.parse(rec?.createdAt); if (!Number.isFinite(t)) return ''; return new Intl.DateTimeFormat('sv-SE', { timeZone: 'Asia/Shanghai', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', hour12: false }).format(new Date(t)).slice(5).replace('T', ' '); })(),
@@ -401,6 +402,7 @@ export async function mountLedger(deps) {
         tag.title = row.anchorFull;
         summary.append(tag);
       }
+      if (row.sourceKind) summary.append(el('span', 'badge ledger-source', row.sourceKind));
       if (row.quarantined) summary.append(el('span', 'badge b-warn ledger-q', row.quarantineLabel));
       summary.append(el('span', 'ledger-excerpt', row.excerpt || '（无摘要）'));
       item.append(summary);
