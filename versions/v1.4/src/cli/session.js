@@ -4,7 +4,7 @@
 // 零依赖（只用 node 内置）；不改 src/cli/memo.js（W3 再接入口）。
 
 import { readFile } from 'node:fs/promises';
-import { existsSync } from 'node:fs';
+import { existsSync, rmSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { itemsFileName } from '../config/paths.js';
 import { systemClock } from '../core/clock.js';
@@ -33,6 +33,7 @@ const USAGE = `memo session —— 会话临时记忆库（可丢弃、可晋升
   memo session sweep [--older-than 14d] [--json]                 只报告僵尸 session 候选，不删
   memo session list [--json]                                     任务库清单：标题 | 记录数 | 状态 | 更新时间 | scope
   memo session rename --scope session:<id> --title <t> [--json]  任务库改名（1..80 字符，禁换行）
+  memo session auto-capture <on|off|status> [--json]             自动入账总开关（$MEMO_HOME/autocapture.off 哨兵）
   memo session bind --scope session:<id> --session-id <hostSessionId> [--json]
                                                                  绑定宿主会话转录（自动入账精确探测用）
   memo session remove --scope session:<id> [--yes] [--json]      删任务库（移入 trash/；无 --yes 只预览，退出码 2）
@@ -497,6 +498,24 @@ export async function sessionCli(args, { service, memoHome, clock = systemClock,
           `自动入账将按此 id 精确定位转录（${path.basename(file)}）。\n`,
         { scope, hostSessionId: String(opts['session-id']).trim(), previous, file },
       );
+    }
+
+    case 'auto-capture': {
+      const action = rest[0];
+      const offFile = path.join(memoHome, 'autocapture.off');
+      if (action === 'off') {
+        writeFileSync(offFile, 'disabled\n');
+        return emit('自动捕获已关闭（删 $MEMO_HOME/autocapture.off 或执行 on 恢复）\n', { autoCapture: false });
+      }
+      if (action === 'on') {
+        rmSync(offFile, { force: true });
+        return emit('自动捕获已开启\n', { autoCapture: true });
+      }
+      if (action === 'status' || action === undefined) {
+        const off = existsSync(offFile);
+        return emit(`自动捕获：${off ? '已关闭（哨兵存在）' : '已开启'}\n`, { autoCapture: !off });
+      }
+      throw new UsageError(`auto-capture 只接受 on|off|status\n${USAGE}`);
     }
 
     case 'remove': {
