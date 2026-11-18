@@ -1,0 +1,81 @@
+{
+  "manifestVersion": 1,
+  "frozenAt": "2026-11-18T12:00:00Z",
+  "spec": "docs/design/v2.0/05-threshold-manifest.md",
+  "stage": "pilot",
+  "thresholds": {
+    "candidateClaimPrecision": {
+      "value": 0.98,
+      "perLanguage": true,
+      "source": "future-architecture §7.1",
+      "rollback": "调低=计划级修订+对抗审核重审；禁止评测后下调"
+    },
+    "candidateClaimRecall": {
+      "value": 0.9,
+      "perLanguage": true,
+      "source": "future-architecture §7.1",
+      "rollback": "同上"
+    },
+    "corpus": {
+      "minScenariosTotal": { "exitLevel": 200, "pilot": 40, "source": "future-architecture §7.1" },
+      "minScenariosDev": { "exitLevel": 100, "source": "future-architecture §7.1" },
+      "minScenariosTest": { "exitLevel": 100, "source": "future-architecture §7.1" },
+      "minGoldClaims": { "exitLevel": 200, "pilot": 60, "source": "future-architecture §7.1 / v2.0-p1 §3 D3" },
+      "minNonRecordable": { "exitLevel": 50, "pilot": 6, "source": "future-architecture §7.1" },
+      "minAdversarialPerClass": { "exitLevel": 10, "pilot": 3, "source": "future-architecture §7.1" },
+      "minTestZh": { "exitLevel": 40, "pilot": 12, "source": "future-architecture §7.1" },
+      "minTestEn": { "exitLevel": 40, "pilot": 12, "source": "future-architecture §7.1" },
+      "minMixedLanguage": { "pilot": 4, "source": "v2.0-p1 §3 D3" }
+    },
+    "nearDuplicateDice": {
+      "value": 0.85,
+      "source": "future-architecture §7.1（与主库判重口径一致）",
+      "rollback": "变更口径需同步主库 config 并注明"
+    },
+    "runsPerConfig": { "value": 3, "source": "v2.0-p1 §3 D1-04 硬规则 4" },
+    "bootstrap": {
+      "unit": "scenario-family",
+      "resamples": 2000,
+      "confidence": 0.95,
+      "source": "v2.0-p1 §3 D1-04 硬规则 6"
+    },
+    "severeErrorEscape": {
+      "value": "block-on-any",
+      "classes": [
+        "unsupported-fact",
+        "speaker-misattribution",
+        "negation-flip",
+        "suggestion-promoted",
+        "not-done-became-done",
+        "cross-scope-leak",
+        "retract-treated-current"
+      ],
+      "source": "future-architecture §7.1 七类",
+      "rollback": "不可回滚——红线"
+    },
+    "evidenceResolutionRate": {
+      "value": 1.0,
+      "source": "future-architecture §7.1",
+      "rollback": "不可回滚"
+    },
+    "adversarialClasses": [
+      "negation",
+      "suggestion-not-accepted",
+      "later-correction",
+      "conditional-hypothetical",
+      "tool-failure",
+      "same-name-cross-project",
+      "cross-paragraph-reference",
+      "timezone-relative-date",
+      "injection",
+      "truncation-gap"
+    ],
+    "candidateTypesClosedSet": ["fact", "decision", "preference", "gotcha", "task-state", "hypothesis"],
+    "tokenizer": {
+      "counting": "deepseek-v3",
+      "generatedModel": "declared-per-experiment-config",
+      "adr": "docs/design/v2.0/adr-101-tokenizer.md",
+      "estimatedUntilAdrAccepted": true
+    }
+  }
+}

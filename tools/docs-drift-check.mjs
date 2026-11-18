@@ -18,6 +18,13 @@ function isContentExempt(rel) {
   return path.basename(rel).startsWith('adr-');
 }
 
+// docs/design/**：未来版本契约暂存区（planned），R2–R5 豁免——它描述的是
+// 目标版本契约而非 CURRENT 行为；冻结并随 CURRENT 切换同步进现行契约文档
+// 后按同步结果核对。R1 头部元信息仍必填（doc-kind/doc-version 写目标版本）。
+function isPlannedSpec(rel) {
+  return /^docs[\\/]design[\\/]/.test(rel);
+}
+
 // 递归遍历 docs/ 下所有 *.md；豁免目录（research/plans/marketing）整体跳过，
 // 其余子目录一律扫描（子目录不能再作为绕过口）。
 function listDocs(root) {
@@ -187,7 +194,8 @@ export function checkDocs({ root } = {}) {
     const verM = text.match(/^>\s*doc-version:\s*(\d+\.\d+)\s*$/m);
     const kind = kindM ? kindM[1] : null;
     // adr-*.md 内容冻结：只豁免 R2–R5，R1 头部元信息仍要查
-    const contentExempt = isContentExempt(rel);
+    // adr-*.md / docs/design/** 内容冻结或 planned：只豁免 R2–R5，R1 头部元信息仍要查
+    const contentExempt = isContentExempt(rel) || isPlannedSpec(rel);
 
     // R1 头部元信息缺失（history 可选）
     if (kind !== 'history' && (!kindM || !verM)) {
