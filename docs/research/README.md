@@ -1,5 +1,7 @@
 # 调研资料（本记忆系统的证据基础）
 
+最新路线输入：[2026-11-18 开源复核与上下文抽取](extraction-first-memory-2026-11-18.md)；对应 [未来架构计划](../plans/future-architecture.md)。历史调研中的星数、成绩与定位不自动沿用。
+
 这里放的是 **v0.1 设计与裁决所依据的原始调研**，不是设计文档本身。设计结论在上级目录
 [`00`](../00-principles-and-requirements.md)–[`06`](../06-usage.md)，实现契约在 [`02`](../02-data-model-and-contract.md)。
 **读的顺序**：想先看结论 → `memory-system-report-and-plan.md`；想验收「这个结论有没有证据」→ 下面的原始调研；1.0.0 立项依据见文末「v1.0.0 调研批次」。
