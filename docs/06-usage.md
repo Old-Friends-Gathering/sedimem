@@ -284,6 +284,14 @@ launchctl kickstart -k gui/$(id -u)/live.sedimem.observer   # 让常驻观察台
 > 版本目录切换之后，**夜间整合一直在跑冻结代码**，仓库里的门禁扫不到，只有查 crontab 才发现。
 > 结论：定时与常驻配置里一律不落版本号，版本由 `versions/CURRENT` 单点决定。
 
+### 12.1 stdio MCP 入口也走同一脚本（`mcp` 子命令）
+
+宿主（DSH 等）以 stdio 方式连 MCP 时同样不落版本号，用 `scripts/sedimem-run.sh mcp` 作为 command
+（脚本会 exec `versions/<CURRENT>/src/mcp/server.js`）。实测教训：连接器配置把 server 路径写死成
+某个已冻结旧版本的 `src/mcp/server.js` 绝对路径之后，新版本发版、CURRENT 切换，**本机会话仍在跑
+冻结代码**——新能力（自动入账、checkpoint 合并展示）静默缺失。凡 stdio/HTTP 常驻配置，一律与
+plist 同规则：只出现 `scripts/sedimem-run.sh`，不出现任何 `versions/vX.Y/` 路径。
+
 ### 12.1 安装
 
 ```bash

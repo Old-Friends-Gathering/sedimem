@@ -38,6 +38,9 @@ CMD=${1:-}
 case "$CMD" in
   serve)   ENTRY="src/cli/memo.js";   ARGS="serve $*" ;;
   nightly) ENTRY="src/cli/nightly.js"; ARGS="$*" ;;
+  # stdio MCP 入口：宿主（如 DSH cordis.patch.yml）用它替代写死版本目录——
+  # 实测教训：连接器配置写死 versions/v1.3 后，v1.4 发版本会话仍跑冻结代码。
+  mcp)     ENTRY="src/mcp/server.js"; ARGS="" ;;
   *) usage ;;
 esac
 

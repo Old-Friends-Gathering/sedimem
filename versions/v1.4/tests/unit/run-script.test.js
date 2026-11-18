@@ -29,6 +29,12 @@ test('--print serve：保留端口等参数', () => {
   assert.match(out, /src\/cli\/memo\.js serve --port 7799$/);
 });
 
+test('--print mcp：解析到 versions/<CURRENT>/src/mcp/server.js（stdio 入口，跟 CURRENT 走）', () => {
+  const out = print('mcp');
+  assert.match(out, new RegExp(`versions/${CURRENT.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}/src/mcp/server\\.js$`),
+    `mcp 入口必须跟 CURRENT=${CURRENT} 走，实际：${out}`);
+});
+
 test('--print 不执行：打印后立即退出（无副作用）', () => {
   // 若真执行了 serve，这里会因为端口占用/阻塞而超时；能秒回就说明只打印
   const t0 = Date.now();
