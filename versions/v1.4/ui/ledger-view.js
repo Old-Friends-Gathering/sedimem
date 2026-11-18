@@ -197,6 +197,21 @@ export function buildBriefText(brief) {
   return lines.join('\n');
 }
 
+
+function coveredOf(segments) {
+  const spans = segments
+    .filter((s) => Number.isFinite(s?.fromSeq) && Number.isFinite(s?.toSeq))
+    .map((s) => [s.fromSeq, s.toSeq])
+    .sort((a, b) => a[0] - b[0]);
+  const out = [];
+  for (const [from, to] of spans) {
+    const last = out.at(-1);
+    if (last && from <= last[1] + 1) last[1] = Math.max(last[1], to);
+    else out.push([from, to]);
+  }
+  return out;
+}
+
 /** `/api/task-context` 返回 → 视图模型（容忍缺失/异常形状）。 */
 export function normalizeContext(raw) {
   const body = raw && typeof raw === 'object' ? raw : {};
@@ -333,6 +348,7 @@ export async function mountLedger(deps) {
   let segments = [];
   let checkpoints = [];
   let segmentsError = '';
+  let hiddenOldSegments = 0;
   let selectedId = '';
 
   // ② .ledger 段区块
@@ -352,11 +368,12 @@ export async function mountLedger(deps) {
   acts.append(captureBtn, archiveBtn, expandBtn);
   head.append(acts);
   const note = el('div', 'ledger-note faint');
+  const historyNote = el('div', 'ledger-note faint');
   const cmd = el('div', 'ledger-cmd mono');
   cmd.hidden = true;
   const segBox = el('div', 'ledger-segs');
   const cpBox = el('div', 'ledger-cps');
-  ledger.append(head, note, cmd, segBox, cpBox);
+  ledger.append(head, note, historyNote, cmd, segBox, cpBox);
 
   // ③ .ledger-brief 简报面板（正文默认折叠，按钮常驻可点）
   const brief = el('div', 'ledger-brief');
@@ -468,6 +485,9 @@ export async function mountLedger(deps) {
 
   const renderAll = () => {
     summarySlot?.replaceChildren?.(buildSummaryBar(context, { writeEnabled, hint }));
+    historyNote.textContent = hiddenOldSegments > 0
+      ? `已隐藏 ${hiddenOldSegments} 段旧转录（其它会话）；checkpoint 是任务级，不受影响。`
+      : '';
     count.textContent = checkpoints.length > 0
       ? `${segments.length} 段 · ${checkpoints.length} checkpoint`
       : `${segments.length} 段`;
@@ -483,7 +503,17 @@ export async function mountLedger(deps) {
     }
     try {
       const segBody = await apiGet(`/task-segments?task=${encodeURIComponent(taskId)}`);
-      segments = normalizeSegments(segBody);
+      const allSegments = normalizeSegments(segBody);
+      const hostSessionId = context.meta?.hostSessionId;
+      if (hostSessionId) {
+        segments = allSegments.filter((s) => s?.source?.sessionId === hostSessionId);
+        hiddenOldSegments = allSegments.length - segments.length;
+      } else {
+        segments = allSegments;
+        hiddenOldSegments = 0;
+      }
+      context.segments = segments.length;
+      context.covered = coveredOf(segments);
       checkpoints = normalizeCheckpoints(segBody);
       segmentsError = '';
     } catch (err) {

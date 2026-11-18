@@ -13,7 +13,7 @@ import { createStaticHandler } from './static.js';
 import {
   assertHostAllowed, isLoopbackHost, presentedToken, sessionCookie,
 } from './auth.js';
-import { issueWebToken, tokensEqual } from '../config/web-token.js';
+import { issueWebToken, readWebToken, tokensEqual } from '../config/web-token.js';
 import { describePermIssues, ensureMemoDir, inspectMemoPerms } from '../config/perms.js';
 
 const UI_DIR = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../ui');
@@ -61,7 +61,7 @@ export async function createWebServer({
   const svc = service ?? await createMemoryService({ memoHome, scope });
   // B4：浏览器面与 MCP 面共用同一个 token 文件；每次启动重新生成（docs/plans/v1.4-p0b.md B4）。
   await ensureMemoDir(memoHome);
-  const sessionToken = typeof token === 'string' && token !== '' ? token : await issueWebToken(memoHome);
+  let sessionToken = typeof token === 'string' && token !== '' ? token : await issueWebToken(memoHome);
   // 权限自查只告警不阻断：存量 `~/.memo` 多为 0755，阻断会把老用户挡在门外（docs/02 §3.24）。
   const permReport = await inspectMemoPerms(memoHome);
   for (const line of describePermIssues(permReport)) process.stderr.write(`${line}\n`);
@@ -130,8 +130,14 @@ export async function createWebServer({
       // 2) token 强校验：所有 /api/* 一律先认证，再谈方法/参数。
       //    顺序讲究：未认证请求不应看到 404/405 这类「端点存不存在」的信号。
       if (!tokensEqual(presentedToken(req), sessionToken)) {
-        unauthorized(res);
-        return;
+        // 多个 serve/插件进程共享同一个 MEMO_HOME 时，后启动的会轮换 web-token。
+        // 内存里的旧 token 不能把新页面锁死：失配时读一次磁盘，仍不匹配才 401。
+        const latest = await readWebToken(memoHome).catch(() => null);
+        if (!latest || !tokensEqual(presentedToken(req), latest)) {
+          unauthorized(res);
+          return;
+        }
+        sessionToken = latest;
       }
       // W7+I52：POST 只放行写端点（后续仍有 只读门禁/Origin 校验 在 write 通道内执行）；其余方法一律 405
       const isWritePost = req.method === 'POST'
