@@ -8,7 +8,7 @@
 //
 // 错误契约（SPEC §7）：task 非法（不匹配 TASK_ID_RE）→ E_INVALID_ARG(400)；任务不存在 → E_NOT_FOUND(404)。
 
-import { existsSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import path from 'node:path';
 
 import { invalidArg, notFound } from '../../core/errors.js';
@@ -17,6 +17,7 @@ import {
   DEFAULT_MAX_CHARS, briefJson, readTaskMeta,
 } from '../../session/ledger-brief.js';
 import { intArg } from './shared.js';
+import { itemsFileName } from '../../config/paths.js';
 
 /** 任务 ID 契约（与 session start 的 id 形状一致：小写字母/数字开头，1..64 字符）。 */
 export const TASK_ID_RE = /^[a-z0-9][a-z0-9._-]{0,63}$/;
@@ -59,13 +60,59 @@ function requireTask(service, query) {
 }
 
 /**
+ * 读取任务库 checkpoint（v1.4.x，issue #223）：checkpoint 由 MCP memory_session_checkpoint 写进
+ * items/session:<taskId>.jsonl（kind:'state' + predicate:'checkpoint'，value 是 8 段 JSON），
+ * 账本 GUI 原本只渲染 segments.jsonl 看不到它们——这里合并进 /api/task-segments 响应。
+ * 只读：逐行 JSON 解析（坏行计入 badLines，不抛错——GUI 展示不能因一条脏数据 500）。
+ * checkpoint 文件不存在 → []（旧任务库没有 checkpoint 属正常）。
+ */
+export function readCheckpoints(memoHome, taskId) {
+  const file = path.join(memoHome, 'items', itemsFileName(`session:${taskId}`));
+  if (!existsSync(file)) return [];
+  const out = [];
+  let badLines = 0;
+  let raw;
+  try {
+    raw = readFileSync(file, 'utf8');
+  } catch {
+    return [];
+  }
+  for (const line of raw.split('\n')) {
+    const t = line.trim();
+    if (!t) continue;
+    let rec;
+    try {
+      rec = JSON.parse(t);
+    } catch {
+      badLines++;
+      continue;
+    }
+    if (rec?.predicate !== 'checkpoint' || rec?.status === 'tombstoned') continue;
+    let sections = null;
+    try {
+      sections = typeof rec.value === 'string' ? JSON.parse(rec.value) : rec.value;
+    } catch {
+      sections = null; // value 不是 JSON → 仍展示时间与标题，sections 为空
+    }
+    out.push({
+      id: rec.id ?? null,
+      createdAt: rec.createdAt ?? null,
+      sections: sections && typeof sections === 'object' ? sections : null,
+    });
+  }
+  out.sort((a, b) => String(a?.createdAt ?? '').localeCompare(String(b?.createdAt ?? '')));
+  return { checkpoints: out, badLines };
+}
+
+/**
  * GET /api/task-segments?task=<id>
- * → { task, segments: 完整段记录[]（fromSeq 升序）, badLines, index }
+ * → { task, segments: 完整段记录[]（fromSeq 升序）, badLines, index, checkpoints, checkpointBadLines }
  * 段记录原样返回（含 anchor/source/tokens/trust 等字段），供 UI 展示区间与展开入口。
  */
 export async function apiTaskSegments(service, query) {
   const task = requireTask(service, query);
   const { segments, badLines } = readSegments({ memoHome: service.memoHome, taskId: task });
+  const { checkpoints, badLines: checkpointBadLines } = readCheckpoints(service.memoHome, task);
   return {
     task,
     segments: [...segments].sort((a, b) => {
@@ -76,6 +123,8 @@ export async function apiTaskSegments(service, query) {
     }),
     badLines,
     index: readIndex({ memoHome: service.memoHome, taskId: task }),
+    checkpoints,
+    checkpointBadLines,
   };
 }
 

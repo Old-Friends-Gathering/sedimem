@@ -775,6 +775,29 @@ decisions / gotchas / nextSteps）与简报面板；`--write` 下才有「捕获
 策略键（`config/policy.json` 的 `session.ledger`）：`maxTurnsPerSegment`（默认 120）、`briefMaxChars`（4000）、
 `capture.mode`（`rules|llm`）、`capture.maxInputTokens`（16000）。段**不进**记忆库，`filter`/`search`/`brief` 都查不到它。
 
+### 22.1 自动入账（v1.4.x：MCP 挂车捕获 + close 捕获）
+
+v1.2 的账本捕获只有 CLI 手动入口，任务库长期使用时账本会停在最后一次手动捕获。v1.4.x 补上两条自动路径
+（落实账本设计的原始诉求：每约 30k token 上下文自动压缩入账，见 `docs/research/task-context-ledger-design.md`）：
+
+- **挂车捕获**：MCP server 在每次工具调用完成后，若当前 scope 是 `session:<taskId>` 且账本已存在，
+  就检查绑定转录是否增长。转录绑定顺序：① `DSH_SESSION_ID` 环境变量精确匹配（转录目录名唯一，
+  与进程 cwd 无关）→ ② 进程 cwd 折算 slug 目录下最新转录。守卫链全部是 stat 级检查（不解压 zstd、
+  零 token）：转录 mtime/size 与 `sessions/<taskId>/autocapture.json` 记录一致 → 跳过；增长折算 token
+  （`growth / bytesPerToken`）< `captureTokens` 且距上次 < `minIntervalMs` → 跳过；达阈值才真正
+  `captureTask`（**rules 模式**，确定性零 token；幂等：重复捕获 created=0；段写入走账本锁防重叠）。
+  结果作为 `structuredContent.autoCapture` 附在响应里（`ran:false` 时带 `reason`）。
+- **close 捕获**（兑现 v1.2 声明过的 `captureOnClose`）：`memory_session_close` 成功关闭后执行一次
+  rules 模式捕获（best-effort，失败不阻塞 close）。
+
+fail-closed：捕获任何失败只记 `ran:false + reason`（如转录不存在 `no-transcript`、策略关闭 `disabled`），
+绝不影响主工具调用的返回。策略键（`session.ledger.autoCapture`）：`enabled`（默认 true）、`captureTokens`
+（30000——落实设计里 `--if-needed` 的 30k 阈值，替代旧死配置 `hintTokens`）、`bytesPerToken`（4.4，
+stat 级字节→token 折算系数，精确计数需解压全量转录违背零成本守卫）、`minIntervalMs`（1800000）、
+`cooldownMs`（60000，两次成功捕获最小间隔）。`autocapture.json` 是可删的运行状态文件（删了只影响下一次
+守卫判断，重新积累）。
+
+
 ## 23、P0b：工具面 / 读取预算 / 隔离区 / 审计（v1.4）
 
 ### 23.1 MCP 工具面（`--surface`）

@@ -13,6 +13,7 @@ import {
   getService, closeAllServices, initConnScope, makeServiceFacade,
 } from './session-tools.js';
 import { checkMcpToken, createMcpTokenGate } from './token-gate.js';
+import { postToolAutoCapture } from '../session/auto-capture.js';
 // 架构边界基线：mcp → session/cli-support 的边由本文件持有（tests/unit/arch-boundaries.test.js）
 import { PROMOTE_KINDS } from '../session/cli-support.js';
 
@@ -135,6 +136,11 @@ async function handleMessage(msg, _service, state) {
         const { text, structured } = await tool.handler(makeServiceFacade(state), args, state);
         const result = { content: [{ type: 'text', text }] };
         if (structured !== undefined) result.structuredContent = structured;
+        // 挂车自动捕获（issue #223）：session scope + 候选工具调用成功后，检查绑定转录是否
+        // 增长并按守卫链决定是否入账。fail-closed —— 任何失败只记进 structuredContent.autoCapture，
+        // 绝不影响主调用的返回（docs/06 §22.1）。
+        const autoCap = await postToolAutoCapture({ state, toolName });
+        if (autoCap) result.structuredContent = { ...(result.structuredContent ?? {}), autoCapture: autoCap };
         return rpcResult(id, result);
       } catch (err) {
         // 业务错误 → isError:true，不用 JSON-RPC error

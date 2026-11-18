@@ -135,7 +135,6 @@
     "titleEnforce": false
   },
   "session": {
-    "hintTokens": null,
     "ttlMs": 604800000,
     "promoteKinds": [
       "decision",
@@ -151,7 +150,14 @@
       "briefMaxChars": 4000,
       "captureOnClose": true,
       "requireCapture": false,
-      "llmMode": "llm"
+      "llmMode": "llm",
+      "autoCapture": {
+        "enabled": true,
+        "captureTokens": 30000,
+        "bytesPerToken": 4.4,
+        "minIntervalMs": 1800000,
+        "cooldownMs": 60000
+      }
     }
   },
   "math": {
