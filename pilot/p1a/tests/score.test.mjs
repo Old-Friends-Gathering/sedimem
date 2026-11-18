@@ -220,3 +220,31 @@ test('scoreRun：输出 bootstrap 且聚类数=家族数、逐场景统计与 to
   const sum = r.scenarioStats.reduce((a, x) => ({ tp: a.tp + x.tp, fp: a.fp + x.fp, fn: a.fn + x.fn }), { tp: 0, fp: 0, fn: 0 });
   assert.deepEqual(sum, { tp: r.totals.tp, fp: r.totals.fp, fn: r.totals.fn });
 });
+
+
+// ---------- 04 §3 必报三项：拦截率 / 无可记场景误报率 ----------
+test('shouldRejectEmission：无可记场景误报率（有候选即误报）', () => {
+  const sc = SCEN({ scenarioId: 'S9', gold: [], shouldReject: true, events: [{ eventId: 'm2', role: 'user', ts: 't', text: '今天天气不错。' }] });
+  const c = CAND({ candidateId: 'C9', claim: '今天天气不错', evidence: [{ eventId: 'm2', quote: '今天天气不错', start: 0, end: 6, hash: 'h9' }] });
+  const r = scoreRun({ candidates: [c], scenarios: [sc], manifest: { stage: 'pilot' } });
+  assert.equal(r.shouldRejectEmission.scenarios, 1);
+  assert.equal(r.shouldRejectEmission.withCandidates, 1);
+  assert.equal(r.shouldRejectEmission.rate, 1);
+});
+
+test('adversarialInterception：拦截率 = 未违规/对抗场景数', () => {
+  const adv = { class: 'negation', target: { eventId: 'm1', quote: '连接池已提升到 200' }, expectedOutcome: 'block', expectedErrorClass: 'negation-flip' };
+  // 场景 1：候选触碰 target 且非 TP → 违规（未拦截）；场景 2：无候选 → 拦截。
+  const bad = CAND({ candidateId: 'C2', claim: '另一条', evidence: [{ eventId: 'm1', quote: '连接池已提升到 200', start: 0, end: 10, hash: 'h2' }] });
+  const r = scoreRun({
+    candidates: [bad],
+    scenarios: [
+      SCEN({ adversarial: adv, gold: [] }),
+      SCEN({ scenarioId: 'S2', events: [{ eventId: 'm3', role: 'user', ts: 't', text: '无关。' }], gold: [], adversarial: { ...adv, target: { eventId: 'm3', quote: '无关' } } }),
+    ],
+    manifest: { stage: 'pilot' },
+  });
+  assert.equal(r.adversarialInterception.scenarios, 2);
+  assert.equal(r.adversarialInterception.blocked, 1);
+  assert.equal(r.adversarialInterception.rate, 0.5);
+});
