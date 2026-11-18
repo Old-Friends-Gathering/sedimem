@@ -54,8 +54,9 @@ P1a 的评测资产存放在仓库 [`pilot/p1a/`](../pilot/p1a/corpus/README.md)
 
 | 资产 | 路径 | 内容 | 状态 |
 |---|---|---|---|
-| 语料 v0 | `pilot/p1a/corpus/*.jsonl` | 合成脱敏场景 + gold + 对抗标注（44 场景/72 gold/对抗 10 类） | 已提交（PR #221） |
-| 校验/基线/评分/复核工具 | `pilot/p1a/tools/` | corpus-validate / baseline-runner / score / review / protocol-sim | 已提交（PR #221、B2） |
+| 语料（pilot v0 → exit） | `pilot/p1a/corpus/*.jsonl` | 合成脱敏场景 + gold + 对抗标注（exit：218 场景/347 gold/对抗 10 类 test 各 10，含 split） | 已提交（PR #221、PR #240） |
+| 校验/基线/评分/复核/切分/盲评/守卫工具 | `pilot/p1a/tools/` | corpus-validate / baseline-runner / score / review / protocol-sim / split-corpus / annotation-pass / contract-guards | 已提交（PR #221、B2、B3、B4） |
+| 盲评包与裁决工作表 | `pilot/p1a/out/blind/`（gitignore） | 盲评包（剥离 gold 侧字段）+ 导入校验 + 一致性报告 + 裁决工作表；含第二标注人标注产物 | 本地生成，不入库（含人工标注内容） |
 | 冻结配置 | `pilot/p1a/config/eval-manifest.json` | 门槛与配额（改数须版本化 diff + 签署） | 已提交（PR #220） |
 | 验证轨输出 | `pilot/p1a/out/`（gitignore） | 候选 jsonl / meta / 评分报告；本地可重建，不入库 | 每次运行带 runId |
 
