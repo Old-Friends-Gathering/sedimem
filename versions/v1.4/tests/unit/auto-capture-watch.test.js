@@ -22,8 +22,12 @@ function fixture() {
 test('listOpenTaskIds: 只返回 open 且 id 合法', () => {
   const home = fixture();
   assert.deepEqual(listOpenTaskIds(home), ['20261118-0001-open']);
+  // 新布局只有 sessions/<taskId>/meta.json（登记文件可能已丢）也必须被扫描到
+  mkdirSync(path.join(home, 'sessions', '20261118-0003-meta'), { recursive: true });
+  writeFileSync(path.join(home, 'sessions', '20261118-0003-meta', 'meta.json'), `${JSON.stringify({ taskId: '20261118-0003-meta', status: 'open' })}\n`);
+  assert.deepEqual(listOpenTaskIds(home), ['20261118-0001-open', '20261118-0003-meta']);
   writeFileSync(path.join(home, 'sessions', 'bad.json'), '{not json');
-  assert.deepEqual(listOpenTaskIds(home), ['20261118-0001-open']);
+  assert.deepEqual(listOpenTaskIds(home), ['20261118-0001-open', '20261118-0003-meta']);
   rmSync(home, { recursive: true, force: true });
 });
 

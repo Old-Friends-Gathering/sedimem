@@ -21,6 +21,7 @@ import path from 'node:path';
 import { defaultPolicy } from '../config/policy.js';
 import { systemClock } from '../core/clock.js';
 import { cwdToSessionSlug } from './transcript.js';
+import { readBoundSessionIds, rememberSession } from './ledger.js';
 import { createLlmPort } from '../llm/port.js';
 
 const TASK_ID_RE = /^[a-z0-9][a-z0-9._-]{0,63}$/;
@@ -124,22 +125,42 @@ export function probeTranscript({ cwd, sessionsRoot, sessionId }) {
   return best;
 }
 
-export function readAutoCaptureState(memoHome, taskId) {
+export function readAutoCaptureState(memoHome, taskId, sessionId) {
   const file = path.join(memoHome, 'sessions', taskId, 'autocapture.json');
   if (!existsSync(file)) return null;
+  let v;
   try {
-    const v = JSON.parse(readFileSync(file, 'utf8'));
-    return v && typeof v === 'object' ? v : null;
+    v = JSON.parse(readFileSync(file, 'utf8'));
   } catch {
     return null; // 坏状态文件 = 重新积累
   }
+  if (!v || typeof v !== 'object') return null;
+  if (typeof sessionId === 'string' && sessionId !== '') {
+    const per = v.sessions && typeof v.sessions === 'object' ? v.sessions[sessionId] : null;
+    if (per && typeof per === 'object') return per;
+    // 旧格式只有顶层状态：只有主会话能复用它，其它会话视为首次。
+    return v.sessionId === sessionId ? v : null;
+  }
+  return v;
 }
 
-function writeAutoCaptureState(memoHome, taskId, patch) {
+function writeAutoCaptureState(memoHome, taskId, patch, sessionId) {
   const dir = path.join(memoHome, 'sessions', taskId);
   mkdirSync(dir, { recursive: true });
   const prev = readAutoCaptureState(memoHome, taskId) ?? {};
-  const next = { ...prev, ...patch };
+  const next = { ...prev };
+  if (typeof sessionId === 'string' && sessionId !== '') {
+    const sessions = prev.sessions && typeof prev.sessions === 'object' ? prev.sessions : {};
+    sessions[sessionId] = { ...(sessions[sessionId] ?? {}), ...patch };
+    next.sessions = sessions;
+    // 主会话（最近一次 bind）才更新顶层，保持旧读法兼容。
+    if (!prev.sessionId || prev.sessionId === sessionId) {
+      next.sessionId = sessionId;
+      Object.assign(next, patch);
+    }
+  } else {
+    Object.assign(next, patch);
+  }
   // 尾换行（Q8：文件末尾必须有换行符）
   writeFileSync(path.join(dir, 'autocapture.json'), `${JSON.stringify(next)}\n`);
   return next;
@@ -184,7 +205,7 @@ export async function maybeAutoCapture({
 } = {}) {
   try {
     if (captureOnClose && !captureOnCloseEnabled(policy)) return { ran: false, reason: 'capture-on-close-disabled' };
-    const state = readAutoCaptureState(memoHome, taskId);
+    const state = readAutoCaptureState(memoHome, taskId, sessionId);
     // 绑定优先级：显式参数/env（MCP 层注入）→ meta.json.hostSessionId（memo session bind，agent shell
     // 里有 DSH_SESSION_ID 而宿主 spawn 的 server 进程没有——issue #225 后续）。都不在才退 cwd slug。
     const sid = sessionId ?? readBoundSessionId(memoHome, taskId) ?? undefined;
@@ -210,10 +231,10 @@ export async function maybeAutoCapture({
     writeAutoCaptureState(memoHome, taskId, {
       mtimeMs: tx.mtimeMs,
       size: tx.size,
-      sessionId: res?.segments?.[0]?.source?.sessionId ?? state?.sessionId ?? tx.sessionId ?? null,
+      sessionId: res?.segments?.[0]?.source?.sessionId ?? state?.sessionId ?? tx.sessionId ?? sid ?? null,
       lastSuccessAt: now,
       lastAttemptAt: now,
-    });
+    }, sid);
     return { ran: true, reason: d.reason, created: res?.created ?? 0, skipped: res?.skipped ?? 0, segments: res?.segments?.length ?? 0 };
   } catch (e) {
     try {
@@ -222,8 +243,8 @@ export async function maybeAutoCapture({
       const now = nowMs(clock);
       writeAutoCaptureState(memoHome, taskId, {
         lastAttemptAt: now,
-        ...(tx2 && !readAutoCaptureState(memoHome, taskId) ? { mtimeMs: tx2.mtimeMs, size: tx2.size } : {}),
-      });
+        ...(tx2 && !readAutoCaptureState(memoHome, taskId, sid2) ? { mtimeMs: tx2.mtimeMs, size: tx2.size } : {}),
+      }, sid2);
     } catch {
       /* 状态写失败不影响 fail-closed 返回 */
     }
@@ -251,8 +272,10 @@ export function readBoundSessionId(memoHome, taskId) {
   }
   try {
     const meta = JSON.parse(raw);
-    const sid = meta?.hostSessionId;
-    return typeof sid === 'string' && sid.trim() !== '' ? sid.trim() : null;
+    const ids = Array.isArray(meta?.hostSessionIds) ? meta.hostSessionIds : [];
+    const primary = typeof meta?.hostSessionId === 'string' ? meta.hostSessionId : '';
+    const all = [primary, ...ids].filter((x) => typeof x === 'string' && x.trim() !== '');
+    return all.length > 0 ? all[0].trim() : null;
   } catch {
     return null;
   }
@@ -281,9 +304,13 @@ export async function postToolAutoCapture({ state, toolName, args, overrides = {
     if (!isAutoCaptureCandidateTool(toolName)) return null;
     const taskId = scope.slice('session:'.length);
     // MCP 层负责把宿主环境绑定进来：DSH 会话 id（精确）+ server 进程 cwd（兜底 slug）
+    const sid = overrides.sessionId || process.env.DSH_SESSION_ID || state?.sessionId || undefined;
+    // agent 一旦在任务库上调用候选工具，就把当前会话登记进 meta.hostSessionIds：
+    // 后续 watcher 会按全部已登记会话逐个捕获，不需要人工 bind。
+    if (sid) rememberSession({ memoHome: MEMO_HOME, taskId, hostSessionId: sid });
     const run = maybeAutoCapture({
       memoHome: MEMO_HOME, taskId, cwd: CAPTURE_CWD,
-      sessionId: process.env.DSH_SESSION_ID || undefined,
+      sessionId: sid,
       ...overrides,
     });
     const timer = new Promise((resolve) => {
@@ -316,21 +343,28 @@ export function listOpenTaskIds(memoHome) {
   const dir = path.join(memoHome, 'sessions');
   let names = [];
   try {
-    names = readdirSync(dir).filter((n) => n.endsWith('.json'));
+    names = readdirSync(dir, { withFileTypes: true });
   } catch {
     return [];
   }
   const out = [];
-  for (const name of names) {
-    let reg;
-    try {
-      reg = JSON.parse(readFileSync(path.join(dir, name), 'utf8'));
-    } catch {
-      continue;
+  const seen = new Set();
+  const add = (id) => {
+    if (TASK_ID_RE.test(id) && !seen.has(id)) { seen.add(id); out.push(id); }
+  };
+  for (const ent of names) {
+    if (ent.isFile() && ent.name.endsWith('.json')) {
+      // 旧登记文件：sessions/<taskId>.json
+      let reg;
+      try { reg = JSON.parse(readFileSync(path.join(dir, ent.name), 'utf8')); } catch { continue; }
+      if (reg && reg.status === 'open') add(String(reg.id ?? ent.name.slice(0, -5)));
+    } else if (ent.isDirectory()) {
+      // v1.4 账本目录：sessions/<taskId>/meta.json（登记文件可能已被删/从未写过）
+      try {
+        const meta = JSON.parse(readFileSync(path.join(dir, ent.name, 'meta.json'), 'utf8'));
+        if (meta && meta.status === 'open') add(String(meta.taskId ?? ent.name));
+      } catch { /* 无 meta 的目录不是任务库 */ }
     }
-    if (!reg || reg.status !== 'open') continue;
-    const id = String(reg.id ?? name.slice(0, -5));
-    if (TASK_ID_RE.test(id)) out.push(id);
   }
   return out;
 }
@@ -380,8 +414,12 @@ export function startAutoCaptureWatcher({
     running = true;
     try {
       for (const taskId of listOpenTaskIds(memoHome)) {
-        const r = await maybeImpl({ memoHome, taskId, policy, clock });
-        if (r?.ran) log(`[autocapture] ${taskId}: ${r.reason} created=${r.created ?? 0}`);
+        const ids = readBoundSessionIds(memoHome, taskId);
+        const targets = ids.length > 0 ? ids : [undefined];
+        for (const sid of targets) {
+          const r = await maybeImpl({ memoHome, taskId, policy, clock, ...(sid ? { sessionId: sid } : {}) });
+          if (r?.ran) log(`[autocapture] ${taskId}${sid ? ` (${sid.slice(-6)})` : ''}: ${r.reason} created=${r.created ?? 0}`);
+        }
       }
     } catch (e) {
       log(`[autocapture] tick failed: ${e?.message ?? e}`);

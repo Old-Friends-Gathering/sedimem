@@ -352,11 +352,72 @@ export function bindSession({ memoHome, taskId, hostSessionId, clock = systemClo
   if (typeof meta.startedAt !== 'string' || meta.startedAt === '') {
     meta.startedAt = new Date(clock.nowMs()).toISOString();
   }
+  // 一个任务可以由多个 DSH 会话接力开发：hostSessionId 保留为「主会话」（最近一次 bind），
+  // hostSessionIds 是全部已关联会话。旧 meta 只有 hostSessionId，读取时自动补齐。
+  const ids = Array.isArray(meta.hostSessionIds)
+    ? meta.hostSessionIds.filter((x) => typeof x === 'string' && x !== '')
+    : [];
+  if (!ids.includes(sid)) ids.push(sid);
+  if (previous && !ids.includes(previous)) ids.unshift(previous);
+  meta.hostSessionIds = ids;
   meta.hostSessionId = sid;
   meta.boundAt = new Date(clock.nowMs()).toISOString();
   mkdirSync(dir, { recursive: true, mode: MEMO_DIR_MODE });
   writeFileSync(metaFile, `${JSON.stringify(meta, null, 2)}\n`, { mode: MEMO_FILE_MODE });
   return { file: metaFile, previous, meta };
+}
+
+/**
+ * 读任务关联的全部宿主会话（`hostSessionIds` + 旧字段 `hostSessionId`）。
+ * 去重、保序（主会话在前），非法/空值忽略；meta 缺失返回 []。
+ * @param {string} memoHome
+ * @param {string} taskId
+ * @returns {string[]}
+ */
+export function readBoundSessionIds(memoHome, taskId) {
+  let meta;
+  try {
+    meta = JSON.parse(readFileSync(path.join(memoHome, 'sessions', taskId, 'meta.json'), 'utf8'));
+  } catch {
+    return [];
+  }
+  if (!meta || typeof meta !== 'object') return [];
+  const ids = [];
+  const push = (x) => {
+    if (typeof x === 'string' && x.trim() !== '' && x.length <= 200 && !/[\r\n\0]/.test(x) && !ids.includes(x.trim())) {
+      ids.push(x.trim());
+    }
+  };
+  if (typeof meta.hostSessionId === 'string') push(meta.hostSessionId);
+  if (Array.isArray(meta.hostSessionIds)) meta.hostSessionIds.forEach(push);
+  return ids;
+}
+
+/**
+ * 轻量登记一个会话到任务（agent 用任务库时自动调用）：已存在则零写入。
+ * 与 bindSession 的差别：不抛任务不存在；只追加，不改变主会话（除非首次）。
+ * @returns {{added:boolean, ids:string[]}}
+ */
+export function rememberSession({ memoHome, taskId, hostSessionId, clock = systemClock } = {}) {
+  requireMemoHome(memoHome);
+  requireTaskId(taskId);
+  const sid = typeof hostSessionId === 'string' ? hostSessionId.trim() : '';
+  if (sid === '' || /[\r\n\0]/.test(sid) || sid.length > 200) return { added: false, ids: readBoundSessionIds(memoHome, taskId) };
+  const metaFile = path.join(memoHome, 'sessions', taskId, 'meta.json');
+  let meta;
+  try {
+    meta = JSON.parse(readFileSync(metaFile, 'utf8'));
+  } catch {
+    return { added: false, ids: readBoundSessionIds(memoHome, taskId) };
+  }
+  if (!meta || typeof meta !== 'object' || Array.isArray(meta)) return { added: false, ids: [] };
+  const ids = readBoundSessionIds(memoHome, taskId);
+  if (ids.includes(sid)) return { added: false, ids };
+  ids.push(sid);
+  meta.hostSessionIds = ids;
+  if (typeof meta.hostSessionId !== 'string' || meta.hostSessionId === '') meta.hostSessionId = sid;
+  writeFileSync(metaFile, `${JSON.stringify(meta, null, 2)}\n`, { mode: MEMO_FILE_MODE });
+  return { added: true, ids };
 }
 
 /**

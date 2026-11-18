@@ -1,5 +1,12 @@
 # CHANGELOG · v1.4
 
+## 1.4.2
+
+- 任务库多会话关联：`meta.hostSessionIds` 记录全部开发会话，`hostSessionId` 保留最近主会话。
+- agent 在任务库调用 `memory_session_*` 时自动登记当前会话，不再需要手工 `memo session bind`。
+- 自动捕获 watcher 按全部已关联会话逐个捕获，`autocapture.json` 按会话隔离状态。
+- `listOpenTaskIds` 同时扫描登记文件与 `sessions/<taskId>/meta.json`。
+
 ## [1.4.1] — 2026-11-18
 
 ### Added

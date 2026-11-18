@@ -1,6 +1,6 @@
 {
   "name": "@old-friends-gathering/sedimem",
-  "version": "1.4.1",
+  "version": "1.4.2",
   "private": true,
   "type": "module",
   "description": "sedimem v1.4：本地跨会话、跨客户端（DSH/Codex/Claude）自我迭代记忆层（零运行时依赖）",
