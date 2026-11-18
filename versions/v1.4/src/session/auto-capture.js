@@ -21,6 +21,7 @@ import path from 'node:path';
 import { defaultPolicy } from '../config/policy.js';
 import { systemClock } from '../core/clock.js';
 import { cwdToSessionSlug } from './transcript.js';
+import { createLlmPort } from '../llm/port.js';
 
 const TASK_ID_RE = /^[a-z0-9][a-z0-9._-]{0,63}$/;
 
@@ -175,7 +176,7 @@ export function decideAutoCapture({ memoHome, taskId, policy = defaultPolicy, cl
  */
 export async function maybeAutoCapture({
   memoHome, taskId, cwd = CAPTURE_CWD, sessionsRoot, sessionId, policy = defaultPolicy, clock = systemClock,
-  captureTaskImpl, probe, force = false, requireLedger = true, captureOnClose = false,
+  captureTaskImpl, probe, force = false, requireLedger = true, captureOnClose = false, llmPort,
 } = {}) {
   try {
     if (captureOnClose && !captureOnCloseEnabled(policy)) return { ran: false, reason: 'capture-on-close-disabled' };
@@ -190,7 +191,18 @@ export async function maybeAutoCapture({
     const impl = captureTaskImpl ?? (await import('./capture.js')).captureTask;
     // sid 必须透传给 captureTask：否则它按 cwd slug 找转录——MCP server 进程 cwd 是宿主
     // profiles 目录，slug 永远匹配不上（bind 的意义就是让捕获用对转录，issue #225/#230）。
-    const res = await impl({ memoHome, taskId, cwd, mode: 'rules', sessionId: sid });
+    // 捕获模式按 policy.session.ledger.llmMode（用户要求 llm 录入）；llm 模式注入就绪的
+    // llmPort（key 解析 policy→env→~/.config/sedimem/llm-key），未就绪不透传——captureTask
+    // 内部回落 rules + fallbackReason，fail-closed 永不抛。
+    const ledgerPolicy = policy?.session?.ledger ?? {};
+    const mode = ledgerPolicy.llmMode === 'llm' ? 'llm' : 'rules';
+    let port;
+    if (mode === 'llm') {
+      port = llmPort ?? globalThis.__memoLlmPort ?? createLlmPort({ policy });
+      const ready = typeof port?.ready === 'function' ? port.ready() : port?.ready;
+      if (ready === false) port = undefined;
+    }
+    const res = await impl({ memoHome, taskId, cwd, mode, sessionId: sid, ...(port ? { llmPort: port } : {}) });
     writeAutoCaptureState(memoHome, taskId, {
       mtimeMs: tx.mtimeMs,
       size: tx.size,

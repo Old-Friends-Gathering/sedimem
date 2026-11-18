@@ -219,7 +219,7 @@ test('checkpoints 归一化与行构建：缺字段/旧服务端不抛异常', (
   assert.equal(normalizeCheckpoints(null).length, 0);
   const rows = buildCheckpointRows([cp, { createdAt: null, sections: null }]);
   assert.equal(rows.length, 2);
-  assert.equal(rows[0].time, '2026-11-18 06:28');
+  assert.equal(rows[0].time, '2026-11-18 06:28:16');
   assert.equal(rows[0].excerpt, '完成 P1a');
   assert.equal(rows[0].lists.find((l) => l.key === 'nextSteps').items.length, 2);
   assert.equal(rows[0].texts.find((t) => t.key === 'intent').text, '完成 P1a');
@@ -252,4 +252,11 @@ test('源码安全：ledger-view.js 只用 textContent，禁止 innerHTML / eval
 test('文件行数：session-view.js ≤ 520 行（超了继续拆 ledger-view.js）', () => {
   assert.ok(SESSION_SRC.split('\n').length <= 520, `session-view.js 当前 ${SESSION_SRC.split('\n').length} 行`);
   assert.ok(SESSION_SRC.includes("from './ledger-view.js'"), '账本代码应从 session-view.js 拆出引入');
+});
+
+test('buildCheckpointRows: intent 为空串 → 回落 currentState；时间带秒（同分钟可区分）', () => {
+  const cp = { id: '01XYZ', createdAt: '2026-11-18T08:56:52.561Z', sections: { intent: '', currentState: '三问题闭环：llm 模式+渲染修复' } };
+  const [row] = buildCheckpointRows([cp]);
+  assert.equal(row.excerpt, '三问题闭环：llm 模式+渲染修复', '空 intent 必须回落 currentState 而不是空串');
+  assert.equal(row.time, '2026-11-18 08:56:52', '时间带秒，区分同分钟多条');
 });

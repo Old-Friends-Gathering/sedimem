@@ -296,3 +296,25 @@ test('bind：空串/缺失 meta/坏 JSON → readBoundSessionId 返回 null；bi
   rmSync(f.memoHome, { recursive: true, force: true });
   rmSync(f.cwd, { recursive: true, force: true });
 });
+
+test('maybeAutoCapture: policy llmMode=llm → mode=llm + 注入 llmPort（用户要求 llm 录入）', async () => {
+  const f = makeFixture();
+  const fakePort = { ready: () => true, derive: async () => ({}) };
+  const policy = JSON.parse(JSON.stringify(f.base.policy));
+  policy.session.ledger.llmMode = 'llm';
+  const r = await maybeAutoCapture({ ...f.base, policy, sessionId: 'sess-1', llmPort: fakePort });
+  assert.equal(r.ran, true);
+  assert.equal(f.calls[0].mode, 'llm', 'llmMode=llm 时自动捕获必须用 llm 模式');
+  assert.equal(f.calls[0].llmPort, fakePort, 'ready 的 llmPort 必须透传 captureTask');
+});
+
+test('maybeAutoCapture: llmPort 未 ready → 不透传（captureTask 内部回落 rules，fail-closed）', async () => {
+  const f = makeFixture();
+  const policy = JSON.parse(JSON.stringify(f.base.policy));
+  policy.session.ledger.llmMode = 'llm';
+  const notReady = { ready: () => false };
+  const r = await maybeAutoCapture({ ...f.base, policy, sessionId: 'sess-1', llmPort: notReady });
+  assert.equal(r.ran, true);
+  assert.equal(f.calls[0].mode, 'llm', 'mode 仍按 policy');
+  assert.equal(f.calls[0].llmPort, undefined, '未就绪的 llmPort 不得透传');
+});
