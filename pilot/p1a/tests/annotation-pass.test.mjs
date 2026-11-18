@@ -7,6 +7,7 @@ import {
   importBlindAnnotation,
   agreementReport,
   adjudicationWorksheet,
+  buildGoldset,
 } from '../tools/annotation-pass.mjs';
 
 const mkScenario = (id, overrides = {}) => ({
@@ -224,4 +225,171 @@ test('F9：坏 speechAct / 坏 status 报错且错误信息含字段名', () => 
   // 合法枚举通过。
   const good = importBlindAnnotation(mkRow({ goldId: 'x', claim: 'c', role: 'user', type: 'fact', scope: 's', status: 'suggestion-only', assertion: { speechAct: 'decide' }, evidence: [] }), pkg);
   assert.equal(good.errors.length, 0);
+});
+
+// ---------- buildGoldset（P1a 出口：裁决表 → 版本化 goldset） ----------
+const G = (claim, extra = {}) => ({
+  goldId: `g-${claim}`, claim, role: 'assistant', type: 'fact', scope: 'repo:demo',
+  status: 'active', assertion: { speechAct: 'state', negated: false, about: null, condition: null },
+  time: { observedAt: '2026-11-18T09:01:00Z' }, evidence: [{ eventId: 'S001-m002', quote: '已改为 30 秒' }],
+  language: 'zh', ...extra,
+});
+const PASS = (sid, gold, shouldReject = false) => [{ scenarioId: sid, shouldReject, reason: shouldReject ? '无可记' : '', gold }];
+
+test('goldset：两份完全一致时直接采用 A 侧，adjudicated=0，annotationMode=dual-independent', () => {
+  const a = PASS('S001', [G('超时已改为 30 秒')]);
+  const r = buildGoldset(a, a, { annotationMode: 'dual-independent', rows: [], pending: 0 }, { clock: () => new Date('2026-11-18T12:00:00Z') });
+  assert.equal(r.errors.length, 0, `不应有错误：${JSON.stringify(r.errors)}`);
+  assert.equal(r.goldset.annotationMode, 'dual-independent');
+  assert.equal(r.goldset.goldsetVersion, 'goldset-v1');
+  assert.equal(r.goldset.frozenAt, '2026-11-18T12:00:00.000Z');
+  assert.equal(r.goldset.scenarios.length, 1);
+  assert.equal(r.goldset.scenarios[0].gold.length, 1);
+  assert.equal(r.goldset.stats.adjudicated, 0);
+});
+
+test('goldset：裁决表还有 resolution=null 的行 → 拒绝产出（fail-closed）', () => {
+  const ws = { annotationMode: 'dual-independent', rows: [{ scenarioId: 'S001', kind: 'field-mismatch', fields: ['type'], resolution: null }], pending: 1 };
+  const r = buildGoldset(PASS('S001', [G('x')]), PASS('S001', [G('x', { type: 'decision' })]), ws);
+  assert.equal(r.goldset, null, '未裁决时不得产出 goldset');
+  assert.ok(r.errors.some((e) => e.includes('未裁决')), `错误应提示未裁决，实际：${JSON.stringify(r.errors)}`);
+});
+
+test('goldset：非法 resolution 值 → 报错并拒绝产出', () => {
+  const ws = { annotationMode: 'dual-independent', rows: [{ scenarioId: 'S001', kind: 'field-mismatch', fields: ['type'], resolution: 'maybe' }], pending: 0 };
+  const r = buildGoldset(PASS('S001', [G('x')]), PASS('S001', [G('x', { type: 'decision' })]), ws);
+  assert.equal(r.goldset, null);
+  assert.ok(r.errors.some((e) => e.includes('非法 resolution')), `错误应含「非法 resolution」，实际：${JSON.stringify(r.errors)}`);
+});
+
+test('goldset：字段分歧裁决为 b → 采用 B 侧的字段值', () => {
+  const ws = { annotationMode: 'dual-independent', rows: [{ scenarioId: 'S001', kind: 'field-mismatch', fields: ['type'], resolution: 'b' }], pending: 0 };
+  const r = buildGoldset(
+    PASS('S001', [G('超时已改为 30 秒', { type: 'fact' })]),
+    PASS('S001', [G('超时已改为 30 秒', { type: 'decision' })]),
+    ws,
+  );
+  assert.equal(r.errors.length, 0, JSON.stringify(r.errors));
+  assert.equal(r.goldset.scenarios[0].gold[0].type, 'decision', 'resolution=b 应取 B 的 type');
+  assert.equal(r.goldset.stats.adjudicated, 1);
+});
+
+test('goldset：仅 A 有的 claim 裁决为 b → 丢弃该 claim（计入 droppedA）', () => {
+  const ws = { annotationMode: 'dual-independent', rows: [{ scenarioId: 'S001', kind: 'claim-only-in-A', resolution: 'b' }], pending: 0 };
+  const r = buildGoldset(PASS('S001', [G('只有 A 说的事实')]), PASS('S001', []), ws);
+  assert.equal(r.errors.length, 0, JSON.stringify(r.errors));
+  assert.equal(r.goldset.scenarios[0].gold.length, 0, '裁决为 b 时 A 独有 claim 应被丢弃');
+  assert.equal(r.goldset.stats.droppedA, 1);
+});
+
+test('goldset：仅 B 有的 claim 裁决为 both → 两条都保留', () => {
+  const ws = { annotationMode: 'dual-independent', rows: [{ scenarioId: 'S001', kind: 'claim-only-in-B', resolution: 'both' }], pending: 0 };
+  const r = buildGoldset(PASS('S001', [G('共同事实')]), PASS('S001', [G('共同事实'), G('只有 B 说的事实')]), ws);
+  assert.equal(r.errors.length, 0, JSON.stringify(r.errors));
+  assert.equal(r.goldset.scenarios[0].gold.length, 2, 'resolution=both 时两边 claim 都保留');
+});
+
+test('goldset：shouldReject 分歧裁决为 a → 采用 A 的判定，且保留 reason', () => {
+  const ws = { annotationMode: 'dual-independent', rows: [{ scenarioId: 'S001', kind: 'reject-mismatch', rejectA: true, rejectB: false, resolution: 'a' }], pending: 0 };
+  const r = buildGoldset(PASS('S001', [], true), PASS('S001', [G('不该记的事')]), ws);
+  assert.equal(r.errors.length, 0, JSON.stringify(r.errors));
+  assert.equal(r.goldset.scenarios[0].shouldReject, true);
+  assert.equal(r.goldset.scenarios[0].gold.length, 0);
+});
+
+test('goldset：缺场景（只在一边出现）→ 报错', () => {
+  const ws = { annotationMode: 'dual-independent', rows: [], pending: 0 };
+  const r = buildGoldset(PASS('S001', [G('a')]), PASS('S002', [G('b')]), ws);
+  assert.equal(r.goldset, null);
+  assert.ok(r.errors.some((e) => e.includes('缺场景')), `错误应含「缺场景」，实际：${JSON.stringify(r.errors)}`);
+});
+
+
+// ---------- B4②：goldset 生成（裁决落地 → 可版本化 goldset-vN） ----------
+const g = (claim, over = {}) => ({
+  goldId: 'g', claim, role: 'assistant', type: 'fact', scope: 'repo:demo', status: 'active',
+  assertion: { speechAct: 'state', negated: false, about: 'x', condition: null },
+  evidence: [], language: 'zh', ...over,
+});
+const PASS2 = (sid, gold, shouldReject = false, reason = '') => [{ scenarioId: sid, gold, shouldReject, reason }];
+
+test('buildGoldset：双份完全一致时直接产出，且不产生待裁决计数', () => {
+  const a = PASS2('S001', [g('超时已改为 30 秒')]);
+  const b = PASS2('S001', [g('超时已改为 30 秒')]);
+  const ws = adjudicationWorksheet(a, b);
+  const r = buildGoldset(a, b, ws);
+  assert.deepEqual(r.errors, []);
+  assert.equal(r.goldset.annotationMode, 'dual-independent');
+  assert.equal(r.goldset.goldsetVersion, 'goldset-v1');
+  assert.ok(r.goldset.frozenAt);
+  assert.equal(r.goldset.scenarios[0].gold.length, 1);
+  assert.equal(r.goldset.stats.adjudicated, 0);
+});
+
+test('buildGoldset：裁决表存在未裁决行时拒绝产出（fail-closed）', () => {
+  const a = PASS2('S001', [g('超时已改为 30 秒', { type: 'fact' })]);
+  const b = PASS2('S001', [g('超时已改为 30 秒', { type: 'decision' })]);
+  const ws = adjudicationWorksheet(a, b);
+  assert.ok(ws.pending > 0, '构造的分歧应产生待裁决行');
+  const r = buildGoldset(a, b, ws);
+  assert.equal(r.goldset, null);
+  assert.ok(r.errors.some((e) => e.includes('未裁决')), `错误应含「未裁决」，实际：${JSON.stringify(r.errors)}`);
+});
+
+test('buildGoldset：field-mismatch 判 b 时采用 B 的字段值', () => {
+  const a = PASS2('S001', [g('超时已改为 30 秒', { type: 'fact' })]);
+  const b = PASS2('S001', [g('超时已改为 30 秒', { type: 'decision' })]);
+  const ws = adjudicationWorksheet(a, b);
+  for (const row of ws.rows) row.resolution = 'b';
+  const r = buildGoldset(a, b, ws);
+  assert.deepEqual(r.errors, []);
+  assert.equal(r.goldset.scenarios[0].gold[0].type, 'decision');
+  assert.equal(r.goldset.stats.adjudicated, ws.rows.length);
+});
+
+test('buildGoldset：claim-only-in-A 判 b 表示丢弃 A 的独有 claim', () => {
+  const a = PASS2('S001', [g('A 独有命题'), g('共有命题')]);
+  const b = PASS2('S001', [g('共有命题')]);
+  const ws = adjudicationWorksheet(a, b);
+  for (const row of ws.rows) row.resolution = 'b';
+  const r = buildGoldset(a, b, ws);
+  const claims = r.goldset.scenarios[0].gold.map((x) => x.claim);
+  assert.ok(!claims.includes('A 独有命题'), `不应保留 A 独有 claim，实际：${JSON.stringify(claims)}`);
+  assert.equal(r.goldset.stats.droppedA, 1);
+});
+
+test('buildGoldset：claim-only-in-B 判 both 时两边 claim 都保留', () => {
+  const a = PASS2('S001', [g('共有命题')]);
+  const b = PASS2('S001', [g('共有命题'), g('B 独有命题')]);
+  const ws = adjudicationWorksheet(a, b);
+  for (const row of ws.rows) row.resolution = 'both';
+  const r = buildGoldset(a, b, ws);
+  assert.equal(r.goldset.scenarios[0].gold.length, 2);
+});
+
+test('buildGoldset：shouldReject 分歧按裁决取值', () => {
+  const a = PASS2('S004', [], true, 'chitchat');
+  const b = PASS2('S004', [g('寒暄里的事实')], false, '');
+  const ws = adjudicationWorksheet(a, b);
+  assert.ok(ws.rows.some((x) => x.kind === 'reject-mismatch'));
+  for (const row of ws.rows) row.resolution = 'a';
+  const r = buildGoldset(a, b, ws);
+  assert.equal(r.goldset.scenarios[0].shouldReject, true);
+});
+
+test('buildGoldset：布尔形态 shouldReject 与对象形态等价识别（真实 pass 文件为布尔）', () => {
+  const a = [{ scenarioId: 'S004', gold: [], shouldReject: true, reason: 'chitchat' }];
+  const b = [{ scenarioId: 'S004', gold: [], shouldReject: { reason: 'chitchat' } }];
+  const rep = agreementReport(a, b);
+  assert.equal(rep.perScenario.S004.fieldDisagreements.length, 0, '布尔与对象同义时不应报分歧');
+});
+
+test('buildGoldset：非法 resolution 拒绝产出', () => {
+  const a = PASS2('S001', [g('超时已改为 30 秒', { type: 'fact' })]);
+  const b = PASS2('S001', [g('超时已改为 30 秒', { type: 'decision' })]);
+  const ws = adjudicationWorksheet(a, b);
+  for (const row of ws.rows) row.resolution = 'x';
+  const r = buildGoldset(a, b, ws);
+  assert.equal(r.goldset, null);
+  assert.ok(r.errors.some((e) => e.includes('非法 resolution')), `错误应含「非法 resolution」，实际：${JSON.stringify(r.errors)}`);
 });
