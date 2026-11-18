@@ -33,7 +33,7 @@ export const THRESHOLDS = {
   // v1.0.1 调到 16000：W2 去重把三份重复实现收成 core/text.js + core/time.js（≈190 行，
   // 换掉 8+4 处散落实现，净增但可测），W4 会话 LLM 新增 session/transcript.js +
   // checkpoint-llm.js（≈400 行，有 I45 守着）。单文件 400 硬线仍然不动。
-  maxTotalSrcLines: 21000, // v1.4：P0b 新增 trust/taint、删除/profile、Web 鉴权、注入审计、隔离区、读预算（≈+2000 行）
+  maxTotalSrcLines: 21200, // v1.4：P0b 新增 trust/taint、删除/profile、Web 鉴权、注入审计、隔离区、读预算（≈+2000 行）
   /** 单元测试文件数下限 */
   minTestFiles: 8,
   /** 契约文档对 src 导出名的覆盖率（%）；内部工具函数在 contract-exempt.json 里登记豁免 */

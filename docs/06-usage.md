@@ -795,7 +795,7 @@ decisions / gotchas / nextSteps）与简报面板；`--write` 下才有「捕获
 v1.2 的账本捕获只有 CLI 手动入口，任务库长期使用时账本会停在最后一次手动捕获。v1.4.x 补上两条自动路径
 （落实账本设计的原始诉求：每约 30k token 上下文自动压缩入账，见 `docs/research/task-context-ledger-design.md`）：
 
-- **周期扫描（v1.4.1，主要路径）**：MCP server 启动时拉起一个 60s 定时器，扫描 `$MEMO_HOME/sessions/*.json` 里所有 `status: open` 的任务，按任务 meta 的 `hostSessionId` 精确定位转录；增长达阈值就 `captureTask`。不依赖 agent 是否调用 memory 工具，多端同时跑时由 `$MEMO_HOME/autocapture-watch.pid` 保证只有一个 watcher；定时器 `unref()`，不阻止进程退出。
+- **周期扫描（v1.4.1，主要路径）**：MCP server 启动时拉起一个 60s 定时器，扫描 `$MEMO_HOME/sessions/*.json` 里所有 `status: open` 的任务，按任务 meta 的 `hostSessionIds`（全部已关联会话，旧库回退 `hostSessionId`）逐个精确定位转录；增长达阈值就 `captureTask`，每个会话各自维护 `autocapture.json` 的 `sessions[<sessionId>]` 状态。agent 在任务库上调用 `memory_session_*` 时会自动登记当前会话，不需要人工 `memo session bind`。不依赖 agent 是否调用 memory 工具，多端同时跑时由 `$MEMO_HOME/autocapture-watch.pid` 保证只有一个 watcher；定时器 `unref()`，不阻止进程退出。
 - **挂车捕获**：MCP server 在每次工具调用完成后，若当前 scope 是 `session:<taskId>` 且账本已存在，
   就检查绑定转录是否增长。转录绑定顺序：① `memo session bind` 写进任务 meta 的 `hostSessionId`
   （精确，推荐——agent shell 里有 `$DSH_SESSION_ID`，宿主 spawn 的 server 进程没有）→
@@ -818,7 +818,7 @@ fail-closed：捕获任何失败只记 `ran:false + reason`（如转录不存在
 stat 级字节→token 折算系数，精确计数需解压全量转录违背零成本守卫）、`cooldownMs`（60000，两次成功捕获最小间隔，防抖）。
 v1.4.1 起不再用 `minIntervalMs` 的「任意增长兜底」——只有到 30k 才落段，避免大量小段。
 
-**关闭**：`memo session auto-capture off` 写 `$MEMO_HOME/autocapture.off` 哨兵，挂车与周期扫描都会跳过；`on` 删除哨兵，`status` 查看。要全局永久关，仍改 `session.ledger.autoCapture.enabled=false`。`autocapture.json` 是可删的运行状态文件（删了只影响下一次
+**关闭**：`memo session auto-capture off` 写 `$MEMO_HOME/autocapture.off` 哨兵（实现常量 `OFF_FILE`），挂车与周期扫描都会跳过；`on` 删除哨兵，`status` 查看。要全局永久关，仍改 `session.ledger.autoCapture.enabled=false`。`autocapture.json` 是可删的运行状态文件（删了只影响下一次
 守卫判断，重新积累）。
 
 

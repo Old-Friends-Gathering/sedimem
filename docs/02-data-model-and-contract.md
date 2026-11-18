@@ -1096,6 +1096,8 @@ Q5 契约覆盖按「导出名必须出现在 docs/」判定，这里逐模块�
 因此段不过四道门、不占 `quota.maxActive`、不进 `brief` 的主库部分、不进主库 `search`、不进 `facts`。
 理由：`MAX_VALUE=2000` 装不下 8 段 JSON，且把过程塞进真相层会让"可追溯的事实"与"过程记录"混成一个池子。
 
+**v1.4.2 补充（多会话关联）**：`sessions/<taskId>/meta.json` 的 `hostSessionIds` 是全部已关联的 DSH 会话，`hostSessionId` 是最近一次 bind 的主会话；旧 meta 只有单值时按 `[hostSessionId]` 读。agent 在任务库上调用 `memory_session_*` 时自动追加当前会话；自动捕获 watcher 按该数组逐会话捕获，`autocapture.json` 的 `sessions[<sessionId>]` 各自维护 mtime/size。该字段只影响捕获绑定，不改变段的区间幂等与真相层规则。
+
 **裁决 119（区间幂等）**：段是 `[fromSeq,toSeq)` 区间，**两两不相交**；重复捕获必须返回 `created:0`，
 重叠写入抛 `E_ALREADY_CAPTURED` 且**零写入**（先判后写，在 `withLock` 内）。`index.json` 是派生物，可随时重建且逐字节相同。
 
