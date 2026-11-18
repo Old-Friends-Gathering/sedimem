@@ -16,7 +16,6 @@ import path from 'node:path';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const CORPUS_DIR = path.join(HERE, '../corpus');
-const MANIFEST = path.join(HERE, '../config/eval-manifest.json');
 
 const fam = (n) => ({ scenarioId: n, family: 'fam-x', language: 'zh', events: [{ eventId: `${n}-m001`, role: 'user', ts: '2026-11-01T00:00:00Z', text: `事件 ${n}` }], gold: [] });
 

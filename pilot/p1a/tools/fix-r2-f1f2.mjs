@@ -21,7 +21,6 @@ const FALLBACK = {
   'same-name-cross-project': /demo-b|beta|gamma/i,
 };
 
-const isCjk = (t) => /[\u4e00-\u9fff]/.test(t);
 
 for (const f of fs.readdirSync(dir).filter((x) => x.endsWith('.jsonl'))) {
   const p = path.join(dir, f);
