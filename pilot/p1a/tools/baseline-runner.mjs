@@ -36,7 +36,7 @@ export function deriveInputHash(scenario) {
 export function normalizeClaim(s) {
   return String(s)
     .toLowerCase()
-    .replace(/[。，、；：！？.,;:!"'"()（）[\]「」…·—-]/g, ' ')
+    .replace(/[。，、；：！？.,;:!'"()（）[\]「」…·—-]/g, ' ')
     .replace(/\s+/g, ' ')
     .trim();
 }
