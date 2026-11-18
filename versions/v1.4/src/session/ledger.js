@@ -19,6 +19,7 @@ import path from 'node:path';
 import { systemClock } from '../core/clock.js';
 import { newId } from '../core/ids.js';
 import { withLock } from '../storage/lock.js';
+import { MEMO_DIR_MODE, MEMO_FILE_MODE } from '../config/perms.js';
 
 /** index.json 的版本号（结构变更时递增） */
 export const INDEX_VERSION = 1;
@@ -241,6 +242,65 @@ export function coveredSeqs({ memoHome, taskId } = {}) {
       .map((r) => [r[0], r[1]]);
   }
   return fromSegments;
+}
+
+/**
+ * 绑定宿主会话（issue #225 后续）：把 hostSessionId 写进 sessions/<taskId>/meta.json，
+ * 供 auto-capture 的 probeTranscript 精确定位转录——DSH_SESSION_ID 在 agent 的 bash env 里有、
+ * 在宿主 spawn 的 MCP server 进程 env 里没有，server 进程 cwd 也不是会话目录，cwd slug 兜底
+ * 会跟错文件。幂等：重复绑定同 id = 重写同值；换 id = 覆盖（一个任务同时只锚一个会话，
+ * 换会话续做时由 agent 重新 bind）。
+ * @param {{memoHome: string, taskId: string, hostSessionId: string, clock?: object}} args
+ * @returns {{file: string, previous: string|null, meta: object}}
+ */
+export function bindSession({ memoHome, taskId, hostSessionId, clock = systemClock } = {}) {
+  requireMemoHome(memoHome);
+  requireTaskId(taskId);
+  if (typeof hostSessionId !== 'string' || hostSessionId.trim() === '') {
+    const e = new Error('bindSession: hostSessionId 必须是非空字符串');
+    e.code = 'E_INVALID_ARG';
+    throw e;
+  }
+  const sid = hostSessionId.trim();
+  if (/[\r\n\0]/.test(sid) || sid.length > 200) {
+    const e = new Error('bindSession: hostSessionId 含非法字符或超长（>200）');
+    e.code = 'E_INVALID_ARG';
+    throw e;
+  }
+  const dir = path.join(memoHome, 'sessions', taskId);
+  const metaFile = path.join(dir, 'meta.json');
+  const legacyFile = path.join(memoHome, 'sessions', `${taskId}.json`);
+  // 任务存在性：账本标记（segments.jsonl / 旧版登记文件）或 meta 可读。
+  // 不做 existsSync(metaFile) 预检——CodeQL TOCTOU（检查与使用之间文件可能被改）；
+  // 直接读 + 按 errno 分流：ENOENT=没有 meta，其他错误=有 meta 但读不出（视为存在、重写）。
+  const hasLedgerMarker = existsSync(path.join(dir, 'segments.jsonl')) || existsSync(legacyFile);
+  let meta = {};
+  let metaReadable = false;
+  try {
+    meta = JSON.parse(readFileSync(metaFile, 'utf8'));
+    if (!meta || typeof meta !== 'object' || Array.isArray(meta)) meta = {};
+    metaReadable = true;
+  } catch (e) {
+    if ((e?.code ?? '') !== 'ENOENT') metaReadable = true; // 坏 meta → 重写为合法对象
+    meta = {};
+  }
+  if (!hasLedgerMarker && !metaReadable) {
+    const e = new Error(`bindSession: 任务 ${taskId} 不存在（sessions/ 下无 meta、segments 与登记文件）`);
+    e.code = 'E_NOT_FOUND';
+    throw e;
+  }
+  const previous = typeof meta.hostSessionId === 'string' && meta.hostSessionId !== '' ? meta.hostSessionId : null;
+  meta.taskId = taskId;
+  if (typeof meta.title !== 'string' || meta.title === '') meta.title = taskId;
+  if (typeof meta.status !== 'string' || meta.status === '') meta.status = 'open';
+  if (typeof meta.startedAt !== 'string' || meta.startedAt === '') {
+    meta.startedAt = new Date(clock.nowMs()).toISOString();
+  }
+  meta.hostSessionId = sid;
+  meta.boundAt = new Date(clock.nowMs()).toISOString();
+  mkdirSync(dir, { recursive: true, mode: MEMO_DIR_MODE });
+  writeFileSync(metaFile, `${JSON.stringify(meta, null, 2)}\n`, { mode: MEMO_FILE_MODE });
+  return { file: metaFile, previous, meta };
 }
 
 /**

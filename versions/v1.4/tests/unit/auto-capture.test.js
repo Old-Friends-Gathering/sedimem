@@ -229,3 +229,44 @@ test('captureOnCloseEnabled 读取策略；disabled 时 close 捕获跳过', asy
   rmSync(f.memoHome, { recursive: true, force: true });
   rmSync(f.cwd, { recursive: true, force: true });
 });
+
+test('bind：meta.json.hostSessionId 优先于 cwd slug；cwd 不匹配时绑定仍命中', async () => {
+  const { bindSession } = await import('../../src/session/ledger.js');
+  const { readBoundSessionId } = await import('../../src/session/auto-capture.js');
+  const f = makeFixture();
+  // 转录 sess-9 挂在与 cwd 无关的 slug 目录下（模拟 server 进程 cwd 不是会话目录）
+  const tx9 = path.join(f.sessionsRoot, 'unrelated-slug', 'sess-9', 'session.v4.jsonl.zstd');
+  mkdirSync(path.dirname(tx9), { recursive: true });
+  writeFileSync(tx9, 'y'.repeat(3000));
+  const otherCwd = mkdtempSync(path.join(tmpdir(), 'sedimem-autocap-other-'));
+
+  // ① 无绑定：cwd slug 与所有目录都不匹配 → no-transcript（fail-closed，不猜）
+  const r0 = await maybeAutoCapture({ ...f.base, cwd: otherCwd, captureTaskImpl: f.base.captureTaskImpl });
+  assert.equal(r0.ran, false);
+  assert.equal(r0.reason, 'no-transcript');
+
+  // ② 绑定后：按 hostSessionId 精确命中（cwd mismatch 无影响）
+  bindSession({ memoHome: f.memoHome, taskId: '20261114-2222-fix', hostSessionId: 'sess-9' });
+  assert.equal(readBoundSessionId(f.memoHome, '20261114-2222-fix'), 'sess-9');
+  const r1 = await maybeAutoCapture({ ...f.base, cwd: otherCwd, captureTaskImpl: f.base.captureTaskImpl });
+  assert.equal(r1.ran, true, '绑定 id 命中转录 → 捕获');
+  assert.equal(f.calls.at(-1)?.taskId, '20261114-2222-fix');
+  rmSync(f.memoHome, { recursive: true, force: true });
+  rmSync(f.cwd, { recursive: true, force: true });
+  rmSync(otherCwd, { recursive: true, force: true });
+});
+
+test('bind：空串/缺失 meta/坏 JSON → readBoundSessionId 返回 null；bindSession 校验与 E_NOT_FOUND', async () => {
+  const { bindSession } = await import('../../src/session/ledger.js');
+  const { readBoundSessionId } = await import('../../src/session/auto-capture.js');
+  const f = makeFixture();
+  assert.equal(readBoundSessionId(f.memoHome, '20261114-2222-fix'), null, '无 meta → null');
+  writeFileSync(path.join(f.memoHome, 'sessions', '20261114-2222-fix', 'meta.json'), 'not-json');
+  assert.equal(readBoundSessionId(f.memoHome, '20261114-2222-fix'), null, '坏 meta → null');
+  bindSession({ memoHome: f.memoHome, taskId: '20261114-2222-fix', hostSessionId: '  sess-x  ' });
+  assert.equal(readBoundSessionId(f.memoHome, '20261114-2222-fix'), 'sess-x', 'trim 后写入');
+  assert.throws(() => bindSession({ memoHome: f.memoHome, taskId: '20261114-2222-fix', hostSessionId: '  ' }), /E_INVALID_ARG|非空/);
+  assert.throws(() => bindSession({ memoHome: f.memoHome, taskId: '99999999-absent', hostSessionId: 'a' }), /E_NOT_FOUND|不存在/);
+  rmSync(f.memoHome, { recursive: true, force: true });
+  rmSync(f.cwd, { recursive: true, force: true });
+});

@@ -180,7 +180,10 @@ export async function maybeAutoCapture({
   try {
     if (captureOnClose && !captureOnCloseEnabled(policy)) return { ran: false, reason: 'capture-on-close-disabled' };
     const state = readAutoCaptureState(memoHome, taskId);
-    const tx = probe ?? probeTranscript({ cwd, sessionsRoot, sessionId });
+    // 绑定优先级：显式参数/env（MCP 层注入）→ meta.json.hostSessionId（memo session bind，agent shell
+    // 里有 DSH_SESSION_ID 而宿主 spawn 的 server 进程没有——issue #225 后续）。都不在才退 cwd slug。
+    const sid = sessionId ?? readBoundSessionId(memoHome, taskId) ?? undefined;
+    const tx = probe ?? probeTranscript({ cwd, sessionsRoot, sessionId: sid });
     const d = decideAutoCapture({ memoHome, taskId, policy, clock, probe: tx, state, force, requireLedger });
     if (!d.ok) return { ran: false, reason: d.reason, ...(d.waitMs !== undefined ? { waitMs: d.waitMs } : {}) };
     const now = nowMs(clock);
@@ -196,7 +199,8 @@ export async function maybeAutoCapture({
     return { ran: true, reason: d.reason, created: res?.created ?? 0, skipped: res?.skipped ?? 0, segments: res?.segments?.length ?? 0 };
   } catch (e) {
     try {
-      const tx2 = probe ?? probeTranscript({ cwd, sessionsRoot, sessionId });
+      const sid2 = sessionId ?? readBoundSessionId(memoHome, taskId) ?? undefined;
+      const tx2 = probe ?? probeTranscript({ cwd, sessionsRoot, sessionId: sid2 });
       const now = nowMs(clock);
       writeAutoCaptureState(memoHome, taskId, {
         lastAttemptAt: now,
@@ -211,6 +215,29 @@ export async function maybeAutoCapture({
 
 export function isAutoCaptureCandidateTool(name) {
   return AUTO_CAPTURE_TOOLS.has(name);
+}
+
+/**
+ * 读 meta.json 里 agent 显式绑定的宿主会话 id（`memo session bind --session-id`）。
+ * 背景（issue #225 后续）：DSH_SESSION_ID 在 agent 的 bash env 里有、在宿主 spawn 的
+ * MCP server 进程 env 里没有；server 进程 cwd 也不是会话目录，cwd slug 兜底会跟错文件。
+ * 所以由 agent 在开工时把当前会话 id 绑进任务 meta，自动捕获按它精确定位转录。
+ * @returns {string|null} hostSessionId（非空字符串）或 null
+ */
+export function readBoundSessionId(memoHome, taskId) {
+  let raw;
+  try {
+    raw = readFileSync(path.join(memoHome, 'sessions', taskId, 'meta.json'), 'utf8');
+  } catch {
+    return null;
+  }
+  try {
+    const meta = JSON.parse(raw);
+    const sid = meta?.hostSessionId;
+    return typeof sid === 'string' && sid.trim() !== '' ? sid.trim() : null;
+  } catch {
+    return null;
+  }
 }
 
 /** 单次挂车检查硬超时：捕获慢（大 zstd）也不拖住工具响应。 */
