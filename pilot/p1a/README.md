@@ -9,7 +9,7 @@ pilot/p1a/
 ├── corpus/    语料（合成脱敏；exit 批次 218 场景/347 gold/对抗 10 类 test 各 10）
 ├── config/    eval-manifest.json（冻结数字，改须版本化 diff+签署）
 ├── tools/     corpus-validate / baseline-runner / score / review / protocol-sim / split-corpus / annotation-pass / contract-guards / fix-r2-*
-├── tests/     101 测试（TDD 先行）
+├── tests/     117 测试（TDD 先行）
 └── out/       运行输出（gitignore，每次带 runId）
 ```
 
@@ -35,6 +35,8 @@ node pilot/p1a/tools/annotation-pass.mjs export --corpus pilot/p1a/corpus --out 
 node pilot/p1a/tools/annotation-pass.mjs import --file pilot/p1a/out/blind/pass2.jsonl --package pilot/p1a/out/blind
 node pilot/p1a/tools/annotation-pass.mjs compare --a pilot/p1a/out/blind/pass1.jsonl --b pilot/p1a/out/blind/pass2.jsonl
 node pilot/p1a/tools/annotation-pass.mjs worksheet --a pilot/p1a/out/blind/pass1.jsonl --b pilot/p1a/out/blind/pass2.jsonl --out pilot/p1a/out/blind/adjudication.json
+# 人工裁决 adjudication.json 的每行 resolution 后：
+node pilot/p1a/tools/annotation-pass.mjs goldset --a pilot/p1a/out/blind/pass1.jsonl --b pilot/p1a/out/blind/pass2.jsonl --worksheet pilot/p1a/out/blind/adjudication.json --out pilot/p1a/out/blind/goldset-v1.json
 
 # 复核骨架（只读；accept/reject 属 P1b）
 node pilot/p1a/tools/review.mjs list pilot/p1a/out/baseline/<runId>/candidates.jsonl [--status s] [--scope sc]
@@ -52,7 +54,7 @@ node pilot/p1a/tools/review.mjs show pilot/p1a/out/baseline/<runId>/candidates.j
 | review.mjs | 复核骨架（只读 list/show） | 计划 §8 |
 | contract-guards.mjs | 三项冻结守卫：双时间互斥/asOf 穿越、tokenizer 计数快照与声明、成本闸门 | 01 §5 / adr-101 / adr-102 |
 | split-corpus.mjs | 家族分层 dev/test 切分 + 跨集近重复（Dice）校验 | 04-scoring-and-splits §1 |
-| annotation-pass.mjs | 双独立标注工作流：盲评包/导入校验/一致性报告/裁决工作表；不出 pass/fail | 06-annotation-spec §2 |
+| annotation-pass.mjs | 双独立标注工作流：盲评包/导入校验/一致性报告/裁决工作表/goldset 生成（fail-closed，未裁决一律拒绝）；不出 pass/fail | 06-annotation-spec §2 |
 
 ## 红线
 
