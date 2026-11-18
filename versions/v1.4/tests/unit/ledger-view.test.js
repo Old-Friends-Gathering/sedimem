@@ -39,6 +39,8 @@ import {
 } from '../../ui/ledger-view.js';
 
 const SRC = await readFile(fileURLToPath(new URL('../../ui/ledger-view.js', import.meta.url)), 'utf8');
+// v1.4.1：checkpoint 渲染从 ledger-view.js 拆到 ledger-checkpoints.js（Q9 单文件 600 行上限）
+const CPSRC = await readFile(fileURLToPath(new URL('../../ui/ledger-checkpoints.js', import.meta.url)), 'utf8');
 const SESSION_SRC = await readFile(fileURLToPath(new URL('../../ui/session-view.js', import.meta.url)), 'utf8');
 
 const SEG = {
@@ -263,10 +265,9 @@ test('buildCheckpointRows: intent 为空串 → 回落 currentState；时间带�
 
 test('checkpoint 徽标一致性：renderCheckpoints 输出含 cp 徽标（与段行结构对齐，issue #241）', () => {
   // renderCheckpoints 不导出——源码级断言：cp 徽标与段行 mode 徽标同类同位置（badge ledger-mode）
-  assert.ok(SRC.includes("el('span', 'badge ledger-mode b-accent', 'cp')"), 'checkpoint 行必须有 cp 徽标（badge ledger-mode 结构）');
-  assert.ok(SRC.includes("非捕获段，无 rules/llm 模式"), 'cp 徽标必须带 title 解释与段的差异');
-  // 段行徽标在 summary 中的顺序：range → mode badge → excerpt；checkpoint 行一致
-  const segIdx = SRC.indexOf("badge ledger-mode");
-  const cpIdx = SRC.indexOf("b-accent', 'cp'");
-  assert.ok(segIdx > -1 && cpIdx > segIdx, 'checkpoint 徽标应复用段行徽标结构');
+  assert.ok(CPSRC.includes("el('span', 'badge ledger-mode b-accent', 'cp')"), 'checkpoint 行必须有 cp 徽标（badge ledger-mode 结构）');
+  assert.ok(CPSRC.includes("非捕获段，无 rules/llm 模式"), 'cp 徽标必须带 title 解释与段的差异');
+  // 段行徽标与 cp 徽标必须同构：都用 "badge ledger-mode" 基类（拆文件后按各自源码断言）
+  assert.ok(SRC.includes("badge ledger-mode"), '段行徽标必须是 badge ledger-mode 结构');
+  assert.ok(/el\('span', 'badge ledger-mode b-accent', 'cp'\)/.test(CPSRC), 'checkpoint 徽标应复用段行徽标结构');
 });

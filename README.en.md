@@ -292,7 +292,7 @@ Tool surface: 10 `memory_*` + 5 `memory_session_*`, identical across all three c
 
 ![Five gate layers: quality → security → coverage → docs-drift → pages-verify](docs/shots/diagrams/gates-en.png)
 
-Local scripts = CI scripts: 15 quality checks + 9 security checks + coverage (lines ≥ 85 / branches ≥ 70 / functions ≥ 90) + docs-drift + pages-verify, plus 831 tests and eval I1–I56.
+Local scripts = CI scripts: 15 quality checks + 9 security checks + coverage (lines ≥ 85 / branches ≥ 70 / functions ≥ 90) + docs-drift + pages-verify, plus 858 tests and eval I1–I56.
 
 ```bash
 node tools/quality-check.mjs && node tools/security-check.mjs && node tools/coverage-gate.mjs
@@ -314,7 +314,8 @@ node tools/quality-check.mjs && node tools/security-check.mjs && node tools/cove
 
 | Version | Theme | Status |
 |---|---|---|
-| **v1.4.0** | P0b start: English README/site (English diagrams + `?lang=en` UI) and project-site links in both READMEs | 🚧 In progress |
+| **v1.4.0** | P0b start: English README/site (English diagrams + `?lang=en` UI) and project-site links in both READMEs | ✅ Released |
+| **v1.4.1** | Periodic auto-capture: scan open tasks every 60s, capture at 30k context without memory tool calls | 🚧 In progress |
 | v1.3.1 | Task-store terminology & entry fix: MCP now says "task store = temporary memory = session:<id>"; `memory_write` accepts a one-shot `scope` | ✅ Shipped |
 | v1.3.0 | P0a foundation: CI follows `versions/CURRENT`, coverage/Windows smoke de-hardcoded, engines 22.15 | ✅ Shipped |
 | v1.2.x | Task context ledger (segments/brief/expand) + task page | ✅ Shipped |

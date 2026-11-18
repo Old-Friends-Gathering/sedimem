@@ -1,17 +1,17 @@
 {
-  "version": "1.4.0",
-  "ts": "2026-11-18T09:13:02.598Z",
+  "version": "1.4.1",
+  "ts": "2026-11-18T11:29:26.599Z",
   "cases": [
     {
       "id": "I1",
       "pass": true,
-      "ms": 144,
+      "ms": 170,
       "detail": "ok"
     },
     {
       "id": "I2",
       "pass": true,
-      "ms": 136,
+      "ms": 180,
       "detail": "ok"
     },
     {
@@ -23,19 +23,19 @@
     {
       "id": "I4",
       "pass": true,
-      "ms": 133,
+      "ms": 147,
       "detail": "ok"
     },
     {
       "id": "I5",
       "pass": true,
-      "ms": 139,
+      "ms": 142,
       "detail": "ok"
     },
     {
       "id": "I6",
       "pass": true,
-      "ms": 217,
+      "ms": 222,
       "detail": "ok"
     },
     {
@@ -47,289 +47,289 @@
     {
       "id": "I8",
       "pass": true,
-      "ms": 337,
+      "ms": 358,
       "detail": "ok"
     },
     {
       "id": "I9",
       "pass": true,
-      "ms": 131,
+      "ms": 132,
       "detail": "ok"
     },
     {
       "id": "I10",
       "pass": true,
-      "ms": 135,
+      "ms": 142,
       "detail": "ok"
     },
     {
       "id": "I11",
       "pass": true,
-      "ms": 168,
+      "ms": 166,
       "detail": "ok"
     },
     {
       "id": "I12",
       "pass": true,
-      "ms": 170,
+      "ms": 191,
       "detail": "ok"
     },
     {
       "id": "I13",
       "pass": true,
-      "ms": 164,
+      "ms": 167,
       "detail": "ok"
     },
     {
       "id": "I14",
       "pass": true,
-      "ms": 215,
+      "ms": 221,
       "detail": "ok"
     },
     {
       "id": "I15",
       "pass": true,
-      "ms": 248,
+      "ms": 261,
       "detail": "ok"
     },
     {
       "id": "I16",
       "pass": true,
-      "ms": 188,
+      "ms": 185,
       "detail": "ok"
     },
     {
       "id": "I17",
       "pass": true,
-      "ms": 160,
+      "ms": 163,
       "detail": "ok"
     },
     {
       "id": "I18",
       "pass": true,
-      "ms": 158,
+      "ms": 160,
       "detail": "ok"
     },
     {
       "id": "I19",
       "pass": true,
-      "ms": 165,
+      "ms": 163,
       "detail": "ok"
     },
     {
       "id": "I20",
       "pass": true,
-      "ms": 21134,
+      "ms": 9684,
       "detail": "ok"
     },
     {
       "id": "I21",
       "pass": true,
-      "ms": 493,
+      "ms": 513,
       "detail": "ok"
     },
     {
       "id": "I22",
       "pass": true,
-      "ms": 406,
+      "ms": 807,
       "detail": "ok"
     },
     {
       "id": "I23",
       "pass": true,
-      "ms": 226,
+      "ms": 382,
       "detail": "ok"
     },
     {
       "id": "I24",
       "pass": true,
-      "ms": 184,
+      "ms": 357,
       "detail": "ok"
     },
     {
       "id": "I25",
       "pass": true,
-      "ms": 117,
+      "ms": 238,
       "detail": "ok"
     },
     {
       "id": "I26",
       "pass": true,
-      "ms": 148,
+      "ms": 179,
       "detail": "ok"
     },
     {
       "id": "I27",
       "pass": true,
-      "ms": 187,
+      "ms": 205,
       "detail": "ok"
     },
     {
       "id": "I28",
       "pass": true,
-      "ms": 147,
+      "ms": 161,
       "detail": "ok"
     },
     {
       "id": "I29",
       "pass": true,
-      "ms": 134,
+      "ms": 145,
       "detail": "ok"
     },
     {
       "id": "I30",
       "pass": true,
-      "ms": 191,
+      "ms": 218,
       "detail": "ok"
     },
     {
       "id": "I31",
       "pass": true,
-      "ms": 336,
+      "ms": 141,
       "detail": "ok"
     },
     {
       "id": "I32",
       "pass": true,
-      "ms": 340,
+      "ms": 120,
       "detail": "ok"
     },
     {
       "id": "I33",
       "pass": true,
-      "ms": 205,
+      "ms": 152,
       "detail": "ok"
     },
     {
       "id": "I34",
       "pass": true,
-      "ms": 379,
+      "ms": 292,
       "detail": "ok"
     },
     {
       "id": "I35",
       "pass": true,
-      "ms": 147,
+      "ms": 120,
       "detail": "ok"
     },
     {
       "id": "I36",
       "pass": true,
-      "ms": 155,
+      "ms": 138,
       "detail": "ok"
     },
     {
       "id": "I37",
       "pass": true,
-      "ms": 203,
+      "ms": 139,
       "detail": "ok"
     },
     {
       "id": "I38",
       "pass": true,
-      "ms": 202,
+      "ms": 163,
       "detail": "ok"
     },
     {
       "id": "I39",
       "pass": true,
-      "ms": 156,
+      "ms": 139,
       "detail": "ok"
     },
     {
       "id": "I40",
       "pass": true,
-      "ms": 119,
+      "ms": 107,
       "detail": "ok"
     },
     {
       "id": "I41",
       "pass": true,
-      "ms": 132,
+      "ms": 135,
       "detail": "ok"
     },
     {
       "id": "I42",
       "pass": false,
-      "ms": 2560,
-      "detail": "    async Test.run (node:internal/test_runner/test:1054:7) |     async startSubtestAfterBootstrap (node:internal/test_runner/harness:296:3) |   ... | 1..1 | # tests 1 | # suites 0 | # pass 0 | # fail 1 | # cancelled 0 | # skipped 0 | # todo 0 | # duration_ms 2513.529125"
+      "ms": 1954,
+      "detail": "    async Test.run (node:internal/test_runner/test:1054:7) |     async startSubtestAfterBootstrap (node:internal/test_runner/harness:296:3) |   ... | 1..1 | # tests 1 | # suites 0 | # pass 0 | # fail 1 | # cancelled 0 | # skipped 0 | # todo 0 | # duration_ms 1906.084708"
     },
     {
       "id": "I43",
       "pass": true,
-      "ms": 153,
+      "ms": 138,
       "detail": "ok"
     },
     {
       "id": "I44",
       "pass": true,
-      "ms": 140,
+      "ms": 145,
       "detail": "ok"
     },
     {
       "id": "I45",
       "pass": true,
-      "ms": 154,
+      "ms": 173,
       "detail": "ok"
     },
     {
       "id": "I46",
       "pass": true,
-      "ms": 231,
+      "ms": 149,
       "detail": "ok"
     },
     {
       "id": "I47",
       "pass": true,
-      "ms": 209,
+      "ms": 239,
       "detail": "ok"
     },
     {
       "id": "I48",
       "pass": true,
-      "ms": 190,
+      "ms": 185,
       "detail": "ok"
     },
     {
       "id": "I49",
       "pass": true,
-      "ms": 442,
+      "ms": 750,
       "detail": "ok"
     },
     {
       "id": "I50",
       "pass": true,
-      "ms": 169,
+      "ms": 223,
       "detail": "ok"
     },
     {
       "id": "I51",
       "pass": true,
-      "ms": 197,
+      "ms": 290,
       "detail": "ok"
     },
     {
       "id": "I52",
       "pass": true,
-      "ms": 226,
+      "ms": 420,
       "detail": "ok"
     },
     {
       "id": "I53",
       "pass": true,
-      "ms": 124,
+      "ms": 174,
       "detail": "ok"
     },
     {
       "id": "I54",
       "pass": true,
-      "ms": 154,
+      "ms": 172,
       "detail": "ok"
     },
     {
       "id": "I55",
       "pass": true,
-      "ms": 122,
+      "ms": 151,
       "detail": "ok"
     },
     {
@@ -360,25 +360,25 @@
   "bench": {
     "n1000": {
       "write": {
-        "p50": 2.0014589999991586,
-        "p95": 2.995583000003535,
+        "p50": 1.932915999997931,
+        "p95": 3.5739170000015292,
         "n": 1000
       },
       "search": {
-        "p50": 1.0905840000050375,
-        "p95": 1.5773340000014286,
+        "p50": 0.9756660000020929,
+        "p95": 1.4694999999992433,
         "n": 200
       }
     },
     "n5000": {
       "write": {
-        "p50": 5.10545799999818,
-        "p95": 8.477707999998529,
+        "p50": 5.211625000003551,
+        "p95": 10.180542000001878,
         "n": 5000
       },
       "search": {
-        "p50": 2.4050829999978305,
-        "p95": 3.1904579999973066,
+        "p50": 2.638249999996333,
+        "p95": 4.481959000004281,
         "n": 200
       }
     }

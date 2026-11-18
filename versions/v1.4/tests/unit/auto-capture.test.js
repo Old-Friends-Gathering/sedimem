@@ -97,16 +97,16 @@ test('maybeAutoCapture: 增长低于阈值且间隔未到 → below-threshold', 
   rmSync(f.cwd, { recursive: true, force: true });
 });
 
-test('maybeAutoCapture: 增长小但间隔已到 → interval-elapsed 捕获', async () => {
+test('maybeAutoCapture: 增长小但间隔已到 → 不再按 interval 兜底，必须等 30k 阈值', async () => {
   const f = makeFixture();
   await maybeAutoCapture(f.base);
   f.calls.length = 0;
   writeFileSync(f.txFile, 'x'.repeat(2100));
-  const clock2 = { nowMs: () => 1_000_000 + 61_000 }; // > minIntervalMs(60s)
+  const clock2 = { nowMs: () => 1_000_000 + 61_000 };
   const r = await maybeAutoCapture({ ...f.base, clock: clock2 });
-  assert.equal(r.ran, true);
-  assert.equal(r.reason, 'interval-elapsed');
-  assert.equal(f.calls.length, 1);
+  assert.equal(r.ran, false);
+  assert.equal(r.reason, 'below-threshold');
+  assert.equal(f.calls.length, 0);
   rmSync(f.memoHome, { recursive: true, force: true });
   rmSync(f.cwd, { recursive: true, force: true });
 });

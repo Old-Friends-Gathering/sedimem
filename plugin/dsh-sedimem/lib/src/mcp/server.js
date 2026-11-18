@@ -13,7 +13,7 @@ import {
   getService, closeAllServices, initConnScope, makeServiceFacade,
 } from './session-tools.js';
 import { checkMcpToken, createMcpTokenGate } from './token-gate.js';
-import { postToolAutoCapture } from '../session/auto-capture.js';
+import { postToolAutoCapture, startAutoCaptureWatcher } from '../session/auto-capture.js';
 // 架构边界基线：mcp → session/cli-support 的边由本文件持有（tests/unit/arch-boundaries.test.js）
 import { PROMOTE_KINDS } from '../session/cli-support.js';
 
@@ -167,6 +167,10 @@ async function main() {
   // 必须先解析门禁（可能读 ~/.memo/web-token）再建 readline：
   // readline 一旦创建就开始消费 stdin，await 期间到达的行会没有监听者，管道输入会被整段丢掉。
   const tokenGate = await createMcpTokenGate();
+  // v1.4.1：周期扫描 open 任务（不依赖 memory_* 工具调用）。pid 锁保证多端只有一个 watcher。
+  const autoWatcher = startAutoCaptureWatcher({
+    log: (m) => process.stderr.write(`[memo] ${m}\n`),
+  });
 
   const rl = readline.createInterface({ input: process.stdin, crlfDelay: Infinity });
   // 每连接独立：initialize 门禁 + 运行期 scope（client/scope 在 initialize 时填充）
@@ -236,6 +240,7 @@ async function main() {
     while (inFlight > 0) await new Promise((r) => setTimeout(r, 10));
     try {
       idleDeriver.stop();
+      autoWatcher.stop();
       await closeAllServices();
     } finally {
       process.exit(0);
@@ -247,6 +252,7 @@ async function main() {
   rl.on('close', async () => {
     while (inFlight > 0) await new Promise((r) => setTimeout(r, 10));
     try {
+      autoWatcher.stop();
       await closeAllServices();
     } finally {
       process.exit(0);

@@ -18,7 +18,7 @@ if (!memoHome) {
 
 let web;
 try {
-  web = await createWebServer({ memoHome, scope, port, host: '127.0.0.1', includeUi: true });
+  web = await createWebServer({ memoHome, scope, port, host: '127.0.0.1', includeUi: true, write: true });
 } catch (err) {
   process.stderr.write(`observer-entry: ${err?.code ?? 'E_START'} ${err?.message ?? err}\n`);
   process.exit(1);

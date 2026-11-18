@@ -12,6 +12,7 @@ import path from 'node:path';
 import { systemClock } from '../core/clock.js';
 import { itemsFileName, scopeFromItemsFileName } from '../config/paths.js';
 import { appendAuditedEventSync } from '../storage/audit.js';
+import { MEMO_FILE_MODE } from '../config/perms.js';
 // 只取形状常量，scope-state.js 无反向依赖（无循环）
 import { SCOPE_PATTERN } from '../core/scope-state.js';
 
@@ -443,6 +444,16 @@ export function renameSession({ memoHome, scope, title }) {
   }
   const previous = typeof cur.title === 'string' ? cur.title : '';
   writeSessionRegistry(memoHome, scope, { ...cur, title: trimmed });
+  // meta.json 也存标题（任务页顶栏读它）；改名不能只改登记文件，否则界面还显示 id。
+  const sessionId = scope.slice(SESSION_PREFIX.length);
+  const metaFile = path.join(memoHome, 'sessions', sessionId, 'meta.json');
+  try {
+    const meta = JSON.parse(readFileSync(metaFile, 'utf8'));
+    if (meta && typeof meta === 'object' && !Array.isArray(meta)) {
+      meta.title = trimmed;
+      writeFileSync(metaFile, `${JSON.stringify(meta, null, 2)}\n`, { mode: MEMO_FILE_MODE });
+    }
+  } catch { /* 没有 meta 或坏 meta：改名仍以登记文件为准 */ }
   return { scope, title: trimmed, previous };
 }
 

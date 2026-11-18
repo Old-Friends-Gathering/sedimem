@@ -11,6 +11,7 @@
 import { invalid, invalidArg, notFound } from '../../core/errors.js';
 import { assertSameOriginStrict } from '../auth.js';
 import { captureTask } from '../../session/capture.js';
+import { readTaskMeta } from '../../session/ledger-brief.js';
 import { archiveTask } from '../../session/ledger.js';
 import { isSessionScope, listSessions, renameSession, removeSession } from '../../session/lifecycle.js';
 import { TASK_ID_RE } from './task-ledger.js';
@@ -238,7 +239,11 @@ export async function apiTaskCapture(service, body) {
     throw invalidArg('tasks/capture: cwd 必须是非空字符串（绝对路径）');
   }
   const cwd = body?.cwd ?? process.cwd();
-  const result = await captureTask({ memoHome: service.memoHome, taskId: task, cwd, mode });
+  // 任务可能由别的 cwd 的会话开发；优先按任务绑定的 hostSessionId 找转录，
+  // 否则服务进程的 cwd 一换，按钮就报 E_TRANSCRIPT_UNAVAILABLE。
+  const bound = readTaskMeta(service.memoHome, task)?.meta?.hostSessionId;
+  const sessionId = typeof bound === 'string' && bound !== '' ? bound : undefined;
+  const result = await captureTask({ memoHome: service.memoHome, taskId: task, cwd, mode, sessionId });
   await appendCaptureEvent(service, task, { created: result.created, skipped: result.skipped, mode });
   return { created: result.created, skipped: result.skipped, segments: result.segments };
 }

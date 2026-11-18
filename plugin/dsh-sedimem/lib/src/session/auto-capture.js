@@ -14,7 +14,7 @@
 //   - captureTask 自带幂等（covered 去重）与账本锁（防重叠），这里不重复加锁。
 //   - 非注入路径不产生任何记忆写入：本模块只写 sessions/<taskId>/autocapture.json 状态。
 
-import { existsSync, mkdirSync, readFileSync, readdirSync, statSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, readdirSync, statSync, unlinkSync, writeFileSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 
@@ -35,6 +35,12 @@ const TASK_ID_RE = /^[a-z0-9][a-z0-9._-]{0,63}$/;
 const DEFAULTS = Object.freeze({ enabled: true, captureTokens: 30_000, bytesPerToken: 4.4, minIntervalMs: 1_800_000, cooldownMs: 60_000 });
 
 /** 会触发挂车检查的工具（memory_session_close 的捕获走 handler 内部，不在挂车层）。 */
+export const OFF_FILE = 'autocapture.off';
+
+export function autoCaptureOff(memoHome) {
+  return existsSync(path.join(memoHome, OFF_FILE));
+}
+
 export const AUTO_CAPTURE_TOOLS = Object.freeze(new Set([
   'memory_write', 'memory_supersede', 'memory_search', 'memory_brief',
   'memory_session_start', 'memory_session_checkpoint', 'memory_session_status',
@@ -147,6 +153,7 @@ function writeAutoCaptureState(memoHome, taskId, patch) {
 export function decideAutoCapture({ memoHome, taskId, policy = defaultPolicy, clock, probe, state, force = false, requireLedger = true }) {
   const pol = autoCapturePolicy(policy);
   if (!pol.enabled) return { ok: false, reason: 'disabled' };
+  if (autoCaptureOff(memoHome)) return { ok: false, reason: 'disabled-by-file' };
   if (!TASK_ID_RE.test(String(taskId ?? ''))) return { ok: false, reason: 'bad-task-id' };
   if (!probe) return { ok: false, reason: 'no-transcript' };
   if (requireLedger && !force && !ledgerDirExists(memoHome, taskId)) return { ok: false, reason: 'no-ledger' };
@@ -160,10 +167,7 @@ export function decideAutoCapture({ memoHome, taskId, policy = defaultPolicy, cl
   if (force) return { ok: true, reason: 'forced', growth };
   const byteThreshold = Math.max(1, Math.round(pol.captureTokens * pol.bytesPerToken));
   if (growth >= byteThreshold) return { ok: true, reason: 'threshold-reached', growth };
-  const last = Number.isFinite(state.lastSuccessAt) ? state.lastSuccessAt : state.lastAttemptAt;
-  if (growth > 0 && Number.isFinite(last) && now - last >= pol.minIntervalMs) {
-    return { ok: true, reason: 'interval-elapsed', growth };
-  }
+  // 只按 30k 阈值捕获；不再用 interval-elapsed 在任意增长时兜底（会产生大量小段）。
   return { ok: false, reason: 'below-threshold', growth };
 }
 
@@ -290,4 +294,112 @@ export async function postToolAutoCapture({ state, toolName, args, overrides = {
   } catch {
     return null;
   }
+}
+
+
+// ===== 周期扫描（v1.4.1）：不依赖 memory_* 工具调用，后台按转录增长触发 =====
+
+const WATCHER_PID_NAME = 'autocapture-watch.pid';
+
+function pidAlive(pid) {
+  if (!Number.isInteger(pid) || pid <= 0) return false;
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch (e) {
+    return e?.code === 'EPERM';
+  }
+}
+
+/** 列出 open 任务 id（读登记文件；不看目录，避免把已删任务算进来）。 */
+export function listOpenTaskIds(memoHome) {
+  const dir = path.join(memoHome, 'sessions');
+  let names = [];
+  try {
+    names = readdirSync(dir).filter((n) => n.endsWith('.json'));
+  } catch {
+    return [];
+  }
+  const out = [];
+  for (const name of names) {
+    let reg;
+    try {
+      reg = JSON.parse(readFileSync(path.join(dir, name), 'utf8'));
+    } catch {
+      continue;
+    }
+    if (!reg || reg.status !== 'open') continue;
+    const id = String(reg.id ?? name.slice(0, -5));
+    if (TASK_ID_RE.test(id)) out.push(id);
+  }
+  return out;
+}
+
+function acquireWatcherPid(memoHome) {
+  const file = path.join(memoHome, WATCHER_PID_NAME);
+  const readPid = () => {
+    try {
+      return Number.parseInt(readFileSync(file, 'utf8').trim(), 10);
+    } catch {
+      return NaN;
+    }
+  };
+  try {
+    mkdirSync(memoHome, { recursive: true });
+    writeFileSync(file, `${process.pid}\n`, { flag: 'wx' });
+    return { file, acquired: true };
+  } catch (e) {
+    if (e?.code !== 'EEXIST') return { file, acquired: false };
+    const old = readPid();
+    if (pidAlive(old)) return { file, acquired: false };
+    try { writeFileSync(file, `${process.pid}\n`); } catch { return { file, acquired: false }; }
+    return { file, acquired: true };
+  }
+}
+
+/**
+ * 启动周期扫描（单例）。每个 tick 对每个 open 任务调用 maybeAutoCapture。
+ * 返回 { started, stop }；started=false 表示已有存活 watcher 或 disabled。
+ */
+export function startAutoCaptureWatcher({
+  memoHome = MEMO_HOME, intervalMs = 60_000, policy = defaultPolicy, clock = systemClock,
+  log = () => {}, maybeImpl = maybeAutoCapture, pidFile,
+} = {}) {
+  const pol = autoCapturePolicy(policy);
+  if (!pol.enabled) return { started: false, reason: 'disabled', stop: () => {} };
+  if (autoCaptureOff(memoHome)) return { started: false, reason: 'disabled-by-file', stop: () => {} };
+  const lock = pidFile
+    ? (() => { try { mkdirSync(path.dirname(pidFile), { recursive: true }); writeFileSync(pidFile, `${process.pid}\n`, { flag: 'wx' }); return { file: pidFile, acquired: true }; } catch { return { file: pidFile, acquired: false }; } })()
+    : acquireWatcherPid(memoHome);
+  if (!lock.acquired) return { started: false, reason: 'already-running', stop: () => {} };
+
+  let running = false;
+  let stopped = false;
+  const tick = async () => {
+    if (running || stopped) return;
+    running = true;
+    try {
+      for (const taskId of listOpenTaskIds(memoHome)) {
+        const r = await maybeImpl({ memoHome, taskId, policy, clock });
+        if (r?.ran) log(`[autocapture] ${taskId}: ${r.reason} created=${r.created ?? 0}`);
+      }
+    } catch (e) {
+      log(`[autocapture] tick failed: ${e?.message ?? e}`);
+    } finally {
+      running = false;
+    }
+  };
+  const timer = setInterval(() => { void tick(); }, Math.max(5_000, Number(intervalMs) || 60_000));
+  if (typeof timer.unref === 'function') timer.unref();
+  void tick();
+  return {
+    started: true,
+    stop: () => {
+      stopped = true;
+      clearInterval(timer);
+      try {
+        if (readFileSync(lock.file, 'utf8').trim() === String(process.pid)) unlinkSync(lock.file);
+      } catch { /* 文件已被别的进程替换/删除都无妨 */ }
+    },
+  };
 }
