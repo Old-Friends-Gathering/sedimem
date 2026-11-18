@@ -300,10 +300,10 @@ footer.doc-foot { padding: 28px 0 0; border-color: var(--atlas-line); color: var
       <div>
         <p class="eyebrow">SEDIMEM · FUTURE ARCHITECTURE · FINAL STATE</p>
         <h1>终态架构：<em>证据约束</em>的 Agent 记忆与上下文引擎</h1>
-        <p class="dek">按 2026-11-18 定稿的 <code>docs/plans/future-architecture.md</code> 推演到全部波次完成后的形态：v1.4 已上线的骨架不动，向内插入「证据约束抽取 → 人工复核 → 二次提权」候选流水线（P1b），向外接「确定性预算装配 + 注入回执」（P1c），全程被冻结评测集盯着（P1a / P5）。</p>
+        <p class="dek">按 2026-11-18 定稿的 <code>docs/plans/future-architecture.md</code> 推演到全部波次完成后的形态：v1.4 已上线的骨架不动，向内插入「证据约束抽取 → 自动接纳 → 历史纠正」候选流水线（P1b），向外接「确定性预算装配 + 注入回执」（P1c），全程被冻结评测集盯着（P1a / P5）。</p>
         <div class="status-line" style="margin-top:20px;">
           <span class="live">v1.4 P0B 已上线</span>
-          <span class="doc-chip pending">P1A 当前唯一入口</span>
+          <span class="doc-chip pending">P1A 工具已交付 · 标注降级</span>
           <span class="doc-chip pending">P1B / P1C 规划</span>
           <span class="doc-chip verify">P2–P4 后置</span>
         </div>
@@ -311,7 +311,7 @@ footer.doc-foot { padding: 28px 0 0; border-color: var(--atlas-line); color: var
       <div class="hero-side">
         <div class="hero-note hot">
           <b>最高优先级</b>
-          <span>上下文抽取准确性。候选 ≠ 事实：六道防线走完只到 T2，进可信 facts 需要第二次独立显式 trust promote。</span>
+          <span>上下文抽取准确性。候选 ≠ 事实：六道防线走完只到 T2，T2结构化陈述按出处可用，无需人工提权，不等于已认证facts。</span>
         </div>
         <div class="hero-note">
           <b>评测先行</b>
@@ -339,8 +339,8 @@ footer.doc-foot { padding: 28px 0 0; border-color: var(--atlas-line); color: var
             <tr><th>波次</th><th>版本</th><th>交付</th><th>开始条件</th><th>完成标志</th></tr>
           </thead>
           <tbody>
-            <tr><td><b>P1a</b>（当前入口）</td><td>v2.0 · 第一波</td><td>标注规范 · 冻结测试集 · 基线 · 证据 schema 规格</td><td>—</td><td>9 项决策全部冻结（见 §04）</td></tr>
-            <tr><td><b>P1b</b>（重点波）</td><td>v2.0 · 第二波</td><td>证据约束抽取 · CLI 复核 · 幂等提交 · 拒绝回放</td><td>P1a 规格冻结 + 独立 gold 标注可用</td><td>候选 claim P≥98% · R≥90%（中英分别达标）</td></tr>
+            <tr><td><b>P1a</b>（工具已交付）</td><td>v2.0 · 第一波</td><td>标注规范 · 冻结测试集 · 基线 · 证据 schema 规格</td><td>—</td><td>9 项决策全部冻结（见 §04）</td></tr>
+            <tr><td><b>P1b</b>（重点波）</td><td>v2.0 · 第二波</td><td>证据约束抽取 · 自动校验/可选管理 · 幂等提交 · 拒绝回放</td><td>P1a 规格冻结 + 独立 gold 标注可用</td><td>候选 claim P≥98% · R≥90%（中英分别达标）</td></tr>
             <tr><td><b>P1c</b></td><td>v2.0 · 第三波</td><td>memory_pack · inject 回执 · 真实 Agent 演示</td><td>P1b 达抽取门槛</td><td>pack 门禁通过 + 演示跑通</td></tr>
             <tr><td><b>P2</b></td><td>v2.1</td><td>纠错生命周期 · 增量整理 · 一种额外只读导入</td><td>v2.0 收口</td><td>—</td></tr>
             <tr><td><b>P3</b></td><td>v2.2</td><td>embedding / 半自动捕获（按消融指标触发）</td><td>指标触发，非排期</td><td>—</td></tr>
@@ -364,7 +364,7 @@ footer.doc-foot { padding: 28px 0 0; border-color: var(--atlas-line); color: var
         <div class="plate-body">
           <svg viewBox="0 0 1320 1224" role="img" aria-labelledby="fig1-title fig1-desc">
             <title id="fig1-title">sedimem 终态分层架构：来源层经写入与抽取进入真相层，再经检索与装配回到宿主 Agent，评测与审计两条横切轨贯穿</title>
-            <desc id="fig1-desc">自上而下共七层。第一层端面：MCP stdio、CLI、Web UI 三个入口（已上线，mint），各自带一块规划扩展（橙）：MCP 增加 memory_pack（P1c）、CLI 增加候选复核流程（P1b）、Web UI 增加候选复核视图（P1b 后）；一条虚线从端面右侧贯穿全层，表示读写入口覆盖各层。第二层来源层（蓝，外部）：三端 MCP 写入、DSH transcript（P1a 首个验证源）、任务账本 segments.jsonl、以及 P2 的一种额外只读导入（橙）。第三层写入与抽取：上行是已上线的四道门——schema 校验、脱敏、去重（Dice 0.15 召回 0.85）、冲突标记——全部通过才落库；下行是橙色规划中的证据约束抽取管线（P1b）：锁外 LLM 抽取、六道防线候选、人工复核、T2 落库。写入结果以「唯一提交点 = 长期记录成功追加（acceptOpId）」进入第四层真相层：items.jsonl 追加只写，T1 可信 facts 与 T2 仅 references，sourceEpoch 撤销过滤所有读面；下方三块橙色规划件：双时间轴（P1a 冻结）、纠错生命周期（P2）、传播控制（P1b/P2）。真相层经「只读派生」进入第五层检索层：BM25/FTS5（mint）与语义向量（橙，P3 按消融触发）两路汇入混合排序 RRF k=60（mint），显式 degraded 标注。检索以 recordIds 进入第六层装配层：memory_pack 确定性预算装配（橙，P1c），输出经 MCP 注入第七层宿主 Agent 会话（蓝，外部）。右侧三条横切轨：评测层（橙，P1a 建立、P5 每波必跑，冻结测试集与门禁数字）、审计与事件（events.jsonl 哈希链已上线，候选事件与 inject 回执规划）、数据治理 docs/12（橙，P1a 登记新资产）。宿主 Agent 会话以橙色虚线连回评测层，标注 holdout 评测反馈（P5）。</desc>
+            <desc id="fig1-desc">自上而下共七层。第一层端面：MCP stdio、CLI、Web UI 三个入口（已上线，mint），各自带一块规划扩展（橙）：MCP 增加 memory_pack（P1c）、CLI 增加候选查询与重放（P1b）、Web UI 增加记忆状态与纠错视图（P1b 后）；一条虚线从端面右侧贯穿全层，表示读写入口覆盖各层。第二层来源层（蓝，外部）：三端 MCP 写入、DSH transcript（P1a 首个验证源）、任务账本 segments.jsonl、以及 P2 的一种额外只读导入（橙）。第三层写入与抽取：上行是已上线的四道门——schema 校验、脱敏、去重（Dice 0.15 召回 0.85）、冲突标记——全部通过才落库；下行是橙色规划中的证据约束抽取管线（P1b）：锁外 LLM 抽取、六道防线候选、自动决策、T2落库。写入结果以「唯一提交点 = 长期记录成功追加（acceptOpId）」进入第四层真相层：items.jsonl 追加只写，T0/T1来源认证分区与T2自动记忆陈述，sourceEpoch 撤销过滤所有读面；下方三块橙色规划件：双时间轴（P1a 冻结）、纠错生命周期（P2）、传播控制（P1b/P2）。真相层经「只读派生」进入第五层检索层：BM25/FTS5（mint）与语义向量（橙，P3 按消融触发）两路汇入混合排序 RRF k=60（mint），显式 degraded 标注。检索以 recordIds 进入第六层装配层：memory_pack 确定性预算装配（橙，P1c），输出经 MCP 注入第七层宿主 Agent 会话（蓝，外部）。右侧三条横切轨：评测层（橙，P1a 建立、P5 每波必跑，冻结测试集与门禁数字）、审计与事件（events.jsonl 哈希链已上线，候选事件与 inject 回执规划）、数据治理 docs/12（橙，P1a 登记新资产）。宿主 Agent 会话以橙色虚线连回评测层，标注 holdout 评测反馈（P5）。</desc>
             <defs>
               <marker id="arw" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" fill="#6f8b81"/></marker>
               <marker id="arw-mint" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" fill="#66d7b2"/></marker>
@@ -441,7 +441,7 @@ footer.doc-foot { padding: 28px 0 0; border-color: var(--atlas-line); color: var
             <text class="svg-mono" x="40" y="466">v1.4 已上线 · 直接写入路径（四道门全过才落库）</text>
             <rect class="svg-box orange" x="40" y="478" width="880" height="52" rx="6"/>
             <text class="svg-title" x="60" y="500">证据约束抽取管线【P1b】</text>
-            <text class="svg-copy" x="60" y="520">锁外 LLM 抽取 → 候选（六道防线）→ 人工复核 → T2 落库 · 详见 Figure 2</text>
+            <text class="svg-copy" x="60" y="520">锁外 LLM 抽取 → 自动校验/接纳 → T2 落库 → 聊天纠正 · 详见 Figure 2</text>
 
             <line class="svg-line" x1="200" y1="542" x2="200" y2="572" marker-end="url(#arw)"/>
             <text class="svg-mono" x="214" y="562">唯一提交点 = 成功追加（acceptOpId）</text>
@@ -451,7 +451,7 @@ footer.doc-foot { padding: 28px 0 0; border-color: var(--atlas-line); color: var
             <text class="svg-mono" x="36" y="604">真相层 · SOURCE OF TRUTH（append-only，唯一权威）</text>
             <rect class="svg-box mint" x="40" y="614" width="880" height="56" rx="6"/>
             <text class="svg-title" x="60" y="636">items.jsonl · append-only</text>
-            <text class="svg-copy" x="60" y="656">T1 可信 facts · T2 仅 references · sourceEpoch 撤销过滤所有读面</text>
+            <text class="svg-copy" x="60" y="656">来源trust保持 · T2陈述按出处可用 · sourceEpoch 撤销过滤所有读面</text>
             <rect class="svg-box orange" x="40" y="684" width="280" height="48" rx="6"/>
             <text class="svg-mono" x="180" y="702" text-anchor="middle">双时间轴【P1a 冻结】</text>
             <text class="svg-mono" x="180" y="720" text-anchor="middle">observedAt + assertedValidFrom/To</text>
@@ -547,17 +547,17 @@ footer.doc-foot { padding: 28px 0 0; border-color: var(--atlas-line); color: var
         <div class="section-no">03</div>
         <div>
           <h2>候选生命周期（P1b 核心）</h2>
-          <p class="section-copy">从原始转录到可信 facts，一条候选要走完六道防线、一次人工接纳、一次独立提权。这是本次重构与竞品（Mem0 / claude-mem 等 ADD-only 抽取）的本质差异：<b>抽取不落库，复核才落库，提权才可信。</b></p>
+          <p class="section-copy">用户最新修订r2：<b>自动沉淀，不逐条复核；后续聊天纠正，保留来源与版本。</b>自动接纳不提升来源trust；有证据的T2结构化记忆可以使用，无法消解的冲突保持未决。</p>
         </div>
       </div>
 
       <div class="diagram-unit" data-diagram="lifecycle">
         <figure class="plate">
-          <div class="plate-head"><b>Figure 2 · 候选生命周期：transcript → 候选 → 复核 → T2 → T1</b><span>点节点展开细节</span></div>
+          <div class="plate-head"><b>Figure 2 · 候选生命周期：转录 → 自动校验 → T2 → 聊天纠正</b><span>点节点展开细节</span></div>
           <div class="plate-body">
             <svg viewBox="0 0 1320 660" role="img" aria-labelledby="fig2-title fig2-desc">
-              <title id="fig2-title">候选从 DSH 转录经 LLM 抽取与六道防线，进入人工复核，accept 后以 T2 落库，二次提权后成为 T1 facts；reject 与无法判定为两条旁路</title>
-              <desc id="fig2-desc">主路径从左到右：DSH transcript（蓝，外部来源，携带 sourceEpoch/rangeId）经实线进入 LLM 抽取（橙，P1b，锁外调用，血缘记录 provider/model/prompt 版本/runId），产出候选 candidate（橙）：单一 claim、断言（谁说的/否定/条件/建议或同意或完成或撤销）、双时间、关系 ID 约束、证据 span/hash/eventId。候选进入六道防线区（橙）：结构 schema、证据存在、语义核对、冲突与纠正、人工接纳、传播控制。防线通过后进入人工复核 CLI（橙）：list、show、diff、accept、reject、status，逐条展示不可默认勾选。accept 沿实线向下到 T2 落库 = 提交点（橙）：acceptOpId、CAS（candidateVersion + evidenceHash + expectedTruthRevision），追加进真相层；再沿实线向下经 trust promote（mint，v1.4 已上线，二次独立显式提升、带理由）成为 T1 facts，可进 pack 的 facts 分区。两条旁路：六道防线区沿虚线（玫红）向下到 reject → 拒绝样本留存（玫红）：评测负例、回放防复发；候选沿虚线（玫红）到 recovery-required（玫红）：无法判定、禁止自动重试。左下角橙色块：防线⑥传播控制——摘要继承最低信任，纠正后旧候选/向量/pack 缓存失效，候选工作流与 trust 独立（pending/accepted）。图顶注释：锁不覆盖 LLM 网络调用——锁外抽取、锁内 CAS 核对落盘。</desc>
+              <title id="fig2-title">候选经自动校验接纳以T2落库，并按后续聊天纠正；无需人工审批</title>
+              <desc id="fig2-desc">原始转录经过抽取、证据和语义校验，再自动接受/拒绝/未决。接纳后保持T2，可作为有出处的结构化陈述使用；明确后续纠正追加新版本，旧派生失效；恢复自动对账，无法证明不盲写。</desc>
               <defs>
                 <marker id="arw2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" fill="#6f8b81"/></marker>
                 <marker id="arw2-rose" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" fill="#ff7f8f"/></marker>
@@ -601,14 +601,14 @@ footer.doc-foot { padding: 28px 0 0; border-color: var(--atlas-line); color: var
                 <text class="svg-mono" x="870" y="176" text-anchor="middle">② 证据存在</text>
                 <text class="svg-mono" x="870" y="192" text-anchor="middle">③ 语义核对</text>
                 <text class="svg-mono" x="870" y="208" text-anchor="middle">④ 冲突与纠正</text>
-                <text class="svg-mono" x="870" y="224" text-anchor="middle">⑤ 人工接纳</text>
+                <text class="svg-mono" x="870" y="224" text-anchor="middle">⑤ 自动接纳</text>
                 <text class="svg-mono" x="870" y="240" text-anchor="middle">⑥ 传播控制</text>
               </g>
               <line class="svg-line" x1="990" y1="180" x2="1016" y2="180" marker-end="url(#arw2)"/>
 
-              <g class="node" data-node="review" tabindex="0" role="button" aria-label="展开人工复核节点详情">
+              <g class="node" data-node="review" tabindex="0" role="button" aria-label="展开自动策略节点详情">
                 <rect class="svg-box orange" x="1020" y="120" width="270" height="120" rx="6"/>
-                <text class="svg-title" x="1155" y="148" text-anchor="middle">人工复核 CLI【P1b】</text>
+                <text class="svg-title" x="1155" y="148" text-anchor="middle">自动策略决策【P1b】</text>
                 <text class="svg-mono" x="1155" y="172" text-anchor="middle">list→show→diff→accept</text>
                 <text class="svg-mono" x="1155" y="190" text-anchor="middle">reject · status</text>
                 <text class="svg-copy" x="1155" y="212" text-anchor="middle">逐条展示 · 不可默认勾选</text>
@@ -629,11 +629,11 @@ footer.doc-foot { padding: 28px 0 0; border-color: var(--atlas-line); color: var
               <line class="svg-line mint" x1="1155" y1="446" x2="1155" y2="496" marker-end="url(#arw2-mint)"/>
               <text class="svg-mono svg-mint" x="1167" y="476">二次提升</text>
 
-              <g class="node" data-node="promote" tabindex="0" role="button" aria-label="展开 trust promote 节点详情">
+              <g class="node" data-node="promote" tabindex="0" role="button" aria-label="展开自动记忆读取规则">
                 <rect class="svg-box mint" x="1020" y="500" width="270" height="110" rx="6"/>
-                <text class="svg-title" x="1155" y="528" text-anchor="middle">trust promote【v1.4】</text>
+                <text class="svg-title" x="1155" y="528" text-anchor="middle">记忆读取【P1c】</text>
                 <text class="svg-copy" x="1155" y="552" text-anchor="middle">二次独立显式提升 · 带理由</text>
-                <text class="svg-mono" x="1155" y="576" text-anchor="middle">T1 → pack facts 分区</text>
+                <text class="svg-mono" x="1155" y="576" text-anchor="middle">T2 → 有出处的上下文</text>
               </g>
 
               <line class="svg-line rose svg-dash" x1="870" y1="248" x2="870" y2="326" marker-end="url(#arw2-rose)"/>
@@ -661,7 +661,7 @@ footer.doc-foot { padding: 28px 0 0; border-color: var(--atlas-line); color: var
               <text class="svg-mono" x="50" y="430">候选工作流与 trust 独立（pending/accepted）</text>
             </svg>
           </div>
-          <figcaption><b>图 2 附注。</b>实线 = 主路径；虚线 = 拒绝 / 人工介入旁路。mint = v1.4 已上线；orange = P1b 规划；rose = 阻断与拒绝路径；blue = 外部来源。两条弦外之音：① accept 与 trust promote 之间是<b>两道独立的人类动作</b>——批量「接受一批候选」不会连带提权，提权必须逐条带理由，这是 A01 对抗修订的核心结论；② recovery-required 是显式状态而非重试队列——系统无法判定提交结果时禁止自动重试，避免同一段输入被重复入库。</figcaption>
+          <figcaption><b>图 2 附注。</b>实线为自动沉淀主链，拒绝与恢复为旁路。r2取消人工接纳/提权前置；来源trust不提升，后续聊天按证据纠正，未决冲突扣留。v2.0生产管线仍待实现；详见策略08。</figcaption>
         </figure>
 
         <div class="plate-detail-list">
@@ -678,28 +678,28 @@ footer.doc-foot { padding: 28px 0 0; border-color: var(--atlas-line); color: var
             <p><b>核心字段：</b>candidateId、schemaVersion、scope、输入范围 hash。<b>内容：</b>单一 claim（一条候选只说一件事）；类型 fact / decision / preference / gotcha / task-state / hypothesis（与现有 kind 的映射由 P1a 规格定义，<b>不直接扩 kind</b>）。<b>断言：</b>谁说的、引述、否定、条件、建议｜同意｜完成｜撤销。<b>双时间：</b>observedAt + assertedValidFrom/To（业务时间）独立于 MemoryRecord.validFrom/validTo（系统可见区间），防止 asOf 穿越。<b>关系：</b>关系 ID 必须来自输入允许集合，不得幻觉引用。<b>工作流：</b>pending / rejected / accepted 与 trust 完全独立。</p>
           </details>
           <details class="node-detail" id="node-defenses" data-node="defenses">
-            <summary>六道防线 · 抽取质量的结构化保证</summary>
-            <p>① <b>结构 schema</b>：候选必须通过机器可校验的结构定义；② <b>证据存在</b>：每条 claim 携带 span/hash/eventId，必须能在原文中定位，证据解析率门禁 100%；③ <b>语义核对</b>：claim 与证据语义一致，不允许「证据说 A、候选写 B」；④ <b>冲突与纠正</b>：与既有记录冲突时走纠正路径而非静默新增；⑤ <b>人工接纳</b>：accept 后仍 T2，只进 references；⑥ <b>传播控制</b>：摘要继承最低信任，纠正后旧候选/向量/pack 缓存失效。前四道机器执行，第五道人类执行，第六道跨波次生效（P1b 起、P2 完整）。</p>
+            <summary>自动校验与纠正防线</summary>
+            <p>结构/来源/证据/语义/冲突检查后由自动策略接纳；后续用户明确纠正或工具状态变化追加版本并失效旧派生。来源不明或冲突无法消解时扣留，不猜测、不转人工待办。</p>
           </details>
           <details class="node-detail" id="node-review" data-node="review">
-            <summary>人工复核 CLI【P1b 首发，UI 后续】</summary>
-            <p><b>完整流程：</b><code>candidates list → show → diff → accept / reject → status</code>。<b>交互红线：</b>逐条展示、不可默认勾选——批量操作只允许批量「查看」，不允许批量「接受并提权」。<b>落点：</b>accept 只把候选置为 accepted 并以 T2 追加进真相层（references 可见）；提权是另一次独立动作。<b>证据：</b>复核记录本身入审计事件流，可回放。</p>
+            <summary>自动策略决策【P1b，待实现】</summary>
+            <p>校验通过自动accept，违规自动reject，语义不明进入unresolved，不产生待用户审批队列。保存policy版本、证据和opId；来源trust仍T2，不自动提权。</p>
           </details>
           <details class="node-detail" id="node-accept" data-node="accept">
             <summary>T2 落库 = 唯一提交点【P1b】</summary>
             <p><b>幂等五元组：</b>sourceEpoch、rangeId、extractionRunKey、candidateVersion、acceptOpId。<b>CAS 校验（同一数据锁内）：</b>candidateVersion + evidenceHash + expectedTruthRevision 三者匹配才允许追加；长期记录成功追加即为提交点。<b>no-op / merge：</b>需持久收据（opId → 目标记录），不能只留内存结果。<b>区间幂等：</b>重叠写入返回 E_ALREADY_CAPTURED 且零写入。<b>崩溃恢复：</b>无法判定提交结果时标 recovery-required（见旁路节点），带恢复测试覆盖。</p>
           </details>
           <details class="node-detail" id="node-promote" data-node="promote">
-            <summary>trust promote → T1 facts【v1.4 已上线】</summary>
-            <p><b>动作：</b><code>memo trust promote</code>，带理由，逐条执行——这是 T2 升 T1 的唯一路径（P0b B2 交付）。<b>与 accept 的关系：</b>accept 是候选工作流状态（accepted），promote 是信任状态（T1→），两者独立、先后两次人工确认。<b>效果：</b>T1 记录才可进 memory_pack 的 facts 分区；T2 记录只能以 references 出现。<b>对抗背景：</b>首轮审核 A01（blocker）指出「accept 不提升 trust 却无可信 facts 路径」的矛盾，最终以「二次独立 promote」收口。</p>
+            <summary>结构化记忆可用【P1c，待实现】</summary>
+            <p>同scope、授权来源、证据有效且非隔离的T2陈述可按出处进入上下文；不宣称已人工认证，也不授权工具/出站。v1.4手工promote仅保留兼容，不是日常前置。</p>
           </details>
           <details class="node-detail" id="node-reject" data-node="reject">
             <summary>reject → 拒绝样本留存</summary>
             <p><b>不丢弃：</b>被拒绝的候选作为<b>评测负例</b>持久留存（按数据地图登记可删性），进入冻结测试集的对抗维度（建议未接受、后续纠正等十类）。<b>回放：</b>每次抽取管线迭代后在拒绝样本上回放，防止同类错误复发。<b>审计：</b>拒绝动作与理由写入事件流（P1b 交付），与 accept 对称。</p>
           </details>
           <details class="node-detail" id="node-recovery" data-node="recovery">
-            <summary>recovery-required · 显式恢复态</summary>
-            <p><b>触发：</b>提交结果无法判定（如锁内 CAS 核对后进程崩溃，追加是否落盘未知）。<b>纪律：</b>该状态<b>禁止自动重试</b>——自动重试可能把同一段输入重复入库，破坏区间幂等。<b>恢复：</b>由人工按 opId 对账后推进；恢复路径有专项测试覆盖（对抗修订 A03 / D02）。<b>与 reject 的区别：</b>reject 是「人看了，决定不要」；recovery-required 是「系统不知道结果」，两者都阻断传播，但语义与处置不同。</p>
+            <summary>recovery-required · 自动对账</summary>
+            <p>依据持久opId、决定和目标版本确定性对账；无法证明结果时扣留该操作，禁止盲目重写，不阻塞其他任务，也不要求用户逐条复核。</p>
           </details>
         </div>
       </div>
@@ -729,11 +729,12 @@ footer.doc-foot { padding: 28px 0 0; border-color: var(--atlas-line); color: var
     </section>
 
     <section id="route">
+      <div class="callout info"><p><b>当前策略 r2：</b>用户取消人工逐条复核、双人工标注和人工提权前置；改为自动沉淀、历史聊天纠正。来源与不确定性保留，取消人工不等于模型永不犯错。<a href="../design/v2.0/08-auto-memory-and-correction.md">策略08</a></p></div>
       <div class="section-head">
         <div class="section-no">04</div>
         <div>
           <h2>路线门槛与放行</h2>
-          <p class="section-copy">P1a 是当前唯一入口；P1a 结束前九项决策必须冻结，缺一不得开 P1b。所有门槛数字是<b>冻结目标</b>，不是已测成绩。</p>
+          <p class="section-copy">P1a 九项规格已冻结，218 场景工具轨与规则基线已交付；出口为 9✅+1⚠️，模型参考来源为 model-dual-blinded，r2取消人工前置。P1b/P1c 尚未实现，新增收益展示仍为 planned；不能把工具出口当人工 gold 或效果验收。</p>
         </div>
       </div>
 
@@ -744,11 +745,22 @@ footer.doc-foot { padding: 28px 0 0; border-color: var(--atlas-line); color: var
         <p><b>七类严重错误（评测中任一出现即阻断，不看总分）：</b>无依据事实 · 角色错归 · 否定反转 · 建议变批准 · 未做变已做 · 跨 scope 泄漏 · 撤回当当前。</p>
       </div>
       <div class="callout warn">
-        <p><b>本轮放行边界：</b>只放行 P1a 的规格、标注准备与最小试跑。不建 v2.0 版本目录、不切 CURRENT；v2.0 规格先写 <code>docs/design/v2.0/</code> 草案（planned），等 CURRENT 切换时才同步现行 <code>docs/02 / 04 / 07 / 12</code>。</p>
+        <p><b>当前边界：</b>P1a 工具继续复用；先补自动粒度规范与时序纠正回归，再按门禁推进 P1b。不建 v2.0 版本目录、不切 CURRENT；v2.0 规格先写 <code>docs/design/v2.0/</code> 草案（planned），等 CURRENT 切换时才同步现行 <code>docs/02 / 04 / 07 / 12</code>。</p>
       </div>
       <div class="callout">
-        <p><b>发布收益三条件（端到端实验，三项同时满足才谈发布）：</b>pack 证据覆盖率不降 · memory token 中位数降 ≥20% · 任务成功率不降。对比组五档（无记忆 / 最近窗口 / BM25 / 混合 / 混合+pack）共享同一份人工接纳与 trust 结果，成对比较、每组 ≥3 次运行。</p>
+        <p><b>发布收益三条件（端到端实验，三项同时满足才谈发布）：</b>pack 证据覆盖率不降 · memory token 中位数降 ≥20% · 任务成功率不降。对比组五档（无记忆 / 最近窗口 / BM25 / 混合 / 混合+pack）共享同一份自动沉淀与来源策略结果，成对比较、每组 ≥3 次运行。</p>
       </div>
+    </section>
+
+    <section id="benefits">
+      <div class="section-head"><div class="section-no">＋</div><div><h2>最终收益展示 · planned</h2><p class="section-copy">用户新增交付：复用已完成的 P1a 评分结果，P1b 采集，P1c 展示；不改冻结数据或阈值。</p></div></div>
+      <div class="boundary-grid">
+        <div class="boundary"><b>收益看板</b><ul><li>同任务 token 用量与节省</li><li>抽取/核对/回答全链路净费用</li><li>质量、耗时、可选干预、纠正效果与回本</li></ul></div>
+        <div class="boundary"><b>任务对照演示</b><ul><li>相同任务与可用记忆</li><li>baseline / pack 上下文与输出</li><li>证据、排除理由与失败样例</li></ul></div>
+        <div class="boundary"><b>可复现实验报告</b><ul><li>模型 / tokenizer / gold / 标注版本</li><li>同源 JSON / CSV / Markdown</li><li>限制声明、区间与复现命令</li></ul></div>
+      </div>
+      <div class="callout warn"><p><b>口径必须清楚：</b>20% 是 memory token 的目标，非实测节省或总费用承诺；跨模型 tokenizer 不等于真实账单。没有 baseline / usage 时显示 N/A 或 estimate；负收益保留，model-dual-blinded 不标正式达标。</p></div>
+      <p>实施与验收：<a href="../design/v2.0/07-benefits-observability.md">收益展示规格 07</a> · <a href="v2.0-p1.md">P1 施工衔接 §11</a></p>
     </section>
 
     <section id="state">
@@ -768,16 +780,16 @@ footer.doc-foot { padding: 28px 0 0; border-color: var(--atlas-line); color: var
             <li>BM25(FTS5) 检索 + RRF，显式 degraded</li>
             <li>events.jsonl 哈希链 · memo audit</li>
             <li>任务账本 segments.jsonl + briefJson</li>
-            <li>九页只读观测台 · 831 tests 三端部署</li>
+            <li>九页只读观测台 · 当前运行 v1.4.2（源码核对）</li>
             <li>数据锁 / 删除路径 / MCP token opt-in</li>
           </ul>
         </div>
         <div class="boundary">
-          <b>本轮建设（P1a → P1c，v2.0）</b>
+          <b>v2.0：已交付工具与待开发产品</b>
           <ul>
-            <li>P1a：标注规范 · 冻结测试集 · 基线 · 证据 schema 规格 · 九项冻结</li>
-            <li>P1b：证据约束抽取 · 六道防线 · CLI 复核 · 幂等 CAS 提交 · 拒绝回放</li>
-            <li>P1c：memory_pack（分区 / 预算 / 确定性）· inject 回执 · 真实 Agent 演示</li>
+            <li>P1a 已有：九项冻结 · 218 场景 · 规则基线/评分/出口工具；模型参考来源保留</li>
+            <li>P1b：证据约束抽取 · 六道防线 · 自动校验/可选管理 · 幂等 CAS 提交 · 拒绝回放</li>
+            <li>P1c 待开发：memory_pack · 回执 · 收益看板 · 任务对照演示 · 可复现报告</li>
             <li>全程：P5 持续评测门禁</li>
           </ul>
         </div>
@@ -787,7 +799,7 @@ footer.doc-foot { padding: 28px 0 0; border-color: var(--atlas-line); color: var
             <li>P2（v2.1）：纠错完整生命周期 · 增量整理 · 一种额外只读导入</li>
             <li>P3（v2.2）：embedding / 半自动捕获，按消融指标触发，非排期</li>
             <li>P4：backlog（暂无承诺）</li>
-            <li>候选复核 Web UI：P1b CLI 之后的增强项</li>
+            <li>候选管理：可选查看/重放，无日常人工待办</li>
           </ul>
         </div>
       </div>

@@ -4,7 +4,7 @@
 > doc-version: 2.0
 > status: planned
 
-状态：**planned**——冻结前允许修订。来源：[future-architecture.md](../../plans/future-architecture.md) §7.1/§7.2；施工映射 [v2.0-p1.md](../../plans/v2.0-p1.md) §2 冻结决策 8、§3 D2（标注规范并入或独立见 [06-annotation-spec.md](06-annotation-spec.md)）。阈值数字一律以 [05-threshold-manifest.md](05-threshold-manifest.md) 为准，本文只定**口径**。
+状态：**planned，r2：取消人工匹配/裁决前置**。[r1快照](history/2026-11-18-manual-r1/04-scoring-and-splits.txt)保留；自动规则以[08](08-auto-memory-and-correction.md)为准。来源：[future-architecture.md](../../plans/future-architecture.md) §7.1/§7.2；施工映射 [v2.0-p1.md](../../plans/v2.0-p1.md) §2 冻结决策 8、§3 D2（标注规范并入或独立见 [06-annotation-spec.md](06-annotation-spec.md)）。阈值数字一律以 [05-threshold-manifest.md](05-threshold-manifest.md) 为准，本文只定**口径**。
 
 ## 1. 场景家族切分（冻结决策 8）
 
@@ -25,7 +25,7 @@
 
 **匹配裁决与 tie-break**：
 
-1. 一对一匹配由**人工裁决**（对照 [06-annotation-spec.md](06-annotation-spec.md) §1 gold 与候选输出逐对判定），裁决记录随 gold 版本化存档、可追溯，不靠打分器自动配对。
+1. 一对一匹配由**冻结的自动匹配规约与记录化模型judge**（对照 [06-annotation-spec.md](06-annotation-spec.md) §1 gold 与候选输出逐对判定），裁决记录随参考集/匹配器版本化存档；无人工前置，未决配对按保守FP/FN记录，不悄悄忽略。
 2. **tie-break**：同一 gold 命中多个候选时，「证据更完整者优先」——evidence 覆盖 span 更完整、quote 与 gold 引文一致性更高者得 TP，其余按重复候选计 FP；仍无法区分 → 该 gold 计 FN、全部相关候选计 FP（保守计分，宁可低报）。
 3. **子/超集命题计分**：候选是 gold 的子命题（信息缺失）→ 不计 TP，gold 计 FN、该候选计 FP；候选是超集（复合命题）→ 本应被 01 schema 校验拒绝，若逃逸到评分层计 FP；两种情形都在裁决记录中标注子/超集类型。
 
@@ -37,7 +37,7 @@
 
 1. **零输出 precision 未定义不通过**（§2）。
 2. **漏标 gold 先裁决再重跑**：「语义正确但 gold 漏标」→ 先走 gold 裁决流程（[06-annotation-spec.md](06-annotation-spec.md) §4）并**版本化** gold，然后**重跑全部组**（含对照组），不得临时把该候选加成 TP。
-3. **FN 含过滤拒绝**：因管线过滤、人工 reject、`evidence-unsupported` 导致的漏报都是 FN；评测不放管线「自我豁免」。
+3. **FN 含过滤拒绝**：因管线过滤、策略reject、`evidence-unsupported` 导致的漏报都是 FN；评测不放管线「自我豁免」。
 4. **固定配置 ≥3 次运行**：每次运行独立达标（中英分别），报三次的分布，不只报最好一次。
 5. **截断/超时/解析失败保留原分母**：`token-truncated`/`timeout`/`parse-failure` 场景保留在分母计缺失，**不得**作为「空场景」剔除。
 6. **家族聚类 bootstrap 主口径**：置信区间以场景家族为聚类单位 bootstrap；Wilson 区间仅描述性、禁止宣称独立样本置信；报告必报：拦截率、每场景复核数量/耗时、无可记场景误报率。
@@ -57,11 +57,11 @@
 - **拦住**：对抗样例中管线正确拒绝或正确标记为错误的情形 → 拦截率分子。机判口径（R2-F1 定稿，score.mjs 同源实现）：
   - `block` 违规 = **非 TP 候选**触碰对抗 target（`c.evidence[0].eventId === target` 且该候选未精确匹配任何 gold）——TP 豁免是因为合法的极简场景里 bait 与 gold 证据共享同一句子，完美抽取（只产出 gold）不受罚；产出 gold 之外命题即违规。
   - `emit-with-flag` 违规 = 触碰 target 的候选**未携带显式标记**（flagged）——已打标候选（无论是否 TP）通过，不被其他打标候选遮蔽。
-- **逃逸**：错误进入最终候选 → **任一逃逸即阻断**（manifest 阈值）；两类分开计数、分开报告。校验器对「block target ∈ gold evidence」输出 warning（corpus-validate collectWarnings，非阻断），提醒人工确认该场景走 TP 豁免路径。
+- **逃逸**：错误进入最终候选 → **任一逃逸即阻断**（manifest 阈值）；两类分开计数、分开报告。校验器对「block target ∈ gold evidence」输出 warning（corpus-validate collectWarnings，非阻断），标记自动规则检查该场景走 TP 豁免路径。
 
 ## 5. 三层报告
 
-每轮评测报三层：① 原始抽取输出（含失败枚举）；② 机器校验后候选（schema/证据/闭集校验后的集合）；③ 人工复核后记录。层间差异本身是指标（过滤率、复核改动率），不得只报最好一层。
+每轮评测报三层：① 原始抽取输出（含失败枚举）；② 机器校验后候选（schema/证据/闭集校验后的集合）；③ 自动沉淀及聊天纠正后记录。层间差异本身是指标（过滤率、纠正生效率），不得只报最好一层。
 
 **pilot fail-closed**：manifest `stage=pilot` 时，scorer **拒绝输出** pass/fail 达标结论（硬校验，输出只含过程指标）；pass/fail 判定仅 `stage=exit` 允许。pilot 语料的单标注局限见 [06-annotation-spec.md](06-annotation-spec.md) §3。
 
