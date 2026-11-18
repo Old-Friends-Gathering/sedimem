@@ -65,6 +65,8 @@ test('T-A13 真相层追加失败 → 收据重放不重复；revision 不符 �
   const rec2 = sim.reconcile('op-crash');
   assert.equal(rec2.kind, 'recovery-required');
   assert.equal(sim.truthRecords().length, 1);
+  // R9：recovery-required 不是「可以自愈」——同 opId 再提交必须被拦
+  assert.throws(() => sim.commit(id, { opId: 'op-crash' }), /E_RECOVERY_BLOCKED/);
 });
 
 test('T-A14 成本闸门：无配置拒绝发起 / 超上限停机 / 目的地白名单 / 脱敏失败', () => {
@@ -130,5 +132,9 @@ test('T-A18 两个并发 accept 同一候选 → 第二条 CAS 冲突，真相�
   assert.equal(a.kind, 'accepted');
   const b = sim.commit(id, { opId: 'op-b' });
   assert.equal(b.kind, 'noop-receipt');
+  // R1/R3：第二条必须真的撞 CAS（candidateVersion 已推进）并走刷新消解，而不是被状态短路
+  assert.equal(b.refreshed, true);
+  assert.equal(sim.refreshCount(), 1);
+  assert.equal(sim.casRefreshes()[0].resolved, 'record-exists');
   assert.equal(sim.truthRecords().length, 1);
 });

@@ -85,6 +85,8 @@ export function createR2Sim(opts = {}) {
   const records = []; // 真相层视图（含 corrected/superseded 语义）
   const holds = [];
   const decisions = new Map();
+  const candidateVersions = new Map(); // candidateId → 已提交后的版本（CAS 比较面）
+  const casRefreshes = [];
   const permissions = new Map();
   const counters = { extraction: 0, usage: 0, decision: 0 };
   const runs = new Map();
@@ -144,9 +146,11 @@ export function createR2Sim(opts = {}) {
       const sameSubject = records.filter((r) => r.subject === a.subject && r.predicate === a.predicate && r.status !== 'retracted');
       if (sameSubject.some((r) => r.scope !== claim.scope)) return reject('cross-scope-leak');
 
-      // 3. 注入
+      // 3. 注入：正文面 = claim 全文 + 所引事件全文 + quote（只查 quote 会被干净句绕过）
       const quote = a.quote ?? '';
-      if (INJECTION_RE.test(quote)) return reject('injection-suspected');
+      const citedTexts = evidence.filter((e) => e.resolvable).map((e) => meta.events?.[e.eventId]?.text ?? '');
+      const injectionSurface = [claim.claim ?? '', quote, ...citedTexts].join('\n');
+      if (INJECTION_RE.test(injectionSurface)) return reject('injection-suspected');
 
       // 4. 身份未定
       if (!a.speaker || ctx.identityUnknown === true) return reject('identity-unknown');
@@ -189,6 +193,13 @@ export function createR2Sim(opts = {}) {
     },
 
     commit(candidateId, { opId, expected } = {}) {
+      // recovery-required 优先于收据幂等：禁止用「看起来已完成」掩盖未决状态（09 §8）
+      const pendingRecovery = sim.recovery.get(opId);
+      if (pendingRecovery && !pendingRecovery.resolved) {
+        const e = new Error(`E_RECOVERY_BLOCKED: opId=${opId} recovery-required，禁止自动重试`);
+        e.code = 'E_RECOVERY_BLOCKED';
+        throw e;
+      }
       const receipt = sim.receipts.get(opId);
       if (receipt) return { kind: 'noop-receipt', recordId: receipt.truthRecordId };
 
@@ -202,9 +213,11 @@ export function createR2Sim(opts = {}) {
         return { kind: 'cancelled' };
       }
       if (cand?.workflow?.state === 'accepted') {
-        // 已提交过（另一个 opId 的并发/重放）→ 幂等收据，不新增真相层
+        // 并发 accept：对方已把 candidateVersion 推进 → 本提交必撞 CAS
         const prior = [...sim.receipts.values()].find((r) => r.candidateId === candidateId);
-        return { kind: 'noop-receipt', recordId: prior?.truthRecordId ?? null };
+        refreshCount += 1; // 刷新重评：读回最新版本后发现目标记录已存在 → 冲突消解
+        casRefreshes.push({ candidateId, opId, resolved: 'record-exists', truthRecordId: prior?.truthRecordId ?? null });
+        return { kind: 'noop-receipt', recordId: prior?.truthRecordId ?? null, refreshed: true };
       }
 
       const evidence = cand?.evidence ?? [];
@@ -212,7 +225,7 @@ export function createR2Sim(opts = {}) {
       let attempt = 0;
       for (;;) {
         const current = {
-          candidateVersion: 1,
+          candidateVersion: candidateVersions.get(candidateId) ?? 1,
           evidenceHash: evidence[0]?.hash,
           expectedTruthRevision: sim.truthRevision,
         };
@@ -256,7 +269,8 @@ export function createR2Sim(opts = {}) {
         trust: sim.truth.get(rec.truthRecordId)?.trust ?? 'T2',
       });
       permissions.set(rec.truthRecordId, { allowed: false, reason: 't2-not-capable' });
-      return { kind: 'accepted', recordId: rec.truthRecordId, revision: rec.revision };
+      candidateVersions.set(candidateId, (candidateVersions.get(candidateId) ?? 1) + 1);
+      return { kind: 'accepted', recordId: rec.truthRecordId, revision: rec.revision, candidateVersion: candidateVersions.get(candidateId) };
     },
 
     truthRecords() {
@@ -364,14 +378,30 @@ export function createR2Sim(opts = {}) {
       return refreshCount;
     },
 
+    casRefreshes() {
+      return [...casRefreshes];
+    },
+
     eventCounts() {
       return { ...counters, extraction: counters.extraction };
     },
 
+    // 09 §9：extraction/usage/decision 三类事件缺一即 run 不可用于效果结论
     runStatus(runId) {
       const run = runs.get(runId) ?? {};
-      const ok = Boolean(run.usage) && (run.decisions ?? 0) > 0;
-      return { runId, status: ok ? 'success' : 'incomplete', verdictAllowed: ok, missing: ok ? [] : ['usage', 'decision'].filter((k) => (k === 'usage' ? !run.usage : !(run.decisions > 0))) };
+      const missing = [];
+      if (!((run.extractions ?? counters.extraction) > 0)) missing.push('extraction');
+      if (!run.usage) missing.push('usage');
+      if (!((run.decisions ?? 0) > 0)) missing.push('decision');
+      const ok = missing.length === 0;
+      return {
+        runId,
+        status: ok ? 'success' : 'incomplete',
+        verdictAllowed: ok,
+        missing,
+        // 与 07 的枚举映射（09 §9）：incomplete → missing
+        observabilityStatus: ok ? 'success' : 'missing',
+      };
     },
 
     recordUsage(runId, usage) {
