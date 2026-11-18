@@ -53,14 +53,18 @@ const observerEntry = path.join(here, 'observer-entry.mjs');
  * @returns {Promise<number>}
  */
 /** 读观察台会话 token（~/.memo/web-token，memoHome 下），30s 缓存；读不到返回 null。
- *  v1.4 起 /api 一律要 Bearer（P0b），health 拿 summary 必须带上。 */
+ *  v1.4 起 /api 一律要 Bearer（P0b），health 拿 summary 必须带上。
+ *  只放行自家 token 的字符集（web-token.js 生成的 [A-Za-z0-9._-]{20,128}）：
+ *  一方面是注入防御，另一方面把「文件内容」变成「校验过的凭据」（CodeQL taint barrier）。 */
+const TOKEN_RE = /^[A-Za-z0-9._-]{20,128}$/;
 const tokenCache = { at: 0, value: null };
 function webToken(memoHome) {
   const now = Date.now();
   if (now - tokenCache.at < 30000) return tokenCache.value;
   tokenCache.at = now;
   try {
-    tokenCache.value = readFileSync(path.join(memoHome, 'web-token'), 'utf8').trim() || null;
+    const raw = readFileSync(path.join(memoHome, 'web-token'), 'utf8').trim();
+    tokenCache.value = TOKEN_RE.test(raw) ? raw : null;
   } catch { tokenCache.value = null; }
   return tokenCache.value;
 }
