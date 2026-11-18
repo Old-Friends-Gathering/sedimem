@@ -444,6 +444,11 @@ export async function mountLedger(deps) {
       const item = el('details', 'ledger-seg ledger-cp');
       const summary = el('summary', 'ledger-seg-h');
       summary.append(el('span', 'mono ledger-range', row.time));
+      // 与段行视觉对齐（issue #241 用户反馈）：checkpoint 不是捕获段、没有 rules/llm 模式，
+      // 用独立的 cp 徽标占同一个位置，保持行结构一致。
+      const cpBadge = el('span', 'badge ledger-mode b-accent', 'cp');
+      cpBadge.setAttribute('title', 'memory_session_checkpoint 写入的检查点（非捕获段，无 rules/llm 模式）');
+      summary.append(cpBadge);
       summary.append(el('span', 'ledger-excerpt', row.excerpt || '（checkpoint）'));
       item.append(summary);
       const body = el('div', 'ledger-seg-b');

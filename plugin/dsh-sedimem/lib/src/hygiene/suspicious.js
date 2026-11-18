@@ -7,25 +7,10 @@
 //   spaced_cjk —— 原文含 ≥3 个「单个 CJK 字符 + 空格」序列，且折叠后命中 patterns（防拆字绕过）
 //   pinyin     —— 按空格切分 ≥5 token 且 ≥80% 属拼音音节集合，且文本长度 ≥20（宁多标，读路径已隔离：裁决 16）
 
-// —— 异体字折叠表（常见 30 组，归一化时一并折叠）——
-const VARIANT_GROUPS = [
-  ['略', '畧'], ['请', '請'], ['执', '執'], ['令', '令'], ['务', '務'],
-  ['级', '級'], ['记', '記'], ['录', '錄'], ['删', '刪'], ['输', '輸'],
-  ['密码', '密碼'], ['钥', '鑰'], ['钥', '钥'], ['证', '證'], ['书', '書'],
-  ['读', '讀'], ['写', '寫'], ['传', '傳'], ['输', '輸'], ['递', '遞'],
-  ['环', '環'], ['境', '境'], ['变', '變'], ['量', '量'], ['设', '設'],
-  ['置', '置'], ['覆', '覆'], ['盖', '蓋'], ['盖', '盖'], ['锁', '鎖'],
-  ['忽', '忽'], ['略', '略'], ['所', '所'], ['有', '有'], ['指', '指'],
-];
-/** 单字符异体折叠映射（异体 → 规范体）。多字符组按整串替换处理。 */
-const VARIANT_CHAR_MAP = new Map();
-const VARIANT_MULTI = [];
-for (const [std, ...variants] of VARIANT_GROUPS) {
-  for (const v of variants) {
-    if (v.length === 1) VARIANT_CHAR_MAP.set(v, std);
-    else VARIANT_MULTI.push([v, std]);
-  }
-}
+// 异体字折叠表、零宽/CJK 空格正则与匹配用归一化已单点化到 core/text.js（W2）。
+// 「单个 CJK 字符 + 空白」序列（拆字检测用，作用于归一化前的原文）
+const SPACED_CJK_RE = /[\u4e00-\u9fff]\s+/g;
+const ENCODED_TOKEN_RE = /^[A-Za-z0-9+/=_-]{40,}$/;
 
 // —— 拼音音节集合（声母 × 韵母的常用组合，约 410 个）——
 const INITIALS = ['b', 'p', 'm', 'f', 'd', 't', 'n', 'l', 'g', 'k', 'h',
@@ -42,29 +27,11 @@ for (const i of INITIALS) {
 }
 PINYIN_SYLLABLES.add('ê'); PINYIN_SYLLABLES.add('ei'); PINYIN_SYLLABLES.add('n'); PINYIN_SYLLABLES.add('ng'); PINYIN_SYLLABLES.add('hm'); PINYIN_SYLLABLES.add('hng');
 
-const ZERO_WIDTH_RE = /[\u200B-\u200D\uFEFF\u2060]/g;
-const CJK_BETWEEN_SPACES_RE = /(?<=[\u4e00-\u9fff])\s+(?=[\u4e00-\u9fff])/g;
-// 「单个 CJK 字符 + 空白」序列（拆字检测用，作用于归一化前的原文）
-const SPACED_CJK_RE = /[\u4e00-\u9fff]\s+/g;
-const ENCODED_TOKEN_RE = /^[A-Za-z0-9+/=_-]{40,}$/;
 
-/**
- * 匹配用归一化（不改存储原文）：
- * NFKC（全角→半角）→ 删零宽字符 → 异体字折叠 → CJK 之间空白折叠 → 小写。
- * @param {string} text
- * @returns {string}
- */
-export function normalizeForMatch(text) {
-  let s = String(text ?? '');
-  s = s.normalize('NFKC');
-  s = s.replace(ZERO_WIDTH_RE, '');
-  for (const [v, std] of VARIANT_MULTI) s = s.split(v).join(std);
-  if (VARIANT_CHAR_MAP.size) {
-    s = s.replace(/[\u3400-\u9fff\uf900-\ufaff]/g, (ch) => VARIANT_CHAR_MAP.get(ch) ?? ch);
-  }
-  s = s.replace(CJK_BETWEEN_SPACES_RE, '');
-  return s.toLowerCase();
-}
+import { normalizeForMatch, containsCjk } from '../core/text.js';
+
+// 既有模块契约：外部（tests 等）仍从本文件 import normalizeForMatch。
+export { normalizeForMatch };
 
 /** patterns 子串匹配（对归一化文本；pattern 自身也做归一化，命中忽略大小写/全角差异） */
 function matchPatterns(normalized, patterns) {
@@ -98,10 +65,6 @@ function tryDecodeBase64(token) {
   return decoded;
 }
 
-function hasCJK(s) {
-  return /[\u4e00-\u9fff]/.test(s);
-}
-
 /**
  * 启发式 encoded：整段或 ≥40 的连续 token 命中 base64 字符集，且解码成功且
  * 解码结果含 CJK 或（归一化后）命中 patterns。
@@ -115,7 +78,7 @@ function heuristicEncoded(text, normalizedPatternsHit, patterns) {
   for (const tok of pool) {
     const decoded = tryDecodeBase64(tok);
     if (decoded === null) continue;
-    if (hasCJK(decoded)) return true;
+    if (containsCjk(decoded)) return true;
     const dn = normalizeForMatch(decoded);
     if (matchPatterns(dn, patterns).length > 0) return true;
   }

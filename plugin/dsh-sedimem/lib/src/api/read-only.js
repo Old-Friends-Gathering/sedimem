@@ -6,6 +6,7 @@ import fsp from 'node:fs/promises';
 import path from 'node:path';
 
 import { SUSPICIOUS_MASK as MASK } from './mask.js';
+import { effectiveTrust, effectiveTaint } from '../core/trust.js';
 
 /**
  * 只读事件查询。读 $MEMO_HOME/events.jsonl（每行 {ts,op,scope,id,detail}），
@@ -93,6 +94,10 @@ export async function queryExportRecords(service, {
       ...(r.sourceRefs !== undefined ? { sourceRefs: r.sourceRefs } : {}),
       // 标题（裁决 59）：图谱/时间线的 label 靠它，导出必须带出去
       ...(r.title !== undefined ? { title: r.title } : {}),
+      // B2（docs/02 §3.24）：导出是「读取视图」——缺 trust 的存量记录在这里派生，
+      // 真相层不被改写。taint 非空才投影，避免给每条记录加空数组。
+      trust: effectiveTrust(r),
+      ...(effectiveTaint(r).length > 0 ? { taint: effectiveTaint(r) } : {}),
       // 来源对象保留 agent（用于区分谁写的），但 quote 可能夹带正文 → 遮蔽
       source: mask && r.source
         ? { ...r.source, quote: r.source.quote === undefined ? undefined : MASK }

@@ -10,7 +10,50 @@ import { renderBrief } from '../render/brief.js';
 import { defaultPolicy as POLICY, kindMeta } from '../config/policy.js';
 import { maskSuspiciousRecord } from './mask.js';
 // 错误工厂从 service.js 反向引用（错误文本被测试断言，必须单一来源）。
-import { invalid, invalidArg } from './service.js';
+import { invalid } from '../core/errors.js';
+import { parseAsOf, nowIso } from '../core/time.js';
+// B2：读取视图补派生 trust/taint（不写真相层；缺 trust 的存量记录在这里看到 T0/T2）。
+import { effectiveTrust, effectiveTaint } from '../core/trust.js';
+
+/** B6 读预算默认值（policy.search 可覆盖；落点集中在此，MCP/CLI/Web 共用同一口径）。 */
+export const SNIPPET_CHARS_DEFAULT = 200;
+export const SESSION_MAX_ITEMS_DEFAULT = 200;
+export const SESSION_MAX_BYTES_DEFAULT = 200 * 1024;
+
+/**
+ * 把一段正文截成片段（单条 ≤ snippetChars；超限加省略号并标记）。
+ * @param {string} text
+ * @param {number} max
+ * @returns {string}
+ */
+export function clipSnippet(text, max = SNIPPET_CHARS_DEFAULT) {
+  if (typeof text !== 'string') return text;
+  if (!Number.isFinite(max) || max <= 0 || text.length <= max) return text;
+  return `${text.slice(0, max)}…`;
+}
+
+/** 每会话读预算（随 service 实例；MCP 一个进程一个会话）。 */
+function readBudget(svc) {
+  if (!svc._readBudget) svc._readBudget = { items: 0, bytes: 0 };
+  return svc._readBudget;
+}
+
+/**
+ * 重置会话读预算（新会话/测试用）。返回旧值便于观测。
+ * @param {object} svc
+ * @returns {{items: number, bytes: number}}
+ */
+export function resetReadBudget(svc) {
+  const old = readBudget(svc);
+  svc._readBudget = { items: 0, bytes: 0 };
+  return old;
+}
+
+/** 一条结果占用的近似字节数（只算会进入 prompt/CLI 的正文字段）。 */
+function itemBytes(r) {
+  const parts = [r?.text, r?.value, r?.title].filter((x) => typeof x === 'string');
+  return Buffer.byteLength(parts.join('\n'), 'utf8');
+}
 
 /**
  * 检索：bm25 × kindWeight × recencyDecay × confidence（系数全部来自 policy）。
@@ -19,12 +62,14 @@ import { invalid, invalidArg } from './service.js';
  * suspicious 记录默认不返回正文（裁决 16，仅 includeSuspicious:true 返回原文）。
  * @param {string} query
  * @param {{limit?: number, kind?: string, asOf?: string, includeDisputed?: boolean,
- *          status?: string, includeSuspicious?: boolean}} opts
- * @returns {{items: {record: MemoryRecord, score: number}[], total: number, asOf: string}}
+ *          status?: string, includeSuspicious?: boolean, snippetChars?: number}} opts
+ * @returns {{items: {record: MemoryRecord, score: number}[], total: number, asOf: string,
+ *            snippetChars: number, readBudget: object}}
  */
 export async function searchRecords(svc, query, {
   limit = POLICY.search.limitDefault ?? 10,
   kind, asOf, includeDisputed = false, status = 'active', includeSuspicious = false,
+  snippetChars,
 } = {}) {
   svc._ensureOpen();
   if (typeof query !== 'string' || query.length === 0) {
@@ -33,10 +78,7 @@ export async function searchRecords(svc, query, {
   let asOfMs = null;
   let asOfIso = null;
   if (asOf !== undefined && asOf !== null) {
-    asOfMs = Date.parse(asOf);
-    if (typeof asOf !== 'string' || Number.isNaN(asOfMs)) {
-      throw invalidArg(`search: asOf must be an ISO-8601 string, got ${JSON.stringify(asOf)}`);
-    }
+    asOfMs = parseAsOf(asOf, 'search: asOf');
     asOfIso = new Date(asOfMs).toISOString(); // 归一化到 UTC（支持 +08:00 等偏移量）
   }
 
@@ -73,12 +115,13 @@ export async function searchRecords(svc, query, {
   const pickedById = new Map(picked.map((r) => [r.id, r]));
   const filter = (rec) => pickedById.has(rec.id);
   const idxLimit = typeof svc.index.size === 'number' ? svc.index.size : undefined;
-  const hits = svc.index.search(query, { limit: idxLimit, filter });
+  // 语义道包装（hybrid-index）的 search 是 async（要跑 embedder）；await 对同步索引是零成本。
+  const hits = await svc.index.search(query, { limit: idxLimit, filter });
 
   const nowMs = svc.clock.nowMs();
   const halfLife = POLICY.search.recencyHalflifeMs;
   const items = [];
-  for (const { id, score } of hits) {
+  for (const { id, score, basis } of hits) {
     const rec = pickedById.get(id);
     if (!rec) continue;
     // 裁决 49：kind 的唯一真相是 policy.kinds（kindMeta 内部 kinds 优先、旧 kindWeight 兜底），
@@ -87,10 +130,47 @@ export async function searchRecords(svc, query, {
     const ageMs = Math.max(0, nowMs - Date.parse(rec.createdAt));
     const decay = monotonicDecay(ageMs, halfLife);
     const final = score * kw * decay * (typeof rec.confidence === 'number' ? rec.confidence : 0.8);
-    if (final > 0) items.push({ record: rec, score: final });
+    if (final > 0) items.push({ record: rec, score: final, basis: basis ?? null });
   }
   items.sort((a, b) => b.score - a.score);
   const top = items.slice(0, limit);
+
+  // —— B6 读预算（docs/02 §3.24）：search 默认只回片段，并按会话条数/字节封顶 ——
+  // 为什么在服务层：MCP / CLI / Web 三条入口都走 searchRecords，落在这里才没有旁路。
+  const budgetPolicy = (svc.policy ?? POLICY).search ?? {};
+  const snippetLimit = Number.isFinite(snippetChars)
+    ? snippetChars
+    : (Number.isFinite(budgetPolicy.snippetChars) ? budgetPolicy.snippetChars : SNIPPET_CHARS_DEFAULT);
+  const maxItems = Number.isFinite(budgetPolicy.sessionMaxItems)
+    ? budgetPolicy.sessionMaxItems : SESSION_MAX_ITEMS_DEFAULT;
+  const maxBytes = Number.isFinite(budgetPolicy.sessionMaxBytes)
+    ? budgetPolicy.sessionMaxBytes : SESSION_MAX_BYTES_DEFAULT;
+  const usage = readBudget(svc);
+  const returned = [];
+  let budgetBytes = 0;
+  let truncatedBySession = false;
+  let truncatedReason = null;
+  for (const it of top) {
+    const masked = maskSuspicious(svc, it.record, includeSuspicious);
+    const text = clipSnippet(masked.text, snippetLimit);
+    const value = clipSnippet(masked.value, snippetLimit);
+    const record = {
+      ...withExtraHits(svc, masked),
+      text,
+      value,
+      snippetTruncated: text !== masked.text || value !== masked.value,
+    };
+    const bytes = itemBytes(record);
+    if (usage.items + returned.length + 1 > maxItems || usage.bytes + budgetBytes + bytes > maxBytes) {
+      truncatedBySession = true;
+      truncatedReason = usage.items + returned.length + 1 > maxItems ? 'session-items' : 'session-bytes';
+      break;
+    }
+    budgetBytes += bytes;
+    returned.push({ ...it, record });
+  }
+  usage.items += returned.length;
+  usage.bytes += budgetBytes;
 
   // 检索健康事件（issue #36，裁决 52）：只记统计，绝不写 query 原文——
   // 真相层的 events.jsonl 是审计面，不是查询日志；qHash 取 sha256 前 12 位仅供聚合影射。
@@ -101,23 +181,48 @@ export async function searchRecords(svc, query, {
     record.status !== 'active' || isExpired(record, svc.clock) ? n + 1 : n
   ), 0);
   await svc._event('search', null, {
-    hits: top.length,
-    topScore: top.length > 0 ? top[0].score : null,
+    hits: returned.length,
+    topScore: returned.length > 0 ? returned[0].score : null,
     staleHits,
     qHash: createHash('sha256').update(query, 'utf8').digest('hex').slice(0, 12),
   });
 
   // hits 只增：召回一次记一次（内存累加，flushHits 时一次性落盘，避免检索写盘刷快照）
   if (asOfMs === null) {
-    for (const { record } of top) {
+    for (const { record } of returned) {
       svc._extraHits.set(record.id, (svc._extraHits.get(record.id) ?? 0) + 1);
     }
   }
-  return {
-    items: top.map((it) => ({ ...it, record: withExtraHits(svc, maskSuspicious(svc, it.record, includeSuspicious)) })),
+  const out = {
+    items: returned.map((it) => ({ ...it, record: withTrustView(it.record) })),
     total: items.length,
-    asOf: asOfIso ?? svc._nowIso(),
+    asOf: asOfIso ?? nowIso(svc.clock),
+    snippetChars: snippetLimit,
+    readBudget: {
+      limit,
+      returned: returned.length,
+      bytes: budgetBytes,
+      maxItems,
+      maxBytes,
+      sessionUsed: { items: usage.items, bytes: usage.bytes },
+      truncated: truncatedBySession,
+      truncatedReason,
+    },
   };
+  // 语义道状态要显式可见（D1）：调用方（/api/search、CLI、MCP）据此提示「这次是纯词法」。
+  // 两种情形都算降级，但原因不同：
+  //  - 已启用但运行期不可用（embedder 挂了 / 维度漂移）→ hybrid 索引自带 degraded + reason；
+  //  - 从未启用（policy.search.embedder.kind='none'）→ 索引没被包装，这里按策略补齐，
+  //    避免「配置关闭」被误读成「检索正常但没结果」。
+  const semanticKind = ((svc.policy ?? POLICY).search?.embedder?.kind) ?? 'none';
+  if (svc.index?.degraded) {
+    out.degraded = true;
+    out.degradedReason = svc.index.degradedReason ?? 'unknown';
+  } else if (semanticKind === 'none') {
+    out.degraded = true;
+    out.degradedReason = 'semantic-disabled';
+  }
+  return out;
 }
 
 /** 裁决 16/42：遮蔽实现见 api/mask.js（四个正文字段一起遮，避免 payload 换字段绕过） */
@@ -128,6 +233,19 @@ export function maskSuspicious(svc, r, includeSuspicious) {
 export function withExtraHits(svc, r) {
   const extra = svc._extraHits.get(r.id);
   return extra ? { ...r, hits: (r.hits ?? 0) + extra } : r;
+}
+
+/**
+ * 读取视图：显式 trust 原样返回；缺省按 backfill 规则派生（T0/T2），taint 归一。
+ * 只复制对象，不回写 _records / items/*.jsonl —— 存量记录的真相层保持原样。
+ */
+export function withTrustView(r) {
+  const taint = effectiveTaint(r);
+  return {
+    ...r,
+    trust: effectiveTrust(r),
+    ...(taint.length > 0 ? { taint } : {}),
+  };
 }
 
 /**
@@ -169,7 +287,7 @@ export function statusOk(svc, r, { status, includeDisputed }) {
 export async function getRecord(svc, id, { includeSuspicious = false } = {}) {
   svc._ensureOpen();
   const r = svc._records.get(id);
-  return r ? withExtraHits(svc, maskSuspicious(svc, r, includeSuspicious)) : null;
+  return r ? withTrustView(withExtraHits(svc, maskSuspicious(svc, r, includeSuspicious))) : null;
 }
 
 /** 确定性 brief：pinned/decision 优先 → 最近 active 事实；suspicious 不进 brief。
@@ -199,8 +317,17 @@ export async function briefRecords(svc, { lines = 80, dedupeCandidates, blocks }
       viewBlocks = null; // 视图模块缺失/损坏不影响 brief 主路径（降级为扁平）
     }
   }
+  // v1.0 W3：有 ok 派生时用 LLM 生成的 title 覆盖规则字段（缺失/失败自动回落，不改变条数）
+  let shaped = records;
+  if (svc.llmPort && svc.llmPort.ready) {
+    await svc._loadDerived();
+    shaped = records.map((r) => {
+      const d = svc._derived.get(`${r.id}@${r.validFrom}`);
+      return d && d.deriveStatus === 'ok' && d.title ? { ...r, title: d.title } : r;
+    });
+  }
   return renderBrief({
-    scope: svc.scope, records, lines, clock: svc.clock, dedupeCandidates: candidates,
+    scope: svc.scope, records: shaped, lines, clock: svc.clock, dedupeCandidates: candidates,
     blocks: viewBlocks,
   });
 }

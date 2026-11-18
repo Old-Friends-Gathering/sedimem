@@ -260,3 +260,13 @@ test('buildCheckpointRows: intent 为空串 → 回落 currentState；时间带�
   assert.equal(row.excerpt, '三问题闭环：llm 模式+渲染修复', '空 intent 必须回落 currentState 而不是空串');
   assert.equal(row.time, '2026-11-18 08:56:52', '时间带秒，区分同分钟多条');
 });
+
+test('checkpoint 徽标一致性：renderCheckpoints 输出含 cp 徽标（与段行结构对齐，issue #241）', () => {
+  // renderCheckpoints 不导出——源码级断言：cp 徽标与段行 mode 徽标同类同位置（badge ledger-mode）
+  assert.ok(SRC.includes("el('span', 'badge ledger-mode b-accent', 'cp')"), 'checkpoint 行必须有 cp 徽标（badge ledger-mode 结构）');
+  assert.ok(SRC.includes("非捕获段，无 rules/llm 模式"), 'cp 徽标必须带 title 解释与段的差异');
+  // 段行徽标在 summary 中的顺序：range → mode badge → excerpt；checkpoint 行一致
+  const segIdx = SRC.indexOf("badge ledger-mode");
+  const cpIdx = SRC.indexOf("b-accent', 'cp'");
+  assert.ok(segIdx > -1 && cpIdx > segIdx, 'checkpoint 徽标应复用段行徽标结构');
+});

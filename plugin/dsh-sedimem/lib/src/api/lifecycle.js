@@ -5,7 +5,8 @@
 import { validateRecord } from '../core/record.js';
 // 错误工厂从 service.js 反向引用：三处工厂是唯一权威（错误文本被测试断言），
 // ESM 函数声明在实例化期即初始化，循环 import 在运行期取值是安全的。
-import { invalid } from './service.js';
+import { invalid } from '../core/errors.js';
+import { enqueueDerive } from '../llm/outbox.js';
 
 /** 初始化：全量重载一次真相层（原 _init 方法体） */
 export async function init(svc) {
@@ -42,7 +43,9 @@ export async function reload(svc) {
     if (!svc._versions.has(r.id)) svc._versions.set(r.id, []);
     svc._versions.get(r.id).push(r);
   }
-  svc.index.build(records);
+  // B3：墓碑不是可检索记录——索引/向量/brief 一律只见 live 记录，
+  // 否则删除后派生层仍残留正文（verify-delete 会失败，检索也可能召回已删内容）。
+  svc.index.build(records.filter((r) => r.status !== 'tombstoned'));
   // 以「读之前」的 size 作为消费水位：宁可重复消费已读过的行，也不能跳过未读的行
   svc._readOffset = records.length === 0 && svc._loadError ? 0 : sizeBefore;
   return records;
@@ -91,7 +94,8 @@ export async function refreshIncremental(svc) {
     svc._records.set(r.id, r);
     if (!svc._versions.has(r.id)) svc._versions.set(r.id, []);
     svc._versions.get(r.id).push(r);
-    svc.index.add(r);
+    if (r.status === 'tombstoned') svc.index.remove(r.id);
+    else svc.index.add(r);
   }
   return records;
 }
@@ -118,20 +122,39 @@ export async function event(svc, op, id, detail) {
 export async function commit(svc, record, op = 'write', detail = {}) {
   const v = validateRecord(record);
   if (!v.ok) throw invalid(`commit: ${v.errors.join('; ')}`);
+  // 裁决 111（v1.0.3）：快照的 scope 必须与服务实例一致。历史库里有改名前的遗留行
+  // （repo:strata 时代写入、文件却被迁移到 repo:sedimem），若沿用旧 scope 落盘，
+  // forget/supersede 会把状态写回旧文件 → 表现成「删除/取代没生效」，而且不报错。
+  if (record.scope !== svc.scope) {
+    const err = new Error(`commit: record ${record.id} 的 scope=${record.scope} 与实例 ${svc.scope} 不一致（拒绝跨库写入）`);
+    err.code = 'E_SCOPE_MISMATCH';
+    throw err;
+  }
   if (svc._inScopeLock) await svc.store.appendImmediate(record);
   else await svc.store.append(record);
   svc._records.set(record.id, record);
   if (!svc._versions.has(record.id)) svc._versions.set(record.id, []);
   svc._versions.get(record.id).push(record);
-  svc.index.add(record);
+  if (record.status === 'tombstoned') svc.index.remove(record.id);
+  else svc.index.add(record);
   await event(svc, op, record.id, detail);
+  // v1.0 W3：真相层落盘成功后只**入队**（裁决 84：写入路径绝不同步调 LLM）。
+  // 入队失败不影响写入（派生层是可选投影，失败可由 rebuild 重建）。
+  try {
+    await enqueueDerive({ memoHome: svc.memoHome, scope: svc.scope, id: record.id, validFrom: record.validFrom });
+  } catch { /* 派生层故障隔离：写路径永不因派生失败而失败 */ }
   return record;
 }
 
 /** 裁决 21：close 不吞错——flushHits 失败原样上抛（hits 增量已在 flushHits 内恢复） */
 export async function close(svc) {
   try {
-    if (!svc._closed) await svc.flushHits();
+    if (!svc._closed) {
+      // 对抗审核 S-1：短命 CLI 进程退出时，索引里排队的向量任务会被丢掉
+      // （hybrid 索引的 flush 是「等待在途任务」，不是 flush 到磁盘——向量是先落盘再入内存的）。
+      if (typeof svc.index?.flush === 'function') await svc.index.flush();
+      await svc.flushHits();
+    }
   } finally {
     svc._closed = true;
   }

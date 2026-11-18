@@ -430,6 +430,13 @@ memo retitle --from-file titles.json   # 用 Agent 产出的标题：[{"id":"01M
 
 `plugin/dsh-sedimem` 把观察台装进 DSH 侧边栏：优先代理常驻观察台（`observerUrl: http://127.0.0.1:7788`），探测不到才启动内嵌副本。MCP `memory_*` 与三端配置不变。安装与配置见 `plugin/dsh-sedimem/README.md`。
 
+自 v0.2.0 起的三条防漂移硬规则（issue #241）：
+
+- **存活判定与鉴权解耦**：探活只要求「HTTP 响应 <500」——v1.4 起 `/api` 匿名是 401，把 401 当死亡会误判外部观察台下线、错走内嵌旧副本（旧 UI 盖住新版正是这么发生的）。
+- **外部恢复即升级**：每次代理前都重探外部观察台；发现外部活着就杀掉内嵌子进程完成升级，不允许「内嵌还活着就永远盖住外部」。
+- **服务端补鉴权**：iframe 与观察台跨源、Cookie 到不了观察台——插件代理对 `/api/*` 子路径与健康探测自动注入 `Authorization: Bearer <~/.memo/web-token>`。
+- **内嵌快照跟随 CURRENT**：`scripts/sync-from-current.sh` 从 `versions/CURRENT` 指针同步 src/ui/config，哈希一致性测试防漂移（不再钉死老版本）。
+
 ## 16. v0.4 新工具：语义检索 / 每步注入 / 捕获 / 分歧 / 脱敏
 
 ### 16.1 语义道（可选，默认关闭）

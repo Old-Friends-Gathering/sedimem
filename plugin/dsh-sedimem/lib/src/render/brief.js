@@ -9,6 +9,10 @@
 
 import { readFileSync } from 'node:fs';
 import { detectSuspicious } from '../hygiene/suspicious.js';
+// S-04（adv）：brief 输出的每行若含 <memory-context> / </memory-context> 会被宿主
+// 当成围栏边界提前闭合注入围栏。转义规则与 inject.js 单一来源（inject.js 只依赖
+// config/paths，不反向依赖本文件，无循环依赖）。
+import { neutraliseFence } from './inject.js';
 
 // 策略单一来源（裁决 20）：优先 src/config/policy.js 的 loadPolicy()，缺失时回退读 config/policy.json。
 async function loadPolicySafe() {
@@ -106,7 +110,8 @@ function renderFlat({ scope, records, lines = 80, dedupeCandidates }) {
 
   const all = [...header, ...body];
   if (footer) all.push(footer);
-  const flat = (rows) => clampChars(rows.join('\n'), POLICY?.brief?.totalChars ?? DEFAULT_TOTAL_CHARS, rows);
+  // S-04：逐行转义围栏标记（含 title/正文带进来的），再进字符裁剪。
+  const flat = (rows) => clampChars(rows.map(neutraliseFence).join('\n'), POLICY?.brief?.totalChars ?? DEFAULT_TOTAL_CHARS, rows);
   if (all.length <= lines) return flat(all);
 
   const budget = footer ? lines - 1 : lines; // 截断时给末节留 1 行
@@ -142,10 +147,12 @@ function lineFor(record, suspicious) {
     return `- [suspicious withheld]（id ${record.id}）`;
   }
   const asOf = String(record.validFrom ?? '').slice(0, 10) || 'unknown';
-  // 裁决 59：有 title 就用 title 当行首（更短、更能扫），正文靠 memory_search / memory_get 下钻。
-  // 没有 title 的旧记录保持原样（正文全文），避免回填前 brief 丢掉信息。
+  // W1 写侧粒度契约：行首优先 title；无 title 用 `subject · predicate`（结构化三元组），
+  // 不再用 text 全文兜底——长文进 brief 只会挤掉别的行，正文靠 memory_search / memory_get 下钻。
   const title = typeof record.title === 'string' ? record.title.trim() : '';
-  const head = title !== '' ? title : String(record.text ?? '');
+  const head = title !== ''
+    ? title
+    : `${String(record.subject ?? '')} · ${String(record.predicate ?? '')}`.trim();
   return `- [${record.kind}] ${head}  (as of ${asOf})`;
 }
 
@@ -272,7 +279,8 @@ function renderLayered({ scope, records, lines = 80, dedupeCandidates, policy, b
       if (withMarkers && g.dropped > 0) parts.push(`…略去 ${g.dropped} 条`);
     }
     if (footer) parts.push(footer);
-    return parts.join('\n');
+    // S-04：分层路径同样逐行转义围栏标记。
+    return parts.map(neutraliseFence).join('\n');
   };
 
   // 剩余量（层内预算外 + 已被砍的都不再回流）只减不增，循环必然终止。
