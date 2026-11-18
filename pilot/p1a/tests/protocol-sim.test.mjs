@@ -83,6 +83,8 @@ test('accept 幂等：同 acceptOpId 重放 → noop receipt，真相层不重�
   const sim = createSim();
   const r = sim.ingest('run-E', baseInput, [mkClaim('用户偏好深色主题')]);
   const id = r.created[0].candidateId;
+  const a1 = sim.accept(id, { candidateVersion: 1, evidenceHash: 'sha256:e1', expectedTruthRevision: 0, acceptOpId: 'op-4' });
+  assert.equal(a1.kind, 'accepted');
   const a2 = sim.accept(id, { candidateVersion: 1, evidenceHash: 'sha256:e1', expectedTruthRevision: 1, acceptOpId: 'op-4' });
   assert.equal(a2.kind, 'noop-receipt');
   assert.equal(sim.truth.size, 1);
