@@ -25,3 +25,6 @@ versions/*/eval/results/tmp-*
 
 # 打包产物（图卡/文案导出）不入库
 *.zip
+
+# P1a 验证轨输出（计划 §1：out/ 不入库）
+pilot/p1a/out/
