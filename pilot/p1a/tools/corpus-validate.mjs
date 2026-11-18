@@ -20,7 +20,7 @@ export function checkSingleSentence(claim) {
   const s = String(claim).trim();
   if (!s) return false;
   const inner = s.slice(0, -1); // 去掉句尾一个终结符
-  if (/[。；；？！?!;]/.test(inner)) return false;
+  if (/[。；？！?!;]/.test(inner)) return false;
   if (/\.[.!?]|!\?|\?!/.test(inner)) return false;
   // 英文句点后跟空格+大写/数字开头的新句视为复合（缩写 i.e./e.g. 排除）
   const inner2 = s.slice(0, Math.max(0, s.length - 1)).replace(/\b(e\.g|i\.e|etc|vs|approx|fig|no)\./gi, '');
