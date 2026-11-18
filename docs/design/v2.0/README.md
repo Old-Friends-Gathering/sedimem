@@ -35,6 +35,8 @@
 | 7 | 成本/容量上限 | [adr-102](adr-102-cost-quota.md) | [adr-102](adr-102-cost-quota.md)（accepted）+ [contract-guards.test.mjs](../../../pilot/p1a/tests/contract-guards.test.mjs)（闸门：无配置拒绝发起 / 超上限显式停机）+ [eval-manifest.json](../../../pilot/p1a/config/eval-manifest.json) | frozen（2026-11-18） |
 | 8 | 测试切分与打分规约 | [04](04-scoring-and-splits.md) + [05](05-threshold-manifest.md) | [04](04-scoring-and-splits.md) + [05](05-threshold-manifest.md) + [score.test.mjs](../../../pilot/p1a/tests/score.test.mjs) + [split-corpus.test.mjs](../../../pilot/p1a/tests/split-corpus.test.mjs) | frozen（2026-11-18） |
 
+出口核验可机算：`node pilot/p1a/tools/exit-check.mjs .`（逐项判定语料/拆分/配额/冻结/双标注，失败与待完成分开，输出阻塞项——冻结表与 [plans/v2.0-p1.md](../../plans/v2.0-p1.md) §0.2 的放行条件即其规格来源）。
+
 冻结动作 = 维护者把对应行状态改为 **frozen + 日期**，并回填 [v2.0-p1.md](../../plans/v2.0-p1.md) §10 执行结果表；保护测试绿是冻结前置。九项齐备 + 出口级 gold + 语料达标才开 P1b（计划 §0）。
 
 ## 冻结说明（2026-11-18）
