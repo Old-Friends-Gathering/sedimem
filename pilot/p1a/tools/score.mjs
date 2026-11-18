@@ -1,0 +1,167 @@
+// B2 评分器：实现 docs/design/v2.0/04-scoring-and-splits.md 的 pilot 子集。
+// 硬规则：一对一计分（TP/FP/FN）；子命题=FP+FN；零输出（记录型场景）单列；
+// 七类严重错误计数；mixed 计入 zh+en 两组；stage!=='exit' 时 verdict=null（fail-closed，04 §5）。
+import { normalizeClaim } from './baseline-runner.mjs';
+export { normalizeClaim };
+
+const SEVERE_KEYS = ['negation-flip', 'speaker-misattribution', 'suggestion-promoted', 'retract-treated-current', 'not-done-became-done', 'cross-scope-leak', 'unsupported-fact'];
+
+function wilson(k, n, z = 1.96) {
+  if (n === 0) return null;
+  const p = k / n;
+  const denom = 1 + z * z / n;
+  const center = p + z * z / (2 * n);
+  const spread = z * Math.sqrt((p * (1 - p) + z * z / (4 * n)) / n);
+  return { lo: Math.max(0, (center - spread) / denom), hi: Math.min(1, (center + spread) / denom) };
+}
+
+function pr(tp, fp, fn) {
+  const precision = tp + fp > 0 ? tp / (tp + fp) : null; // 零输出 precision=未定义（04 §3）
+  const recall = tp + fn > 0 ? tp / (tp + fn) : null;
+  return { tp, fp, fn, precision, recall, precisionWilson: wilson(tp, tp + fp), recallWilson: wilson(tp, tp + fn) };
+}
+
+function evidenceSevere(candidate, scenario) {
+  // R2-m#5：校验全部 evidence（不止 evidence[0]）；任一条不可定位 → unsupported-fact
+  const evs = candidate.evidence ?? [];
+  if (evs.length === 0) return true;
+  const events = new Map(scenario.events.map((e) => [e.eventId, e]));
+  for (const ev of evs) {
+    const event = events.get(ev.eventId);
+    if (!event) return true;
+    const text = String(event.text);
+    const first = text.indexOf(ev.quote);
+    if (first === -1 || first !== text.lastIndexOf(ev.quote)) return true;
+  }
+  return false;
+}
+
+// R2-M#2：与 04 §4 表逐字对齐——suggest 被记成 agree/decide 才是「变批准」；
+// state 是普通陈述降级（不算）、complete 属 not-done-became-done 口径。
+function goldSevereKeys(c, g) {
+  const keys = [];
+  if (Boolean(c.assertion?.negated) !== Boolean(g.assertion?.negated)) keys.push('negation-flip');
+  if (c.role !== g.role) keys.push('speaker-misattribution');
+  if (g.assertion?.speechAct === 'suggest' && ['agree', 'decide'].includes(c.assertion?.speechAct)) keys.push('suggestion-promoted');
+  if (g.status === 'retracted' && c.type === 'fact') keys.push('retract-treated-current');
+  if (g.status === 'not-done' && c.type === 'task-state' && !c.assertion?.negated) keys.push('not-done-became-done');
+  // R2-M#3：scopeUnresolved=true 是占位 scope（基线红线 scope 恒 pilot:synthetic），
+  // 不能据此判泄漏；泄漏判定只对已解析 scope 生效。
+  if (!c.scopeUnresolved && c.scope !== g.scope) keys.push('cross-scope-leak');
+  return keys;
+}
+
+export function scoreRun({ candidates, scenarios, manifest }) {
+  const stage = manifest?.stage ?? 'pilot';
+  const severe = Object.fromEntries(SEVERE_KEYS.map((k) => [k, 0]));
+  const byEvent = new Map();
+  for (const s of scenarios) for (const e of s.events) byEvent.set(e.eventId, s);
+  const candByScenario = new Map();
+  for (const c of candidates) {
+    const s = byEvent.get(c.evidence?.[0]?.eventId);
+    if (!s) continue;
+    if (!candByScenario.has(s.scenarioId)) candByScenario.set(s.scenarioId, []);
+    candByScenario.get(s.scenarioId).push(c);
+  }
+  const famAgg = new Map();
+  const zeroOutput = [];
+  const adv = { blockViolations: 0, emitFlagViolations: 0 };
+  const totals = { tp: 0, fp: 0, fn: 0 };
+  const groups = { zh: { tp: 0, fp: 0, fn: 0 }, en: { tp: 0, fp: 0, fn: 0 } };
+  for (const s of scenarios) {
+    const cands = candByScenario.get(s.scenarioId) ?? [];
+    const gold = s.gold ?? [];
+    const used = new Set();
+    const matchedGold = new Set();
+    let tp = 0;
+    for (let gi = 0; gi < gold.length; gi++) {
+      const g = gold[gi];
+      const gNorm = normalizeClaim(g.claim);
+      let matched = -1;
+      let subMatched = -1;
+      for (let i = 0; i < cands.length; i++) {
+        if (used.has(i)) continue;
+        const cNorm = normalizeClaim(cands[i].claim);
+        if (cNorm === gNorm) { matched = i; break; }
+        if (subMatched === -1 && cNorm && gNorm.includes(cNorm)) subMatched = i;
+      }
+      if (matched !== -1) {
+        totals.tp++; tp++;
+        used.add(matched);
+        matchedGold.add(gi);
+        const c = cands[matched];
+        if (evidenceSevere(c, s)) severe['unsupported-fact']++;
+        for (const k of goldSevereKeys(c, g)) severe[k]++;
+      } else if (subMatched !== -1) {
+        // 候选为 gold 子命题（信息缺失）→ 候选 FP + gold FN（04 §2）
+        used.add(subMatched);
+        matchedGold.add(gi);
+        totals.fp++;
+        totals.fn++;
+      } else {
+        totals.fn++;
+      }
+    }
+    // R2-m#4：severe 逃逸不限 TP——FP 候选（错误进入最终候选）同样按 04 §4 计。
+    // FP 候选对「本场景未匹配的 gold」做错类检查，每候选每类只计一次（保守口径，不做模糊配对）。
+    for (let i = 0; i < cands.length; i++) {
+      if (used.has(i)) { continue; }
+      totals.fp++;
+      const c = cands[i];
+      if (evidenceSevere(c, s)) severe['unsupported-fact']++;
+      const hit = new Set();
+      for (let gi = 0; gi < gold.length; gi++) {
+        if (matchedGold.has(gi)) continue;
+        for (const k of goldSevereKeys(c, gold[gi])) hit.add(k);
+      }
+      for (const k of hit) severe[k]++;
+    }
+    // 零输出清单只收「记录型却零候选」（shouldReject 场景零候选是正确行为，评分层可读 gold 判定）
+    if (!s.shouldReject && cands.length === 0) zeroOutput.push(s.scenarioId);
+    if (s.adversarial?.target) {
+      const touched = cands.some((c) => c.evidence?.[0]?.eventId === s.adversarial.target.eventId);
+      if (touched && s.adversarial.expectedOutcome === 'block') adv.blockViolations++;
+      if (touched && s.adversarial.expectedOutcome === 'emit-with-flag' && !cands.some((c) => c.flagged)) adv.emitFlagViolations++;
+    }
+    const agg = famAgg.get(s.family) ?? { family: s.family, scenarios: 0, tp: 0, fp: 0, fn: 0 };
+    agg.scenarios++;
+    agg.tp += tp;
+    agg.fp += cands.length - tp;
+    agg.fn += gold.length - tp;
+    famAgg.set(s.family, agg);
+    if (s.language === 'zh' || s.language === 'mixed') { groups.zh.tp += tp; groups.zh.fp += cands.length - tp; groups.zh.fn += gold.length - tp; }
+    if (s.language === 'en' || s.language === 'mixed') { groups.en.tp += tp; groups.en.fp += cands.length - tp; groups.en.fn += gold.length - tp; }
+  }
+  const families = [...famAgg.values()].sort((a, b) => a.family.localeCompare(b.family));
+  return {
+    stage,
+    verdict: null, // fail-closed：只有 stage==='exit' 且对照 eval-manifest 才允许 pass/fail
+    note: stage === 'exit' ? 'exit 阶段需对照 threshold manifest 逐项判定' : 'pilot 阶段不输出 pass/fail（04 §5 fail-closed），仅报告指标',
+    // R2-m#7：配对简化声明——机器口径取首个全等匹配（04 §2 把最终裁决交人工/复核层）
+    pairing: 'first-exact-match; substring=FP+FN（04 §2）',
+    // R2-m#6：exit 阶段零输出处理接口占位——04 §2 零输出 precision 未定义即不通过，当前 stage=pilot 不判
+    zeroOutputPolicy: stage === 'exit' ? 'per 04 §2: precision undefined → fail (enforced by exit gate, not implemented in pilot)' : 'pilot: list only, no pass/fail',
+    totals: { ...totals, ...pr(totals.tp, totals.fp, totals.fn), zeroOutputCount: zeroOutput.length },
+    groups: { zh: pr(groups.zh.tp, groups.zh.fp, groups.zh.fn), en: pr(groups.en.tp, groups.en.fp, groups.en.fn) },
+    zeroOutput,
+    severe,
+    adversarial: adv,
+    families,
+  };
+}
+
+export async function main() {
+  const { readFileSync } = await import('node:fs');
+  const [candFile, corpusDir] = process.argv.slice(2);
+  if (!candFile || !corpusDir) {
+    console.error('usage: node score.mjs <candidates.jsonl> <corpusDir>');
+    process.exit(1);
+  }
+  const candidates = readFileSync(candFile, 'utf8').split('\n').filter(Boolean).map((l) => JSON.parse(l));
+  const { loadCorpus } = await import('./corpus-validate.mjs');
+  const manifest = JSON.parse(readFileSync(new URL('../config/eval-manifest.json', import.meta.url), 'utf8'));
+  const scenarios = await loadCorpus(corpusDir);
+  console.log(JSON.stringify(scoreRun({ candidates, scenarios, manifest }), null, 2));
+}
+
+if (import.meta.url === `file://${process.argv[1]}`) await main();
