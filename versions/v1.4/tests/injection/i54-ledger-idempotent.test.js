@@ -1,7 +1,8 @@
-// I54 — 区间幂等与重叠：重复 capture 不重复落段，重叠 append 抛 E_ALREADY_CAPTURED
+// I54 — 区间幂等与重叠：重复 capture 不重复落段，同锚重叠 append 抛 E_ALREADY_CAPTURED
 // 钉住：
 //   1. 同一转录连跑两次 captureTask：第二次 {created:0, skipped:1}，segments.jsonl 仍只有 1 行
-//   2. 手工 append 与既有段重叠的区间 → E_ALREADY_CAPTURED，且零写入（fail-closed）
+//   2. 手工 append 与既有段【同锚】重叠的区间 → E_ALREADY_CAPTURED，且零写入（fail-closed）；
+//      【跨锚】重叠区间合法（段序号每条转录独立，issue #235），任务级 coveredSeqs 视图照旧合并
 //   3. 半开区间相切不算重叠（[1,5)+[5,7) 可追加），coveredSeqs 合并为 [1,7) 且无重叠
 
 import test from 'node:test';
@@ -73,12 +74,13 @@ test('I54 重复 capture 幂等、重叠 append 抛错、coveredSeqs 合并且�
   assert.equal(await lineCount(file), 1, '重复 capture 不得追加段行');
   assert.deepEqual(await coveredSeqs({ memoHome, taskId: TASK_ID }), [[1, 5]]);
 
-  // 2) 手工追加与 [1,5) 重叠的区间 → E_ALREADY_CAPTURED，且零写入
+  // 2) 手工追加与 [1,5) 同锚重叠的区间 → E_ALREADY_CAPTURED，且零写入
   const before = await fsp.readFile(file, 'utf8');
+  const firstAnchorPath = (await readSegments({ memoHome, taskId: TASK_ID })).segments[0].anchor.path;
   const overlapSeg = {
     fromSeq: 2,
     toSeq: 4,
-    anchor: { path: '/tmp/i54-overlap.jsonl', fromSeq: 2, toSeq: 4 },
+    anchor: { path: firstAnchorPath, fromSeq: 2, toSeq: 4 },
     summary: 'I54-重叠段（不应落盘）',
   };
   await assert.rejects(
@@ -90,6 +92,23 @@ test('I54 重复 capture 幂等、重叠 append 抛错、coveredSeqs 合并且�
   );
   assert.equal(await fsp.readFile(file, 'utf8'), before, '重叠 append 失败后段文件必须零改动');
   assert.deepEqual(await coveredSeqs({ memoHome, taskId: TASK_ID }), [[1, 5]], '失败的 append 不得污染 index');
+
+  // 2b) 跨锚重叠合法（issue #235）：段序号每条转录独立，另一条转录的 [2,4) 不是重复
+  const cross = await appendSegment({
+    memoHome,
+    taskId: TASK_ID,
+    clock: CLOCK,
+    segment: {
+      fromSeq: 2,
+      toSeq: 4,
+      anchor: { path: '/tmp/i54-overlap.jsonl', fromSeq: 2, toSeq: 4 },
+      summary: 'I54-跨锚段（另一条转录的同序号区间，合法）',
+    },
+  });
+  assert.equal(cross.index.segments.length, 2);
+  // 该转录自己的覆盖视图只有自己的段；任务级合并视图不受影响
+  assert.deepEqual(await coveredSeqs({ memoHome, taskId: TASK_ID, anchorPath: '/tmp/i54-overlap.jsonl' }), [[2, 4]]);
+  assert.deepEqual(await coveredSeqs({ memoHome, taskId: TASK_ID }), [[1, 5]]);
 
   // 3) 半开区间相切（[5,7)）可以追加；index 合并为 [1,7)，coveredSeqs 无重叠
   const added = await appendSegment({
@@ -104,10 +123,10 @@ test('I54 重复 capture 幂等、重叠 append 抛错、coveredSeqs 合并且�
       decisions: ['决定用相切区间验证半开区间语义。'],
     },
   });
-  assert.equal(added.index.segments.length, 2);
-  assert.equal(await lineCount(file), 2);
+  assert.equal(added.index.segments.length, 3);
+  assert.equal(await lineCount(file), 3);
   const { segments } = await readSegments({ memoHome, taskId: TASK_ID });
-  assert.equal(segments.length, 2);
+  assert.equal(segments.length, 3);
 
   const covered = await coveredSeqs({ memoHome, taskId: TASK_ID });
   assert.deepEqual(covered, [[1, 7]], `相邻区间应被合并: ${JSON.stringify(covered)}`);

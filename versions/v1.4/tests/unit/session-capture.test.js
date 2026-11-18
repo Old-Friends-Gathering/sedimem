@@ -238,6 +238,31 @@ describe('capture: captureTask', () => {
     assert.equal(readSegments({ memoHome: home, taskId: TASK }).segments.length, 1);
   });
 
+  test('换转录不继承旧覆盖（issue #223 端到端）：新绑定的转录从自己的 turn 1 开始捕获', async () => {
+    // 真实场景：任务账本先锚过 A 会话（segments 覆盖 [1,9)），之后 bind 到 B 会话——
+    // 序号是每条转录独立的，B 的 turn 1..8 不能被 A 的覆盖区间吞掉（旧行为 skipped=1 漏捕获）。
+    const fileA = writeTranscript(TURNS_8, { id: 'sess-a' });
+    const first = await captureTask({
+      memoHome: home, taskId: TASK, cwd: CWD, sessionsRoot, clock: fixedClock(),
+      sessionId: 'sess-a', policy: { suspiciousPatterns: [] },
+    });
+    assert.equal(first.created, 1);
+    assert.equal(first.segments[0].anchor.path, fileA);
+
+    const fileB = writeTranscript(TURNS_EXTRA, { id: 'sess-b', mtimeMs: FIXED_MS + 60000 });
+    const second = await captureTask({
+      memoHome: home, taskId: TASK, cwd: CWD, sessionsRoot, clock: fixedClock(),
+      sessionId: 'sess-b', policy: { suspiciousPatterns: [] },
+    });
+    assert.equal(second.created, 1, `B 转录应产生自己的段，实际 ${JSON.stringify(second)}`);
+    assert.equal(second.segments[0].anchor.path, fileB);
+    assert.deepEqual([second.segments[0].fromSeq, second.segments[0].toSeq], [1, 3]);
+    // A 的段原样保留
+    const all = readSegments({ memoHome: home, taskId: TASK }).segments;
+    assert.equal(all.length, 2);
+    assert.equal(all[0].anchor.path, fileA);
+  });
+
   test('转录未变但任务不同 → 各自独立捕获', async () => {
     writeTranscript(TURNS_8);
     const a = await captureTask({ memoHome: home, taskId: 'task-a', cwd: CWD, sessionsRoot, clock: fixedClock() });

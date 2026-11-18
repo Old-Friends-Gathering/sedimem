@@ -797,6 +797,8 @@ v1.2 的账本捕获只有 CLI 手动入口，任务库长期使用时账本会�
   （`growth / bytesPerToken`）< `captureTokens` 且距上次 < `minIntervalMs` → 跳过；达阈值才真正
   `captureTask`（**rules 模式**，确定性零 token；幂等：重复捕获 created=0；段写入走账本锁防重叠）。
   结果作为 `structuredContent.autoCapture` 附在响应里（`ran:false` 时带 `reason`）。
+  覆盖区间按转录锚过滤：段序号是每条转录独立的，任务换绑转录后新转录从自己的 turn 1 重新折段，
+  不会被旧转录的覆盖区间吞掉（重叠守卫也只对锚在同一转录上的段互斥）。
 - **close 捕获**（兑现 v1.2 声明过的 `captureOnClose`）：`memory_session_close` 成功关闭后执行一次
   rules 模式捕获（best-effort，失败不阻塞 close）。
 

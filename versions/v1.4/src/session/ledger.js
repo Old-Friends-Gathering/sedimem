@@ -225,11 +225,18 @@ export function readIndex({ memoHome, taskId } = {}) {
  * @param {{memoHome: string, taskId: string}} args
  * @returns {Array<[number, number]>}
  */
-export function coveredSeqs({ memoHome, taskId } = {}) {
+export function coveredSeqs({ memoHome, taskId, anchorPath } = {}) {
   // 真相是 segments.jsonl：index.json 只是派生缓存。若两者不一致（例如手动删了段文件、
   // 或上次写入中途崩溃），以段文件为准 —— 否则会「以为覆盖了」而静默漏捕获。
   const { segments, badLines } = readSegments({ memoHome, taskId });
-  const fromSegments = mergeCovered(segments);
+  // 按转录过滤（issue #223 端到端）：段序号是每条转录独立的，换绑转录后旧行
+  // 「任务级合并覆盖」会把新转录的 turn 1..N 全判成已捕获（skipped=1 静默漏掉）。
+  // 带 anchorPath 时只合并锚在该转录文件上的段；此时 index 快路径不适用（它只有任务级合并区间）。
+  const scoped = typeof anchorPath === 'string' && anchorPath !== ''
+    ? segments.filter((s) => s?.anchor?.path === anchorPath)
+    : segments;
+  const fromSegments = mergeCovered(scoped);
+  if (anchorPath) return fromSegments;
   const idx = readIndex({ memoHome, taskId });
   const idxCovered = idx && Array.isArray(idx.coveredSeqs) ? idx.coveredSeqs.length : 0;
   if (segments.length === 0 && badLines === 0 && idxCovered > 0) {
@@ -318,8 +325,17 @@ export async function appendSegment({ memoHome, taskId, segment, clock = systemC
     const { segments } = readSegments({ memoHome, taskId });
     const fromSeq = segment.fromSeq;
     const toSeq = segment.toSeq;
-    // 半开区间相交：a.from < b.to && b.from < a.to
+    // 半开区间相交：a.from < b.to && b.from < a.to。
+    // 重叠守卫按转录锚过滤（issue #223 端到端）：段序号是每条转录独立的，任务换绑转录后
+    // 新转录的 [1,N) 与旧转录的 [1,M) 不算重叠；只有锚在同一转录文件上的段才互斥。
+    // 锚缺失（无 anchor.path）时保持旧行为：与全部段比（保守，防重复捕获）。
+    const incomingPath = segment?.anchor?.path;
+    const sameTranscript = (ex) =>
+      typeof incomingPath === 'string' && incomingPath !== ''
+        ? ex?.anchor?.path === incomingPath || ex?.anchor?.path == null
+        : true;
     for (const ex of segments) {
+      if (!sameTranscript(ex)) continue;
       if (fromSeq < ex.toSeq && ex.fromSeq < toSeq) {
         throw err('E_ALREADY_CAPTURED',
           `区间 [${fromSeq}, ${toSeq}) 与已有段 ${ex.id ?? '<no-id>'} [${ex.fromSeq}, ${ex.toSeq}) 重叠，` +
