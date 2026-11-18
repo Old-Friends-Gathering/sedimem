@@ -269,6 +269,7 @@ tbody tr:hover{background:var(--sd-panel2)}
 .ledger-seg>summary::before{content:"▸"; color:var(--sd-faint); font-size:var(--fs-xs); flex-shrink:0}
 .ledger-seg[open]>summary::before{content:"▾"}
 .ledger-range{color:var(--sd-muted); font-size:var(--fs-xs); font-variant-numeric:tabular-nums; white-space:nowrap}
+.ledger-session{color:var(--sd-muted); font-size:var(--fs-xs); opacity:.85; white-space:nowrap}
 .ledger-mode,.ledger-q{flex-shrink:0; font-size:var(--fs-xs)}
 .ledger-excerpt{min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-size:var(--fs-sm)}
 .ledger-seg-b{padding:2px 12px 10px; border-top:1px dashed var(--sd-border)}
