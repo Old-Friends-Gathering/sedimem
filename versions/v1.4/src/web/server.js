@@ -147,7 +147,8 @@ export async function createWebServer({
       const isWritePost = req.method === 'POST'
         && (pathname === '/api/write' || pathname === '/api/supersede' || pathname === '/api/forget'
           || pathname === '/api/tasks/rename' || pathname === '/api/tasks/remove'
-          || pathname === '/api/tasks/capture' || pathname === '/api/tasks/archive'
+          || pathname === '/api/tasks/capture' || pathname === '/api/tasks/segment-remove'
+          || pathname === '/api/tasks/archive'
           || pathname === '/api/records/tombstone');
       if (req.method !== 'GET' && !isWritePost) {
         res.writeHead(405, JSON_HEADERS);

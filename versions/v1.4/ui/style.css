@@ -288,3 +288,5 @@ tbody tr:hover{background:var(--sd-panel2)}
   border-radius:var(--r-sm); font-family:var(--mono); font-size:var(--fs-xs); line-height:1.65;
   white-space:pre-wrap; word-break:break-word; max-height:340px; overflow:auto}
 
+
+.ledger-seg-actions{margin-top:10px; display:flex; gap:8px}
