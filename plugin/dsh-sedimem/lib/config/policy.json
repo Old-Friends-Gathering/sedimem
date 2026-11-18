@@ -48,7 +48,20 @@
   "search": {
     "limitDefault": 10,
     "kindWeighted": true,
-    "recencyHalflifeMs": 7776000000
+    "recencyHalflifeMs": 7776000000,
+    "rrfK": 60,
+    "vectorTopK": 30,
+    "minScore": 0.25,
+    "embedder": {
+      "kind": "none",
+      "url": "",
+      "model": "",
+      "timeoutMs": 3000,
+      "dim": 0
+    },
+    "snippetChars": 200,
+    "sessionMaxItems": 200,
+    "sessionMaxBytes": 204800
   },
   "curate": {
     "batchLimit": 20,
@@ -87,5 +100,113 @@
     "maxCallsPerRun": 20,
     "batchSize": 10,
     "ttlMs": 2592000000
+  },
+  "redact": {
+    "enabled": true,
+    "kinds": [
+      "private_key",
+      "jwt",
+      "github_token",
+      "aws_key",
+      "api_key",
+      "internal_host",
+      "assignment"
+    ]
+  },
+  "capture": {
+    "maxItems": 50,
+    "maxLineChars": 400,
+    "inboxDir": "inbox",
+    "maxQueueBytes": 4194304,
+    "quarantineTtlMs": 7776000000,
+    "quarantineMaxQuoteChars": 200
+  },
+  "write": {
+    "titleRequiredKinds": [
+      "fact",
+      "pref",
+      "decision",
+      "gotcha"
+    ],
+    "valueRecommendChars": 300,
+    "textHardMaxChars": 4000,
+    "valueHardMaxChars": 2000,
+    "longFormTag": "long-form",
+    "titleEnforce": false
+  },
+  "session": {
+    "ttlMs": 604800000,
+    "promoteKinds": [
+      "decision",
+      "gotcha"
+    ],
+    "handoffDir": "handoffs",
+    "sweepOlderThanMs": 1209600000,
+    "autoWatch": false,
+    "ledger": {
+      "enabled": true,
+      "maxTurnsPerSegment": 120,
+      "maxSegmentsPerTask": 200,
+      "briefMaxChars": 4000,
+      "captureOnClose": true,
+      "requireCapture": false,
+      "llmMode": "llm",
+      "autoCapture": {
+        "enabled": true,
+        "captureTokens": 30000,
+        "bytesPerToken": 4.4,
+        "minIntervalMs": 1800000,
+        "cooldownMs": 60000
+      }
+    }
+  },
+  "math": {
+    "calibrateDecay": {
+      "enabled": true,
+      "minSamples": 50,
+      "reportOnly": true
+    },
+    "hysteresis": {
+      "enterRatio": 0.8,
+      "exitRatio": 0.6
+    }
+  },
+  "llm": {
+    "provider": "openai-compatible",
+    "baseUrl": "https://open.bigmodel.cn/api/paas/v4",
+    "apiKey": "",
+    "model": "glm-5.3-flash",
+    "egress": "allowed",
+    "timeoutMs": 20000,
+    "maxRetries": 2,
+    "dailyLimitCny": 5,
+    "price": {
+      "inPerM": 0.8,
+      "outPerM": 2.8
+    },
+    "purposes": {
+      "derive": {
+        "maxOutputTokens": 400
+      },
+      "curate": {
+        "maxOutputTokens": 300
+      },
+      "checkpoint": {
+        "maxOutputTokens": 1500
+      },
+      "brief": {
+        "maxOutputTokens": 400
+      },
+      "capture": {
+        "maxOutputTokens": 1200
+      }
+    },
+    "apiKeyEnv": "MEMO_LLM_API_KEY",
+    "apiKeyFile": "",
+    "thinking": "disabled"
+  },
+  "derive": {
+    "promptVersion": "d1-v1",
+    "maxAttempts": 3
   }
 }

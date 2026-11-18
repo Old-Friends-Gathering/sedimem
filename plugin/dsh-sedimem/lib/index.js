@@ -20,7 +20,7 @@
 import { spawn } from 'node:child_process';
 import { createServer as createTcpServer } from 'node:net';
 import { request as httpRequest } from 'node:http';
-import { readdirSync, statSync } from 'node:fs';
+import { readdirSync, readFileSync, statSync } from 'node:fs';
 import { homedir } from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -52,13 +52,29 @@ const observerEntry = path.join(here, 'observer-entry.mjs');
  * 本地单用户场景可接受；观察台 EADDRINUSE 会显式报错而不是静默错。
  * @returns {Promise<number>}
  */
+/** 读观察台会话 token（~/.memo/web-token，memoHome 下），30s 缓存；读不到返回 null。
+ *  v1.4 起 /api 一律要 Bearer（P0b），health 拿 summary 必须带上。
+ *  只放行自家 token 的字符集（web-token.js 生成的 [A-Za-z0-9._-]{20,128}）：
+ *  一方面是注入防御，另一方面把「文件内容」变成「校验过的凭据」（CodeQL taint barrier）。 */
+const TOKEN_RE = /^[A-Za-z0-9._-]{20,128}$/;
+const tokenCache = { at: 0, value: null };
+function webToken(memoHome) {
+  const now = Date.now();
+  if (now - tokenCache.at < 30000) return tokenCache.value;
+  tokenCache.at = now;
+  try {
+    const raw = readFileSync(path.join(memoHome, 'web-token'), 'utf8').trim();
+    tokenCache.value = TOKEN_RE.test(raw) ? raw : null;
+  } catch { tokenCache.value = null; }
+  return tokenCache.value;
+}
+
 function pickFreePort() {
   return new Promise((resolve, reject) => {
     const srv = createTcpServer();
     srv.unref();
     srv.on('error', reject);
-    srv.listen(0, '127.0.0.1', () => {
-      const { port } = srv.address();
+    srv.listen(0, '127.0.0.1', () => {      const { port } = srv.address();
       srv.close(() => resolve(port));
     });
   });
@@ -137,7 +153,9 @@ function probeOk(port) {
       { host: '127.0.0.1', port, path: '/api/summary', method: 'GET', timeout: 900 },
       (res) => {
         res.resume();
-        resolve(res.statusCode === 200);
+        // 存活判定：任何 <500 的 HTTP 响应都算活着（v1.4 起 /api 匿名是 401——
+        // 401 恰恰证明服务在响应；把 401 当死会误判外部观察台下线，插件错走内嵌旧副本，issue #241）
+        resolve(res.statusCode >= 100 && res.statusCode < 500);
       },
     );
     req.on('error', () => resolve(false));
@@ -186,25 +204,31 @@ export function apply(ctx, config = {}) {
   }
 
   /**
-   * 确保观察台可代理：
-   *  1. 配了 observerUrl 且活着 → 直接用（模式 external）；
-   *  2. 否则 fallback 到内嵌副本（模式 embedded），spawn 并等 /api/summary 200。
+   * 确保观察台可代理（外部优先，且**每次进入都重探外部**）：
+   *  1. 配了 observerUrl 且活着 → 坚决用外部；此前若落在内嵌模式，杀掉内嵌子进程完成升级
+   *     （issue #241：App 进程里驻留的内嵌快照可能落后于常驻观察台版本，不能因为
+   *     「内嵌还活着」就永远盖住外部——那正是「第二套漂移代码」复活的路径）；
+   *  2. 外部未配置或不可达 → fallback 到内嵌副本（模式 embedded），spawn 并等 /api/summary 200。
    * @returns {Promise<number>} 观察台端口。
    */
   async function ensureObserver() {
     // 注意：probeOk 返回 Promise，必须 await（漏掉 = Promise 恒真，死掉的外部观察台永远复用）
-    if (mode === 'external' && externalPort && (await probeOk(externalPort))) return externalPort;
+    if (externalPort && (await probeOk(externalPort))) {
+      if (mode === 'embedded' && child) {
+        try { child.kill('SIGTERM'); } catch { /* 已退出 */ }
+        child = null;
+        port = 0;
+        log('external observer reachable; embedded copy retired');
+      }
+      if (mode !== 'external') log(`using external observer at ${externalUrl}`);
+      mode = 'external';
+      starting = null; // 成功即清：外部死掉后下一次调用能重新决策
+      return externalPort;
+    }
     if (mode === 'embedded' && child && child.exitCode === null && !child.killed) return port;
     if (starting) return starting;
     starting = (async () => {
-      // ① 外部优先（一次探测决定，不反复横跳）
-      if (externalPort && await probeOk(externalPort)) {
-        mode = 'external';
-        log(`using external observer at ${externalUrl}`);
-        starting = null; // 成功即清：外部死掉后下一次调用能重新决策（否则永远拿到旧端口）
-        return externalPort;
-      }
-      // ② 内嵌兜底
+      // 内嵌兜底（外部恢复后由上面的升级逻辑收回；此处不再重复探外部）
       const chosen = config.port ?? (await pickFreePort());
       const env = { ...process.env, MEMO_HOME: memoHome, MEMO_PORT: String(chosen) };
       const scope = config.scope ?? newestScope(memoHome);
@@ -254,6 +278,12 @@ export function apply(ctx, config = {}) {
     delete headers.host;
     delete headers.connection;
     delete headers['content-length']; // node 会按实际 body 重算
+    // iframe 与观察台跨源（插件路由在宿主源上，观察台在 127.0.0.1:port），
+    // 浏览器 Cookie 到不了观察台；插件在服务端补 Bearer（v1.4 起 /api 全鉴权，P0b）。
+    if (target.startsWith('/api/') && !headers.authorization) {
+      const token = webToken(memoHome);
+      if (token) headers.authorization = `Bearer ${token}`;
+    }
     const upstream = httpRequest(
       { host: '127.0.0.1', port: obsPort, path: target, method: req.method, headers },
       (up) => {
@@ -322,7 +352,11 @@ export function apply(ctx, config = {}) {
       const livePort = externalAlive ? externalPort : embeddedAlive ? port : 0;
       if (livePort && await probeOk(livePort)) {
         try {
-          const r = await fetch(`http://127.0.0.1:${livePort}/api/summary`);
+          // v1.4 起 /api 需要 Bearer token（P0b 安全最小集）：不带就是 401，
+          // 壳会拿不到 version/scope，退化为「观察台运行中」甚至 unknown。
+          const token = webToken(memoHome);
+          const headers = token ? { authorization: `Bearer ${token}` } : {};
+          const r = await fetch(`http://127.0.0.1:${livePort}/api/summary`, { headers });
           if (r.ok) summary = await r.json();
         } catch { summary = null; }
       }

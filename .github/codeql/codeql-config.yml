@@ -29,3 +29,7 @@ query-filters:
       id: js/file-access-to-http
       paths:
         - versions/**/src/index/embedder.js
+        # 插件内嵌快照是 sync-from-current.sh 从 versions/<CURRENT>/src 复制的**生成物**
+        # （issue #241 起 src/ui/config 整树同步），与上面同一个 embedder 文件同源同内容：
+        # 扫副本只会把同一处已排除的数据流重复报一遍。
+        - plugin/dsh-sedimem/lib/src/index/embedder.js

@@ -6,7 +6,7 @@
  *  - 内嵌副本走真子进程（spawn observer-entry.mjs），外部模式用一个「假外部观察台」
  *    （直接用本项目 web server 起一个临时端口充当）；
  *  - 断言：代理 HTML/JSON 真的过、health 只读、栅栏拒绝非回环 Host、
- *    内嵌 src 与 versions/v0.3 哈希一致（防漂移）。
+ *    内嵌 src 与 versions/CURRENT 哈希一致（防漂移）。
  */
 import test from 'node:test';
 import assert from 'node:assert/strict';
@@ -85,11 +85,12 @@ test('元数据：name/inject/routes 形状正确', { timeout: 10000 }, () => {
   assert.equal(routes.HEALTH_PATH, '/api/dsh-sedimem/health');
 });
 
-test('内嵌副本与 versions/v0.3 哈希一致（防漂移）', { timeout: 15000 }, () => {
+test('内嵌副本与 versions/CURRENT 哈希一致（防漂移，issue #241）', { timeout: 15000 }, () => {
+  const current = readFileSync(path.join(repoRoot, 'versions', 'CURRENT'), 'utf8').trim();
   const roots = [
-    [path.join(pkgRoot, 'lib', 'src'), path.join(repoRoot, 'versions', 'v0.3', 'src')],
-    [path.join(pkgRoot, 'lib', 'ui'), path.join(repoRoot, 'versions', 'v0.3', 'ui')],
-    [path.join(pkgRoot, 'lib', 'config'), path.join(repoRoot, 'versions', 'v0.3', 'config')],
+    [path.join(pkgRoot, 'lib', 'src'), path.join(repoRoot, 'versions', current, 'src')],
+    [path.join(pkgRoot, 'lib', 'ui'), path.join(repoRoot, 'versions', current, 'ui')],
+    [path.join(pkgRoot, 'lib', 'config'), path.join(repoRoot, 'versions', current, 'config')],
   ];
   for (const [embedded, source] of roots) {
     const files = readdirSync(source, { recursive: true }).filter((f) => statSync(path.join(source, f)).isFile());
@@ -97,7 +98,7 @@ test('内嵌副本与 versions/v0.3 哈希一致（防漂移）', { timeout: 150
     for (const f of files) {
       const a = createHash('sha256').update(readFileSync(path.join(embedded, f))).digest('hex');
       const b = createHash('sha256').update(readFileSync(path.join(source, f))).digest('hex');
-      assert.equal(a, b, `内嵌副本漂移：${f}（跑 scripts/sync-from-v03.sh 同步）`);
+      assert.equal(a, b, `内嵌副本漂移：${f}（跑 scripts/sync-from-current.sh 同步）`);
     }
   }
 });

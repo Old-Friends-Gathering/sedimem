@@ -1,5 +1,5 @@
 // config/policy.js — config/policy.json 的唯一加载点（裁决 20：策略单一来源）
-// 其余模块一律 `import { defaultPolicy } from '../config/policy.js'`（或按需 loadPolicy(overrides)），
+// 其余模块一律 import 本模块的 defaultPolicy（或按需 loadPolicy(overrides)），
 // 禁止再各自 readFileSync config/policy.json。
 
 import { readFileSync } from 'node:fs';
