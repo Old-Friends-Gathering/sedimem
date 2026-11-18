@@ -10,6 +10,7 @@ import {
   checkSingleSentence,
   resolveEvidenceSpans,
   computePackQuota,
+  collectWarnings,
 } from '../tools/corpus-validate.mjs';
 
 const manifest = JSON.parse(await (await import('node:fs/promises')).readFile(new URL('../config/eval-manifest.json', import.meta.url), 'utf8'));
@@ -98,12 +99,12 @@ test('对抗场景必须携带 expectedOutcome + expectedErrorClass', () => {
   const errs = validateScenario(s, { manifest });
   assert.ok(errs.some((e) => e.includes('expectedOutcome')));
   const s2 = okScenario({
-    adversarial: { class: 'negation', target: { eventId: 'S001-m001', quote: '超时时间调到 30 秒' }, expectedOutcome: 'block', expectedErrorClass: 'negation-flip' },
+    adversarial: { class: 'later-correction', target: { eventId: 'S001-m001', quote: '超时时间调到 30 秒' }, expectedOutcome: 'block', expectedErrorClass: 'retract-treated-current' },
   });
   assert.deepEqual(validateScenario(s2, { manifest }), []);
   // expectedErrorClass 必须在七类闭集内
   const s3 = okScenario({
-    adversarial: { class: 'negation', target: { eventId: 'S001-m001', quote: '超时时间调到 30 秒' }, expectedOutcome: 'block', expectedErrorClass: 'made-up-class' },
+    adversarial: { class: 'later-correction', target: { eventId: 'S001-m001', quote: '超时时间调到 30 秒' }, expectedOutcome: 'block', expectedErrorClass: 'made-up-class' },
   });
   assert.ok(validateScenario(s3, { manifest }).some((e) => e.includes('expectedErrorClass')));
 });
@@ -179,7 +180,76 @@ test('checkSingleSentence: 小数点数值不算复合', () => {
   assert.equal(checkSingleSentence('Cold-start crash rate is 2.1 percent on affected devices'), true);
   assert.equal(checkSingleSentence('订单查询慢查询率降到 1.2%'), true);
 });
+test('checkSingleSentence: 多段版本号不算复合（B3 语料回归 3.2.1/1.8.3）', () => {
+  assert.equal(checkSingleSentence('OOM was the root cause of the 3.2.1 crash spike'), true);
+  assert.equal(checkSingleSentence('Upload service was rolled back to 1.8.3 manually'), true);
+});
 test('checkSingleSentence: 真复合句仍拒绝', () => {
   assert.equal(checkSingleSentence('网关升到 2.4。连接池保持 50'), false);
   assert.equal(checkSingleSentence('Runs 2.4. Next step is rollback'), false);
+});
+
+// —— R2 语料审核 F2/F7 修订：outcome 类映射、claim 上限、组合合法性 ——
+
+const ADV = (over = {}) => ({
+  class: 'later-correction',
+  target: { eventId: 'S001-m002', quote: '已记录' },
+  expectedOutcome: 'block',
+  expectedErrorClass: 'retract-treated-current',
+  ...over,
+});
+
+test('adversarial.expectedOutcome 必须等于类映射（R2-F2）', () => {
+  const bad = okScenario({ adversarial: ADV({ expectedOutcome: 'emit-with-flag' }) });
+  const errs = validateScenario(bad, { manifest });
+  assert.ok(errs.some((e) => e.includes('expectedOutcome') && e.includes('类映射')));
+  const good = okScenario({ adversarial: ADV() });
+  assert.equal(validateScenario(good, { manifest }).length, 0);
+});
+
+test('negation/suggestion 类映射为 emit-with-flag（R2-F2）', () => {
+  const neg = okScenario({ adversarial: ADV({ class: 'negation', expectedErrorClass: 'negation-flip' }) });
+  neg.adversarial.expectedOutcome = 'emit-with-flag';
+  assert.equal(validateScenario(neg, { manifest }).filter((e) => e.includes('expectedOutcome')).length, 0);
+  const negBlock = okScenario({ adversarial: ADV({ class: 'negation', expectedErrorClass: 'negation-flip' }) });
+  negBlock.adversarial.expectedOutcome = 'block';
+  assert.ok(validateScenario(negBlock, { manifest }).some((e) => e.includes('expectedOutcome')));
+});
+
+test('claim 超过 claimMaxChars 拒绝（R2-F7）', () => {
+  const long = '长'.repeat(101);
+  const s = okScenario();
+  s.gold[0].claim = long;
+  const errs = validateScenario(s, { manifest });
+  assert.ok(errs.some((e) => e.includes('claim') && e.includes('100')));
+});
+
+test('speechAct=suggest ⇒ status ∈ suggestion-only|conditional（R2-F7）', () => {
+  const s = okScenario();
+  s.gold[0].assertion.speechAct = 'suggest';
+  s.gold[0].status = 'active';
+  assert.ok(validateScenario(s, { manifest }).some((e) => e.includes('组合')));
+  s.gold[0].status = 'suggestion-only';
+  assert.equal(validateScenario(s, { manifest }).filter((e) => e.includes('组合')).length, 0);
+});
+
+test('speechAct=complete ⇒ type=task-state；retract ⇒ status=retracted（R2-F7）', () => {
+  const s1 = okScenario();
+  s1.gold[0].assertion.speechAct = 'complete';
+  assert.ok(validateScenario(s1, { manifest }).some((e) => e.includes('组合')));
+  s1.gold[0].type = 'task-state';
+  assert.equal(validateScenario(s1, { manifest }).filter((e) => e.includes('组合')).length, 0);
+  const s2 = okScenario();
+  s2.gold[0].assertion.speechAct = 'retract';
+  assert.ok(validateScenario(s2, { manifest }).some((e) => e.includes('组合')));
+  s2.gold[0].status = 'retracted';
+  assert.equal(validateScenario(s2, { manifest }).filter((e) => e.includes('组合')).length, 0);
+});
+
+test('block 场景 target ∈ gold evidence 产出 warning（不阻断，score 侧 TP 豁免兜底）', () => {
+  const s = okScenario({ adversarial: ADV({ target: { eventId: 'S001-m001', quote: '超时时间调到 30 秒' } }) });
+  const warns = collectWarnings(s);
+  assert.ok(warns.some((w) => w.includes('S001') && w.includes('block') && w.includes('gold evidence')));
+  const s2 = okScenario({ adversarial: ADV({ target: { eventId: 'S001-m002', quote: '已记录' } }) });
+  assert.equal(collectWarnings(s2).length, 0);
 });

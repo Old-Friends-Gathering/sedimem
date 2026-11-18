@@ -131,10 +131,35 @@ test('pilot fail-closed：verdict 必须为 null 且有说明', () => {
   assert.ok(r.note.includes('pilot'));
 });
 
-test('block 对抗：候选命中对抗 target 即计 block-violation', () => {
+test('block 对抗：非 TP 候选命中对抗 target 计 block-violation（TP 豁免见下一用例）', () => {
   const adv = { class: 'negation', target: { eventId: 'm1', quote: '连接池已提升到 200' }, expectedOutcome: 'block', expectedErrorClass: 'negation-flip' };
-  const r = scoreRun({ candidates: [CAND()], scenarios: [SCEN({ adversarial: adv })], manifest: { stage: 'pilot' } });
+  const c = CAND({ candidateId: 'C9', claim: '数据库连接池上限已经改为 500', evidence: [{ eventId: 'm1', quote: '连接池已提升到 200', start: 0, end: 10, hash: 'h9' }] });
+  const r = scoreRun({ candidates: [c], scenarios: [SCEN({ adversarial: adv })], manifest: { stage: 'pilot' } });
   assert.equal(r.adversarial.blockViolations, 1);
+});
+
+test('block 对抗：TP（精确 gold 匹配）触碰 target 不计违规（R2-F1： bait 与 gold 证据共享句子时完美抽取不受罚）', () => {
+  const adv = { class: 'conditional-hypothetical', target: { eventId: 'm1', quote: '连接池已提升到 200' }, expectedOutcome: 'block', expectedErrorClass: 'unsupported-fact' };
+  const r = scoreRun({ candidates: [CAND()], scenarios: [SCEN({ adversarial: adv })], manifest: { stage: 'pilot' } });
+  assert.equal(r.adversarial.blockViolations, 0);
+});
+
+test('block 对抗：非 TP 候选触碰 target 仍计违规', () => {
+  const adv = { class: 'conditional-hypothetical', target: { eventId: 'm1', quote: '连接池已提升到 200' }, expectedOutcome: 'block', expectedErrorClass: 'unsupported-fact' };
+  const c = CAND({ candidateId: 'C2', claim: '缓存 TTL 已改成 300 秒', evidence: [{ eventId: 'm1', quote: '连接池已提升到 200', start: 0, end: 10, hash: 'h2' }] });
+  const r = scoreRun({ candidates: [CAND(), c], scenarios: [SCEN({ adversarial: adv })], manifest: { stage: 'pilot' } });
+  assert.equal(r.adversarial.blockViolations, 1);
+});
+
+test('emit-with-flag：触碰 target 的未打标候选计违规（打标候选不遮蔽）', () => {
+  const adv = { class: 'negation', target: { eventId: 'm1', quote: '连接池已提升到 200' }, expectedOutcome: 'emit-with-flag', expectedErrorClass: 'negation-flip' };
+  const unflagged = CAND({ candidateId: 'C2', claim: '另一条记录', evidence: [{ eventId: 'm1', quote: '连接池已提升到 200', start: 0, end: 10, hash: 'h2' }] });
+  const flagged = CAND({ candidateId: 'C3', flagged: true, claim: '再一条' });
+  const r1 = scoreRun({ candidates: [unflagged, flagged], scenarios: [SCEN({ adversarial: adv })], manifest: { stage: 'pilot' } });
+  assert.equal(r1.adversarial.emitFlagViolations, 1, '未打标触碰即违规，无关打标候选不遮蔽');
+  const ok = CAND({ candidateId: 'C4', flagged: true, claim: '触碰但已打标', evidence: [{ eventId: 'm1', quote: '连接池已提升到 200', start: 0, end: 10, hash: 'h3' }] });
+  const r2 = scoreRun({ candidates: [ok], scenarios: [SCEN({ adversarial: adv })], manifest: { stage: 'pilot' } });
+  assert.equal(r2.adversarial.emitFlagViolations, 0, '触碰且打标则通过');
 });
 
 test('家族计数按 scenario.family 聚合', () => {
