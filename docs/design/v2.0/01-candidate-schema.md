@@ -27,7 +27,12 @@
   "claim": "单一命题原句（一句一候选，禁止复合命题）",
   "type": "fact",                   // 闭集 6 类，见 §4
   "assertion": {                    // 断言框架（§3.2）
-    "speaker": "user|assistant|tool:<name>|unknown",
+    "speaker": "user|assistant|tool:<name>|unknown|quoted",
+                                     // quoted = 引用他人/文档/外部内容（不是用户自己的陈述，r2 新增，见 09 §7）
+    "subject": "主体（结构化，来自输入允许集合；未知 null）",
+                                     // r2 新增（planned）：聊天纠正匹配键依赖 subject+predicate，见 09 §7
+    "predicate": "谓词/槽位（如 port|owner|status；未知 null）",
+    "value": "值文本（与 claim 一致时才填；未知 null）",
     "speechAct": "state|suggest|agree|decide|complete|retract",
     "about": "主体标识（来自输入允许集合，未知写 null）",
     "negated": false,               // 否定标记：原文明确否定时 true
@@ -62,7 +67,9 @@
     "candidateVersion": 1,          // CAS 乐观锁
     "acceptOpId": null,
     "decidedBy": null,
-    "decidedAt": null
+    "decidedAt": null,
+    "hold": null                    // 待决注解（r2）：{reason, decidedAt, policyVersion, unresolved{subject,predicate}}
+                                    // 注意：hold 不是状态，候选仍在 pending；落盘的是注解，见 §2 澄清
   }
 }
 ```
@@ -94,6 +101,18 @@ accepted ──supersede──▶ superseded（修订链：新候选 accept 时�
 
 **非法迁移一律拒绝并返回冲突**（如 accept 已 rejected 的候选），不静默成功。
 
+**hold 不是状态（r2 澄清，消除与 09 §6 的闭集冲突）**：自动决策的 `hold` 不引入新状态，候选**保持 `pending`**，改在 `workflow.hold` 落注解：
+
+```jsonc
+"hold": { "reason": "unresolved|stale-evidence", "decidedAt": "2026-11-18T12:00:00Z",
+          "policyVersion": "policy:auto-memory-r2/1",
+          "unresolved": { "subject": "db-primary", "predicate": "port", "value": null } }
+```
+
+- 状态机闭集不变（`pending|accepted|rejected|cancelled|failed|superseded`）。
+- hold 之后仍可 accept/reject（注解清除）；hold 不阻塞其他候选、不生成人工待办。
+- 「reject + hold」二义表述作废：stale 证据 → `failed`（`evidence-unsupported`）**或**退回重新圈定后出新候选版本（与 [02 §4](02-evidence-and-deletion.md) 一致），不叠加 hold。
+
 **failed 重试澄清（消除与 §3 noop 的张力）**：failed 后重试若输入、模型、配置都未变，则按 §3 确定性 ID 规则命中**同一 candidateId** → noop，不产生新候选；只有 claim 内容、模型或配置变化时才产生新 candidateId（修订语义，见 §3.1）。
 
 ## 3. 幂等协议（冻结决策 1b）
@@ -110,6 +129,8 @@ accepted ──supersede──▶ superseded（修订链：新候选 accept 时�
 **CAS 校验**（accept 提交时，同一数据锁内）：校验三元组 `candidateVersion` + `evidenceHash` + `expectedTruthRevision`。任一不匹配 → **返回冲突、自动刷新重评，不盲写**；冲突响应包含当前值供自动决策器刷新。
 
 **提交点**：长期记录（真相层）成功追加 = 唯一提交点。候选与审计先持久化，真相层追加失败时恢复流程以「审计里的决定 + 收据」重放，不产生重复。
+
+**真相层记录必须携带 `opId` 与 `candidateId`（r2 新增，恢复对账前提）**：真相层每条追加记录含 `opId`（本次 accept 操作）、`candidateId`、`revision`；收据缺失时据此反查「该 opId 是否已提交」（判定树见 [09 §8](09-extraction-pipeline.md)）。缺 `opId` 的记录视为 schema 不完整，恢复器不得猜。
 
 **抽取游标**：仅在候选与审计持久化后提交；任何缺口写入 `missingRanges`（持久列表），**不得把缺口推进为已完成**。恢复运行必须先消费 missingRanges。
 
@@ -128,7 +149,7 @@ accepted ──supersede──▶ superseded（修订链：新候选 accept 时�
 - **candidateVersion 自增只由工作流操作触发**：自动策略决策、修订链接建立及可选用户编辑。抽取管线绝不自行 bump candidateVersion（版本是 CAS 锁，不是迭代计数器）。
 - **判定边界（R2-N1 修订，消除与 §3 写入幂等的矛盾）**：candidateId 派生**只含内容四元组**（sourceEpoch/rangeId/inputHash/claim 规范化形式），**不含 model/configHash**——这是重放幂等的关键不变量，不为此妥协。因此：模型/配置变化**且 claim 规范化形式不同** → 修订路径（新 candidateId + supersedes）；模型/配置变化但 **claim 相同** → 按 §3 写入幂等处理（同 candidateId → noop），**provenance 以首写为准**（首次写入的 model/configHash 落盘，后续 noop 不覆盖）。修订的本质是内容变化，不是执行环境变化。P1b 协议测试必含「跨模型同 claim → noop + provenance 不变」用例。
 
-**失败状态枚举（§3.4 对齐）**：`timeout` / `empty-response` / `parse-failure` / `token-truncated`（识别 finish_reason=length，不解析半截响应）/ `evidence-unsupported` / `no-recordable-content` / `policy-blocked`，附原始 finish_reason。`no-recordable-content` 不是错误——它是「无可记场景」的正常信号，进评测统计。
+**失败状态枚举（对齐上位 future-architecture §3.4；本节位于 §3.1 末）**：`timeout` / `empty-response` / `parse-failure` / `token-truncated`（识别 finish_reason=length，不解析半截响应）/ `evidence-unsupported` / `no-recordable-content` / `policy-blocked`，附原始 finish_reason。`no-recordable-content` 不是错误——它是「无可记场景」的正常信号，进评测统计。`recovery-required` **不属于**候选 failure 枚举：它是 opId 级恢复标记（§3 recovery-required 段），落在收据/审计侧，不得写进 `workflow.failure`。
 
 ## 4. 类型映射（冻结决策 4，闭集）
 
