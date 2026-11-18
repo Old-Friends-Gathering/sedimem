@@ -188,7 +188,9 @@ export async function maybeAutoCapture({
     if (!d.ok) return { ran: false, reason: d.reason, ...(d.waitMs !== undefined ? { waitMs: d.waitMs } : {}) };
     const now = nowMs(clock);
     const impl = captureTaskImpl ?? (await import('./capture.js')).captureTask;
-    const res = await impl({ memoHome, taskId, cwd, mode: 'rules' });
+    // sid 必须透传给 captureTask：否则它按 cwd slug 找转录——MCP server 进程 cwd 是宿主
+    // profiles 目录，slug 永远匹配不上（bind 的意义就是让捕获用对转录，issue #225/#230）。
+    const res = await impl({ memoHome, taskId, cwd, mode: 'rules', sessionId: sid });
     writeAutoCaptureState(memoHome, taskId, {
       mtimeMs: tx.mtimeMs,
       size: tx.size,
