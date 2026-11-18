@@ -109,3 +109,55 @@ test('renderExitReport：输出含每项状态与总结行', () => {
   assert.match(text, /annotation-dual/);
   assert.match(text, /待完成 1 项/);
 });
+
+// ---------- 降级标注模式：model-dual-blinded（模型盲评双遍 + 裁决） ----------
+test('annotation-dual：model-dual-blinded 满足出口但带降级声明（caveat），不冒充 dual-independent', () => {
+  const scenarios = [
+    SC('S1', 'dev', 'zh'), SC('S2', 'dev', 'zh'),
+    SC('S3', 'test', 'zh', { adv: 'negation' }), SC('S4', 'test', 'en', { adv: 'tool-failure' }),
+    SC('S5', 'dev', 'zh', { reject: true, goldCount: 0 }),
+  ];
+  const r = evaluateExit({
+    scenarios, manifest: MANIFEST(), frozenRows: FROZEN_OK,
+    annotation: { mode: 'model-dual-blinded', pass1: true, pass2: true, goldset: true },
+  });
+  const chk = r.checks.find((c) => c.id === 'annotation-dual');
+  assert.equal(chk.ok, true);
+  assert.equal(chk.pending, false);
+  assert.ok(chk.caveat, '降级模式必须留下 caveat');
+  assert.match(chk.caveat, /model-dual-blinded/);
+  assert.equal(r.ok, true);
+  assert.deepEqual(r.blockedBy, []);
+  assert.deepEqual(r.caveats, ['annotation-dual']);
+});
+
+test('annotation-dual：dual-independent 无 caveat', () => {
+  const scenarios = [
+    SC('S1', 'dev', 'zh'), SC('S2', 'dev', 'zh'),
+    SC('S3', 'test', 'zh', { adv: 'negation' }), SC('S4', 'test', 'en', { adv: 'tool-failure' }),
+    SC('S5', 'dev', 'zh', { reject: true, goldCount: 0 }),
+  ];
+  const r = evaluateExit({
+    scenarios, manifest: MANIFEST(), frozenRows: FROZEN_OK,
+    annotation: { mode: 'dual-independent', pass1: true, pass2: true, goldset: true },
+  });
+  const chk = r.checks.find((c) => c.id === 'annotation-dual');
+  assert.equal(chk.ok, true);
+  assert.equal(chk.caveat, undefined);
+  assert.deepEqual(r.caveats, []);
+});
+
+test('renderExitReport：降级模式结论行标注 caveat 数', () => {
+  const scenarios = [
+    SC('S1', 'dev', 'zh'), SC('S2', 'dev', 'zh'),
+    SC('S3', 'test', 'zh', { adv: 'negation' }), SC('S4', 'test', 'en', { adv: 'tool-failure' }),
+    SC('S5', 'dev', 'zh', { reject: true, goldCount: 0 }),
+  ];
+  const r = evaluateExit({
+    scenarios, manifest: MANIFEST(), frozenRows: FROZEN_OK,
+    annotation: { mode: 'model-dual-blinded', pass1: true, pass2: true, goldset: true },
+  });
+  const text = renderExitReport(r);
+  assert.match(text, /⚠️/);
+  assert.match(text, /降级声明 1 项/);
+});

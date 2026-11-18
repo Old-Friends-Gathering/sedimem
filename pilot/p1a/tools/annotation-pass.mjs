@@ -3,7 +3,7 @@
 // 红线：goldset 只在两份标注都覆盖、且裁决表无待裁决行时才产出（fail-closed）。
 // 红线（06-annotation-spec §2）：工具只做机械比对，绝不产出 pass/fail 裁决；
 // 独立性=盲评包必须剥离全部 gold 侧字段（gold/shouldReject/adversarial/split/expected*）。
-import { readFileSync, writeFileSync, mkdirSync } from 'node:fs';
+import { readFileSync, writeFileSync, mkdirSync, existsSync } from 'node:fs';
 import { join } from 'node:path';
 import { normalizeClaim } from './score.mjs';
 
@@ -46,7 +46,12 @@ export function buildBlindPackage(scenarios, { blindPass = 'pass-2', clock = () 
 /** 校验第二遍标注：场景覆盖齐全 + gold 枚举合法。返回 {errors, annotationMode}。 */
 export function importBlindAnnotation(annotations, blindPackage) {
   const errors = [];
-  const expected = new Set(blindPackage?.manifest?.scenarioIds ?? blindPackage?.scenarios?.map((s) => s.scenarioId) ?? []);
+  const pkgScenarios = blindPackage?.scenarios ?? [];
+  const expected = new Set(blindPackage?.manifest?.scenarioIds ?? pkgScenarios.map((s) => s.scenarioId));
+  // 事件索引：用于校验证据（eventId 必须存在、quote 必须逐字子串）——盲评包只含事件文本，足以独立判定
+  const eventsByScenario = new Map(
+    pkgScenarios.map((s) => [s.scenarioId, new Map((s.events ?? []).map((e) => [e.eventId, String(e.text ?? '')]))]),
+  );
   const seen = new Set();
   for (const row of annotations) {
     const sid = row?.scenarioId;
@@ -60,6 +65,18 @@ export function importBlindAnnotation(annotations, blindPackage) {
       if (g.status != null && !STATUS_ENUM.has(g.status)) errors.push(`${sid}: gold status 非法枚举 ${JSON.stringify(g.status)}（合法：active|retracted|conditional|suggestion-only|not-done）`);
       const sa = g.assertion?.speechAct;
       if (sa != null && !SPEECH_ACT_ENUM.has(sa)) errors.push(`${sid}: assertion.speechAct 非法枚举 ${JSON.stringify(sa)}（合法：state|suggest|agree|decide|complete|retract）`);
+      if (typeof g.claim === 'string' && g.claim.length > 100) errors.push(`${sid}: claim 超过 100 字符上限（实际 ${g.claim.length}）`);
+      // 证据校验（06 §1：quote 必须逐字出自事件文本）
+      const evMap = eventsByScenario.get(sid);
+      if (evMap) {
+        for (const [i, ev] of (g.evidence ?? []).entries()) {
+          if (!ev?.eventId) { errors.push(`${sid}: 第 ${i + 1} 条 evidence 缺 eventId`); continue; }
+          if (!evMap.has(ev.eventId)) { errors.push(`${sid}: 第 ${i + 1} 条 evidence 的 eventId ${ev.eventId} 不在此场景事件中`); continue; }
+          if (!ev.quote || !evMap.get(ev.eventId).includes(String(ev.quote))) {
+            errors.push(`${sid}: 第 ${i + 1} 条 evidence 的 quote 不是事件 ${ev.eventId} 的逐字子串`);
+          }
+        }
+      }
     }
   }
   for (const sid of expected) {
@@ -258,7 +275,7 @@ function mergeClaims(ga, gb) {
  * goldset 生成：把两份独立标注 + 裁决表落地成可版本化的 goldset-vN。
  * fail-closed：任一行未裁决 / 非法 resolution / 场景只在一侧标注 → 不产出，只返错误。
  */
-export function buildGoldset(passA, passB, worksheet = {}, { goldsetVersion = 'goldset-v1', clock = () => new Date() } = {}) {
+export function buildGoldset(passA, passB, worksheet = {}, { goldsetVersion = 'goldset-v1', clock = () => new Date(), annotationMode = 'dual-independent', adjudication = null } = {}) {
   const errors = [];
   const rows = Array.isArray(worksheet?.rows) ? worksheet.rows.filter(Boolean) : [];
   const pending = rows.filter((r) => r.resolution == null);
@@ -310,23 +327,29 @@ export function buildGoldset(passA, passB, worksheet = {}, { goldsetVersion = 'g
       for (let i = 0; i < paired; i += 1) {
         const ga = gaList[i];
         const gb = gbList[i];
-        if (res === 'b') gold.push(structuredClone(gb));
-        else if (res === 'merge') gold.push(mergeClaims(ga, gb));
-        else gold.push(structuredClone(ga));
+        const claim = res === 'b' ? structuredClone(gb) : res === 'merge' ? mergeClaims(ga, gb) : structuredClone(ga);
+        claim.confirmedByBoth = true; // 两遍盲评都提出了同一 claim（归一化键相同）
+        gold.push(claim);
       }
       for (let i = paired; i < gaList.length; i += 1) {
         const row = pickRow(sid, 'claim-only-in-A', key);
         const r = row?.resolution ?? 'a';
         if (row) adjudicated += 1;
-        if (r === 'a' || r === 'both') gold.push(structuredClone(gaList[i]));
-        else droppedA += 1;
+        if (r === 'a' || r === 'both') {
+          const claim = structuredClone(gaList[i]);
+          claim.confirmedByBoth = false; // 单侧提出：未经第二遍确认
+          gold.push(claim);
+        } else droppedA += 1;
       }
       for (let i = paired; i < gbList.length; i += 1) {
         const row = pickRow(sid, 'claim-only-in-B', key);
         const r = row?.resolution ?? 'b';
         if (row) adjudicated += 1;
-        if (r === 'b' || r === 'both') gold.push(structuredClone(gbList[i]));
-        else droppedB += 1;
+        if (r === 'b' || r === 'both') {
+          const claim = structuredClone(gbList[i]);
+          claim.confirmedByBoth = false;
+          gold.push(claim);
+        } else droppedB += 1;
       }
     }
     let reject;
@@ -345,7 +368,8 @@ export function buildGoldset(passA, passB, worksheet = {}, { goldsetVersion = 'g
   return {
     errors: [],
     goldset: {
-      annotationMode: 'dual-independent',
+      annotationMode,
+      ...(adjudication ? { adjudication } : {}),
       goldsetVersion,
       frozenAt: clock().toISOString(),
       scenarios,
@@ -395,7 +419,10 @@ async function main() {
     const file = arg('--file');
     const pkgDir = arg('--package') ?? 'out/blind';
     const manifest = JSON.parse(readFileSync(join(pkgDir, 'manifest.json'), 'utf8'));
-    const result = importBlindAnnotation(loadJsonl(file), { manifest });
+    // 盲评包场景（含 events）用于证据逐字校验；文件缺失时退化为只校验枚举/覆盖
+    const pkgScenariosFile = join(pkgDir, 'blind-pass.jsonl');
+    const scenarios = existsSync(pkgScenariosFile) ? loadJsonl(pkgScenariosFile) : [];
+    const result = importBlindAnnotation(loadJsonl(file), { manifest, scenarios });
     console.log(JSON.stringify(result, null, 2));
     if (result.errors.length > 0) process.exit(1);
     return;
@@ -419,7 +446,12 @@ async function main() {
     const a = loadJsonl(arg('--a'));
     const b = loadJsonl(arg('--b'));
     const ws = JSON.parse(readFileSync(arg('--worksheet'), 'utf8'));
-    const res = buildGoldset(a, b, ws, { goldsetVersion: arg('--version') ?? 'goldset-v1' });
+    const adjFile = arg('--adjudication');
+    const res = buildGoldset(a, b, ws, {
+      goldsetVersion: arg('--version') ?? 'goldset-v1',
+      annotationMode: arg('--mode') ?? 'dual-independent',
+      adjudication: adjFile ? JSON.parse(readFileSync(adjFile, 'utf8')) : null,
+    });
     if (res.errors.length > 0) {
       console.error(JSON.stringify({ ok: false, errors: res.errors }, null, 2));
       process.exit(1);
@@ -429,7 +461,7 @@ async function main() {
     console.log(JSON.stringify({ ok: true, ...res.goldset.stats, version: res.goldset.goldsetVersion, out }));
     return;
   }
-  console.error('用法：node annotation-pass.mjs <export|import|compare|worksheet|goldset> [--corpus dir] [--out file] [--a file] [--b file] [--worksheet file] [--version vN] [--package dir]');
+  console.error('用法：node annotation-pass.mjs <export|import|compare|worksheet|goldset> [--corpus dir] [--out file] [--a file] [--b file] [--worksheet file] [--version vN] [--package dir] [--mode dual-independent|model-dual-blinded] [--adjudication file]');
   process.exit(2);
 }
 

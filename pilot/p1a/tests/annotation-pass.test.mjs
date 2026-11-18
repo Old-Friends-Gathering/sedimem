@@ -393,3 +393,61 @@ test('buildGoldset：非法 resolution 拒绝产出', () => {
   assert.equal(r.goldset, null);
   assert.ok(r.errors.some((e) => e.includes('非法 resolution')), `错误应含「非法 resolution」，实际：${JSON.stringify(r.errors)}`);
 });
+
+// ---------- import 时的证据校验（quote 必须逐字出自盲评包事件） ----------
+test('importBlindAnnotation：证据 eventId 不存在 / quote 非逐字子串 → 报错点名', () => {
+  const pkg = {
+    manifest: { blindPass: 'pass-2' },
+    scenarios: [{ scenarioId: 'S1', events: [{ eventId: 'S1-m001', text: '连接池已提升到 200。' }] }],
+  };
+  const bad = [
+    { scenarioId: 'S1', gold: [{ claim: '连接池提升', type: 'fact', evidence: [{ eventId: 'S1-m999', quote: '连接池已提升到 200' }] }] },
+  ];
+  const r1 = importBlindAnnotation(bad, pkg);
+  assert.ok(r1.errors.some((e) => e.includes('S1-m999')), '未知 eventId 必须点名');
+
+  const badQuote = [
+    { scenarioId: 'S1', gold: [{ claim: '连接池提升', type: 'fact', evidence: [{ eventId: 'S1-m001', quote: '连接池已提升到 300' }] }] },
+  ];
+  const r2 = importBlindAnnotation(badQuote, pkg);
+  assert.ok(r2.errors.some((e) => e.includes('quote') && e.includes('S1')), 'quote 非逐字子串必须点名');
+
+  const ok = [
+    { scenarioId: 'S1', gold: [{ claim: '连接池提升', type: 'fact', evidence: [{ eventId: 'S1-m001', quote: '连接池已提升到 200' }] }] },
+  ];
+  assert.deepEqual(importBlindAnnotation(ok, pkg).errors, []);
+});
+
+test('importBlindAnnotation：claim 超 100 字符 → 报错', () => {
+  const pkg = { scenarios: [{ scenarioId: 'S1', events: [{ eventId: 'S1-m001', text: 'x' }] }] };
+  const long = 'a'.repeat(101);
+  const rows = [{ scenarioId: 'S1', gold: [{ claim: long, type: 'fact', evidence: [{ eventId: 'S1-m001', quote: 'x' }] }] }];
+  const r = importBlindAnnotation(rows, pkg);
+  assert.ok(r.errors.some((e) => e.includes('100')), '超长 claim 必须点名');
+});
+
+// ---------- 自动裁决（记录化的裁决策略，非人工） ----------
+test('applyUnionPolicy：only-A→a、only-B→b、字段分歧→merge，并统计 confirmed 比例', async () => {
+  const { applyUnionPolicy } = await import('../tools/adjudicate.mjs');
+  const ws = {
+    rows: [
+      { scenarioId: 'S1', kind: 'claim-only-in-A', claimA: 'a1', claimB: null, resolution: null },
+      { scenarioId: 'S1', kind: 'claim-only-in-B', claimA: null, claimB: 'b1', resolution: null },
+      { scenarioId: 'S2', kind: 'field-mismatch', fields: ['type'], claimA: 'x', claimB: 'x', resolution: null },
+    ],
+  };
+  const { rows, stats } = applyUnionPolicy(ws);
+  assert.deepEqual(rows.map((r) => r.resolution), ['a', 'b', 'merge']);
+  assert.equal(stats.rows, 3);
+  assert.equal(stats.byResolution.a, 1);
+  assert.equal(stats.byResolution.b, 1);
+  assert.equal(stats.byResolution.merge, 1);
+});
+
+test('applyUnionPolicy：拒绝覆盖已有人工裁决（有 resolution 的行保持原样）', async () => {
+  const { applyUnionPolicy } = await import('../tools/adjudicate.mjs');
+  const ws = { rows: [{ scenarioId: 'S1', kind: 'claim-only-in-A', claimA: 'a1', claimB: null, resolution: 'both' }] };
+  const { rows, stats } = applyUnionPolicy(ws);
+  assert.equal(rows[0].resolution, 'both');
+  assert.equal(stats.preserved, 1);
+});
