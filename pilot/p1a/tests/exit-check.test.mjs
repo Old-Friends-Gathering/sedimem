@@ -79,7 +79,7 @@ test('evaluateExit：语料不足/无对抗/未冻结 → 失败项点名', () =
   assert.ok(failed.includes('frozen-decisions'), `应点名 frozen-decisions，实际：${failed}`);
 });
 
-test('evaluateExit：双标注未完成 → pending（不算失败），但 ok=false 且 blockedBy 指向它', () => {
+test('evaluateExit：参考产物未完成 → pending（不算失败），但 ok=false 且 blockedBy 指向它', () => {
   const scenarios = [
     SC('S1', 'dev', 'zh'), SC('S2', 'dev', 'zh'),
     SC('S3', 'test', 'zh', { adv: 'negation' }), SC('S4', 'test', 'en', { adv: 'tool-failure' }),
@@ -110,8 +110,8 @@ test('renderExitReport：输出含每项状态与总结行', () => {
   assert.match(text, /待完成 1 项/);
 });
 
-// ---------- 降级标注模式：model-dual-blinded（模型盲评双遍 + 裁决） ----------
-test('annotation-dual：model-dual-blinded 满足出口但带降级声明（caveat），不冒充 dual-independent', () => {
+// ---------- 模型参考来源模式：model-dual-blinded（模型盲评双遍 + 裁决） ----------
+test('annotation-dual：model-dual-blinded 满足资产出口但带来源声明（caveat），不冒充 dual-independent', () => {
   const scenarios = [
     SC('S1', 'dev', 'zh'), SC('S2', 'dev', 'zh'),
     SC('S3', 'test', 'zh', { adv: 'negation' }), SC('S4', 'test', 'en', { adv: 'tool-failure' }),
@@ -124,7 +124,7 @@ test('annotation-dual：model-dual-blinded 满足出口但带降级声明（cave
   const chk = r.checks.find((c) => c.id === 'annotation-dual');
   assert.equal(chk.ok, true);
   assert.equal(chk.pending, false);
-  assert.ok(chk.caveat, '降级模式必须留下 caveat');
+  assert.ok(chk.caveat, '模型来源必须留下 caveat');
   assert.match(chk.caveat, /model-dual-blinded/);
   assert.equal(r.ok, true);
   assert.deepEqual(r.blockedBy, []);
@@ -147,7 +147,7 @@ test('annotation-dual：dual-independent 无 caveat', () => {
   assert.deepEqual(r.caveats, []);
 });
 
-test('renderExitReport：降级模式结论行标注 caveat 数', () => {
+test('renderExitReport：模型参考模式结论行标注 caveat 数', () => {
   const scenarios = [
     SC('S1', 'dev', 'zh'), SC('S2', 'dev', 'zh'),
     SC('S3', 'test', 'zh', { adv: 'negation' }), SC('S4', 'test', 'en', { adv: 'tool-failure' }),
@@ -159,5 +159,28 @@ test('renderExitReport：降级模式结论行标注 caveat 数', () => {
   });
   const text = renderExitReport(r);
   assert.match(text, /⚠️/);
-  assert.match(text, /降级声明 1 项/);
+  assert.match(text, /参考来源声明 1 项/);
+});
+
+// 用户策略r2：模型参考可用，不要求人工标注；资产ok不代表生产实现就绪。
+test('r2：模型参考来源声明不再要求人工复核，且明确仅检查P1a资产', () => {
+  const r = evaluateExit({
+    scenarios: [], manifest: MANIFEST(), frozenRows: FROZEN_OK,
+    annotation: { mode: 'model-dual-blinded', pass1: true, pass2: true, goldset: true },
+  });
+  const chk = r.checks.find((c) => c.id === 'annotation-dual');
+  assert.equal(chk.ok, true);
+  assert.doesNotMatch(chk.detail, /以人工双标注复核为硬前置|待第二标注人/);
+  assert.equal(r.policyVersion, 'auto-memory-r2');
+  assert.equal(r.scope, 'p1a-assets');
+  assert.equal(r.runtimeImplemented, false);
+});
+
+test('r2：参考产物缺失仍pending，但不是等待人工人选', () => {
+  const r = evaluateExit({ scenarios: [], manifest: MANIFEST(), frozenRows: FROZEN_OK, annotation: {} });
+  const chk = r.checks.find((c) => c.id === 'annotation-dual');
+  assert.equal(chk.ok, false);
+  assert.equal(chk.pending, true);
+  assert.match(chk.detail, /参考产物/);
+  assert.doesNotMatch(chk.detail, /第二标注人|人工.*前置/);
 });

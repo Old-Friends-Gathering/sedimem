@@ -56,8 +56,24 @@ P1a 的评测资产存放在仓库 [`pilot/p1a/`](../pilot/p1a/corpus/README.md)
 |---|---|---|---|
 | 语料（pilot v0 → exit） | `pilot/p1a/corpus/*.jsonl` | 合成脱敏场景 + gold + 对抗标注（exit：218 场景/347 gold/对抗 10 类 test 各 10，含 split） | 已提交（PR #221、PR #240） |
 | 校验/基线/评分/复核/切分/盲评/守卫工具 | `pilot/p1a/tools/` | corpus-validate / baseline-runner / score / review / protocol-sim / split-corpus / annotation-pass / contract-guards | 已提交（PR #221、B2、B3、B4） |
-| 盲评包与裁决工作表 | `pilot/p1a/out/blind/`（gitignore） | 盲评包（剥离 gold 侧字段）+ 导入校验 + 一致性报告 + 裁决工作表；含第二标注人标注产物 | 本地生成，不入库（含人工标注内容） |
+| 盲评包与裁决工作表 | `pilot/p1a/out/blind/`（gitignore） | 盲评包（剥离 gold 侧字段）+ 导入校验 + 一致性报告 + 裁决工作表；含自动盲评与裁决产物（r2：不要求人工标注） | 本地生成，不入库（含参考标注内容） |
 | 冻结配置 | `pilot/p1a/config/eval-manifest.json` | 门槛与配额（改数须版本化 diff + 签署） | 已提交（PR #220） |
 | 验证轨输出 | `pilot/p1a/out/`（gitignore） | 候选 jsonl / meta / 评分报告；本地可重建，不入库 | 每次运行带 runId |
 
 要求：baseline/score 每次运行输出必须带 runId 落盘（输入与结论成对保留）；语料场景删除/修改须在对应 REVIEW 留痕；pilot 阶段评分器不得输出 pass/fail（fail-closed）。
+
+## 12.6 收益观测与实验展示资产（P1b/P1c planned）
+
+规格：[07-benefits-observability](design/v2.0/07-benefits-observability.md)。本节只登记新增目标资产，不改变 v1.4 现行存储或P1a既有结果；具体路径/保留期/条数与字节上限在P1b/P1c施工前冻结，缺配置禁止真实观测摄取和公开导出。
+
+| 新资产 | 内容 | 删除与分享边界 | 状态 |
+|---|---|---|---|
+| 阶段用量与复核事件 | 抽取/核对/embedding/检索/回答/重试 usage、价格版本、耗时、人工工时、逻辑runId | 不存秘密或默认复制原文；继承来源撤销与配额 | planned，P1b采集 |
+| 配对实验结果包 | experiment manifest、任务/arm/repetition、模型/tokenizer/gold/标注/阈值版本、原始结果引用及聚合 | 本地私密包不公开；撤销后重新聚合/失效；verify-delete纳入扫描 | planned，P1c |
+| 看板/报告派生 | 同源聚合JSON、只读页面、CSV/Markdown报告、trace引用 | 缺数据不回填；公共导出仅合成脱敏，外部已下载副本无法远程撤回 | planned，P1c/P5 |
+
+看板数据目录不成为新的真相层；不可因观测失败改变候选接纳或信任决定。观测不完整须显式标missing/degraded，不能省略失败费用或把N/A当零。
+
+## 12.7 自动决策与聊天纠正记录（r2 planned）
+
+用户取消人工前置，权威为[策略08](design/v2.0/08-auto-memory-and-correction.md)。新增自动决策记录包含policy版本、接受/拒绝/未决理由、opId和证据引用；纠正记录包含旧/新命题与生效时间/来源，恢复对账保留结果。均继承sourceEpoch、配额、保留期与来源删除，不复制秘密正文。P1b落地前冻结数值与删除测试；不改现行v1.4资产，原人工复核事件仅在实际可选干预发生时存在，不构成必填或待用户任务。

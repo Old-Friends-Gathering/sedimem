@@ -2,6 +2,8 @@
 
 对应计划 [`docs/plans/v2.0-p1.md`](../../docs/plans/v2.0-p1.md)（issue #218）。规格见 [`docs/design/v2.0/`](../../docs/design/v2.0/README.md)。资产登记见 [`docs/12-data-map.md`](../../docs/12-data-map.md) §12.5。
 
+> 当前策略r2：[自动记忆与历史纠正](../../docs/design/v2.0/08-auto-memory-and-correction.md)。取消人工标注/复核前置；下列双遍工具仍复用，模型参考只标来源。exit-check只核P1a资产，不证明r2生产实现或语义真值；旧模拟器仍为r1资产。
+
 ## 布局
 
 ```
@@ -9,7 +11,7 @@ pilot/p1a/
 ├── corpus/    语料（合成脱敏；exit 批次 218 场景/347 gold/对抗 10 类 test 各 10）
 ├── config/    eval-manifest.json（冻结数字，改须版本化 diff+签署）
 ├── tools/     corpus-validate / baseline-runner / score / review / protocol-sim / split-corpus / annotation-pass / contract-guards / exit-check / adjudicate / fix-r2-*
-├── tests/     137 测试（TDD 先行）
+├── tests/     139 测试（TDD 先行）
 └── out/       运行输出（gitignore，每次带 runId）
 ```
 
@@ -32,12 +34,12 @@ node pilot/p1a/tools/score.mjs pilot/p1a/out/baseline/<runId>/candidates.jsonl p
 node pilot/p1a/tools/split-corpus.mjs pilot/p1a/corpus pilot/p1a/config/eval-manifest.json --check
 node pilot/p1a/tools/split-corpus.mjs pilot/p1a/corpus pilot/p1a/config/eval-manifest.json --apply --seed 20261118
 
-# 双独立标注工作流（出口级 gold）：导出盲评包 → 第二标注人独立标注 → 导入校验 → 一致性 → 裁决工作表
+# 自动双遍盲评参考工作流（标来源）：导出盲评包 → 第二个模型执行体独立标注 → 导入校验 → 一致性 → 裁决工作表
 node pilot/p1a/tools/annotation-pass.mjs export --corpus pilot/p1a/corpus --out pilot/p1a/out/blind
 node pilot/p1a/tools/annotation-pass.mjs import --file pilot/p1a/out/blind/pass2.jsonl --package pilot/p1a/out/blind
 node pilot/p1a/tools/annotation-pass.mjs compare --a pilot/p1a/out/blind/pass1.jsonl --b pilot/p1a/out/blind/pass2.jsonl
 node pilot/p1a/tools/annotation-pass.mjs worksheet --a pilot/p1a/out/blind/pass1.jsonl --b pilot/p1a/out/blind/pass2.jsonl --out pilot/p1a/out/blind/adjudication.json
-# 人工裁决 adjudication.json 的每行 resolution 后：
+# 自动版本化裁决策略填充 adjudication.json 的 resolution 后：
 node pilot/p1a/tools/annotation-pass.mjs goldset --a pilot/p1a/out/blind/pass1.jsonl --b pilot/p1a/out/blind/pass2.jsonl --worksheet pilot/p1a/out/blind/adjudication.json --out pilot/p1a/out/blind/goldset-v1.json
 
 # 复核骨架（只读；accept/reject 属 P1b）
@@ -58,7 +60,7 @@ node pilot/p1a/tools/review.mjs show pilot/p1a/out/baseline/<runId>/candidates.j
 | adjudicate.mjs | 裁决表的记录化策略（union-policy@v1）：单侧 claim 取该侧、字段分歧 merge、不覆盖人工裁决；输出双遍确认统计 | 06-annotation-spec §3.1 |
 | contract-guards.mjs | 三项冻结守卫：双时间互斥/asOf 穿越、tokenizer 计数快照与声明、成本闸门 | 01 §5 / adr-101 / adr-102 |
 | split-corpus.mjs | 家族分层 dev/test 切分 + 跨集近重复（Dice）校验 | 04-scoring-and-splits §1 |
-| annotation-pass.mjs | 双独立标注工作流：盲评包/导入校验/一致性报告/裁决工作表/goldset 生成（fail-closed，未裁决一律拒绝）；不出 pass/fail | 06-annotation-spec §2 |
+| annotation-pass.mjs | 双遍盲评**自动参考**工作流：盲评包/导入校验/一致性报告/裁决工作表/goldset 生成（fail-closed，未裁决一律拒绝）；不出 pass/fail；不再要求人工标注 | 06-annotation-spec §2/§3 |
 
 ## 红线
 

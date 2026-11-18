@@ -5,6 +5,8 @@
 > status: planned
 
 状态：**planned**——本文是 v2.0 目标契约的规格草案，不是 v1.4 现行行为；冻结前允许修订。冻结标记由维护者在 [README](README.md) 核验表显式声明。
+> 2026-11-18 r2：人工接纳前置已由[自动记忆策略08](08-auto-memory-and-correction.md)替代；[r1快照](history/2026-11-18-manual-r1/01-candidate-schema.txt)保留。现有P1a模拟器仅验证r1资产，r2实现前需补自动纠错测试并重新冻结。
+
 来源：[future-architecture.md](../../plans/future-architecture.md) §3.2/§3.3/§3.4/§3.5；施工映射见 [v2.0-p1.md](../../plans/v2.0-p1.md) §2 冻结决策 1a/1b/3/4。
 
 ## 1. 候选对象（Candidate）
@@ -72,7 +74,7 @@
 ## 2. 状态机（冻结决策 1a）
 
 ```
-pending ──accept──▶ accepted ──trust promote（独立动作）──▶ （真相层可信 facts，不在候选状态机内）
+pending ──accept──▶ accepted ──来源trust不变；结构化陈述按08规则可用于上下文
    │ ├──reject──▶ rejected（留作评测负例，不删除）
    │ └──retract──▶ cancelled（抽取器自我撤回或来源失效）
    └──fail──▶ failed（含 failure 枚举；重试语义见 §3.1 澄清）
@@ -83,8 +85,8 @@ accepted ──supersede──▶ superseded（修订链：新候选 accept 时�
 
 | from | to | 触发 | 备注 |
 |---|---|---|---|
-| pending | accepted | 人工 accept（带 acceptOpId） | 不提升 trust |
-| pending | rejected | 人工 reject | 留评测负例 |
+| pending | accepted | policy 自动 accept（带 acceptOpId） | 不提升 trust |
+| pending | rejected | policy 自动 reject | 留评测负例 |
 | pending | cancelled | 抽取器 retract / sourceEpoch 撤销 | 撤销触发的批量迁移见 02 文件 |
 | pending | failed | 管线错误（带 failure 枚举） | |
 | accepted | superseded | 后续候选 accept 且 relations.kind=supersedes | 修订链 |
@@ -105,7 +107,7 @@ accepted ──supersede──▶ superseded（修订链：新候选 accept 时�
 2. noop/merge 决策必须保存 **opId→目标记录的持久收据**（落盘，不靠进程内缓存），收据可重放恢复；
 3. merge 类 accept 的收据记录目标记录 ID 与 merge 后的 revision。
 
-**CAS 校验**（accept 提交时，同一数据锁内）：校验三元组 `candidateVersion` + `evidenceHash` + `expectedTruthRevision`。任一不匹配 → **返回冲突、重新展示，不盲写**；冲突响应包含当前值供复核界面刷新。
+**CAS 校验**（accept 提交时，同一数据锁内）：校验三元组 `candidateVersion` + `evidenceHash` + `expectedTruthRevision`。任一不匹配 → **返回冲突、自动刷新重评，不盲写**；冲突响应包含当前值供自动决策器刷新。
 
 **提交点**：长期记录（真相层）成功追加 = 唯一提交点。候选与审计先持久化，真相层追加失败时恢复流程以「审计里的决定 + 收据」重放，不产生重复。
 
@@ -115,7 +117,7 @@ accepted ──supersede──▶ superseded（修订链：新候选 accept 时�
 
 **锁边界**：数据锁不覆盖 LLM 网络调用。顺序 = 先固化输入（inputHash/rangeId）→ 锁外抽取（网络）→ 锁内核对（inputHash 未变 + candidateVersion CAS）→ 落盘。
 
-**recovery-required**：无法判定（如收据缺失但真相层疑似已追加）时，把该 opId 标 `recovery-required` 并**禁止自动重试成新写入**；恢复需人工按预先持久化的决定与目标版本核对后显式继续。
+**recovery-required**：无法判定（如收据缺失但真相层疑似已追加）时，把该 opId 标 `recovery-required` 并**禁止自动重试成新写入**；恢复由自动对账器按持久化决定与目标版本确定性核对，无法证明结果则扣留，不盲写也不要求用户复核。
 
 ### 3.1 修订语义（模型差异 / 跨运行修订）
 
@@ -123,7 +125,7 @@ accepted ──supersede──▶ superseded（修订链：新候选 accept 时�
 
 - **同一逻辑运行**（同 extractionRunKey，同模型同配置）：重放产出同一 candidateId 集 → noop（§3 写入幂等）。
 - **修订**（revision）：跨运行或跨模型产生的新候选，通过 `relations.kind=supersedes` 指向旧候选；旧候选在修订被 accept 时转 `superseded`（状态机）。修订是新 candidateId（内容变化的判定边界见下）——修订路径不冒充 noop，noop 也不吞并内容变化。
-- **candidateVersion 自增只由工作流操作触发**：人工编辑、修订链接建立、复核状态变更。抽取管线绝不自行 bump candidateVersion（版本是 CAS 锁，不是迭代计数器）。
+- **candidateVersion 自增只由工作流操作触发**：自动策略决策、修订链接建立及可选用户编辑。抽取管线绝不自行 bump candidateVersion（版本是 CAS 锁，不是迭代计数器）。
 - **判定边界（R2-N1 修订，消除与 §3 写入幂等的矛盾）**：candidateId 派生**只含内容四元组**（sourceEpoch/rangeId/inputHash/claim 规范化形式），**不含 model/configHash**——这是重放幂等的关键不变量，不为此妥协。因此：模型/配置变化**且 claim 规范化形式不同** → 修订路径（新 candidateId + supersedes）；模型/配置变化但 **claim 相同** → 按 §3 写入幂等处理（同 candidateId → noop），**provenance 以首写为准**（首次写入的 model/configHash 落盘，后续 noop 不覆盖）。修订的本质是内容变化，不是执行环境变化。P1b 协议测试必含「跨模型同 claim → noop + provenance 不变」用例。
 
 **失败状态枚举（§3.4 对齐）**：`timeout` / `empty-response` / `parse-failure` / `token-truncated`（识别 finish_reason=length，不解析半截响应）/ `evidence-unsupported` / `no-recordable-content` / `policy-blocked`，附原始 finish_reason。`no-recordable-content` 不是错误——它是「无可记场景」的正常信号，进评测统计。

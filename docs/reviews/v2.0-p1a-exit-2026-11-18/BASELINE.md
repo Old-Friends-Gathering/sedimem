@@ -1,7 +1,10 @@
+
 # P1a 出口基线正式报告（2026-11-18）
 
 > doc-kind: history
 > doc-version: 1.4
+
+> **r2 修订说明（2026-11-18）**：本报告是 r1 证据，正文中「出口级 gold 需双人工独立标注」「待第二标注人」等表述**已被用户取消**——现行策略以 [策略08](../../design/v2.0/08-auto-memory-and-correction.md) 与 [v2.0-p1 §12](../../plans/v2.0-p1.md) 为准：改用自动参考集与记录化自动裁决，不设人工标注/复核前置。报告里的数值、口径与 fail-closed 结论（verdict=null、不下 pass/fail）仍然有效，且「工具出口 ok ≠ 质量通过」这一条在 r2 下不变。
 
 测量对象：P1a 出口基线（分支 `p1a/exit-freeze`）——规则地板抽取器 baseline-runner 在 exit 语料上的端到端实测。上位权威：[docs/design/v2.0/](../../design/v2.0/README.md) 规格包 + [docs/plans/v2.0-p1.md](../../plans/v2.0-p1.md)。语料与审核记录见 [v2.0-p1a-b3-2026-11-18/REVIEW.md](../v2.0-p1a-b3-2026-11-18/REVIEW.md)。
 

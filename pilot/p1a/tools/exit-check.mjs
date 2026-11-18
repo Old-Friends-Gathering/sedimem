@@ -1,7 +1,7 @@
 // exit-check.mjs —— P1a 出口核验（机算，不靠人肉读文档）
 // 规格：docs/plans/v2.0-p1.md §0.2/§7.1（放行条件与冻结项）、docs/design/v2.0/README.md 冻结核验表、
 //       pilot/p1a/config/eval-manifest.json thresholds.corpus（exit 作用域数字）。
-// 语义：失败项（ok=false 且 !pending）→ 出口未达成；pending 项 = 已达成前置、但缺外部输入（双标注）。
+// 语义：失败项（ok=false 且 !pending）→ 出口未达成；pending 项 = 已达成前置、但缺版本化参考产物。
 // 不判定抽取质量（那是 P1b 的事），只核「规格/语料/冻结/标注」四类放行条件是否齐备。
 import { readFileSync, readdirSync, existsSync } from 'node:fs';
 import { join } from 'node:path';
@@ -94,22 +94,25 @@ export function evaluateExit({ scenarios, manifest, frozenRows, annotation = {} 
   add('frozen-decisions', '九项冻结', frozen.length >= 9 && unfrozen.length === 0,
     frozen.length < 9 ? `核验表只解析到 ${frozen.length} 行` : (unfrozen.length === 0 ? `${frozen.length} 项全部 frozen` : `未冻结：${unfrozen.map((r) => r.id).join('、')}`));
 
-  // 双独立标注（pending：需要外部标注人，不算失败但阻塞出口）
-  // 标注状态：dual-independent（两份人工盲评）为出口级；model-dual-blinded（两遍模型盲评 + 裁决）为降级满足，必须留 caveat
+  // r2：只检查参考产物与来源标签，不要求人工标注/裁决。历史annotation-dual键保持兼容。
+  // 两种既有来源模式均允许；模型参考保留caveat声明其非人工真值。
   const mode = annotation.mode ?? 'pilot';
   const hasPasses = Boolean(annotation.pass1 && annotation.pass2 && annotation.goldset);
   const dual = mode === 'dual-independent' && hasPasses;
   const degraded = mode === 'model-dual-blinded' && hasPasses;
   const detailBits = `pass1=${annotation.pass1 ? '✓' : '✗'}、pass2=${annotation.pass2 ? '✓' : '✗'}、goldset=${annotation.goldset ? '✓' : '✗'}`;
-  if (dual) add('annotation-dual', '出口级 gold = 双人工独立标注 + 裁决', true, 'annotationMode=dual-independent');
-  else if (degraded) add('annotation-dual', '出口级 gold = 双人工独立标注 + 裁决', true,
-    `annotationMode=model-dual-blinded（${detailBits}）——两遍模型盲评 + 维护者裁决，**非人工双标注**，实验结论仍以人工双标注复核为硬前置`, false, 'model-dual-blinded');
-  else add('annotation-dual', '出口级 gold = 双人工独立标注 + 裁决', false,
-    `${detailBits}（待第二标注人 + 裁决留痕）`, true);
+  if (dual) add('annotation-dual', '参考产物完整性与来源声明', true, 'annotationMode=dual-independent');
+  else if (degraded) add('annotation-dual', '参考产物完整性与来源声明', true,
+    `annotationMode=model-dual-blinded（${detailBits}）——自动参考模式可用；保留非人工来源与自动裁决局限，不要求用户复核，不等于真实质量通过`, false, 'model-dual-blinded');
+  else add('annotation-dual', '参考产物完整性与来源声明', false,
+    `${detailBits}（参考产物缺失或模式无效；补自动参考产物，不等待人工）`, true);
 
   const failed = checks.filter((c) => !c.ok && !c.pending);
   const pending = checks.filter((c) => c.pending);
   return {
+    policyVersion: 'auto-memory-r2',
+    scope: 'p1a-assets',
+    runtimeImplemented: false,
     checks,
     ok: failed.length === 0 && pending.length === 0,
     pending,
@@ -120,11 +123,11 @@ export function evaluateExit({ scenarios, manifest, frozenRows, annotation = {} 
 
 export function renderExitReport(result) {
   const icon = (c) => (c.caveat ? '⚠️' : c.ok ? '✅' : c.pending ? '⏳' : '❌');
-  const lines = ['P1a 出口核验', ''];
+  const lines = ['P1a 出口核验（r2：仅资产完整性，非生产实现/质量验收）', ''];
   for (const c of result.checks) lines.push(`${icon(c)} ${c.id.padEnd(22)} ${c.title} — ${c.detail}`);
   const failed = result.checks.filter((c) => !c.ok && !c.pending).length;
   const caveatCount = (result.caveats ?? []).length;
-  lines.push('', `结论：${result.ok ? '出口条件齐备' : `失败 ${failed} 项、待完成 ${result.pending.length} 项`}${caveatCount > 0 ? `（降级声明 ${caveatCount} 项）` : ''}`);
+  lines.push('', `结论：${result.ok ? '出口条件齐备' : `失败 ${failed} 项、待完成 ${result.pending.length} 项`}${caveatCount > 0 ? `（参考来源声明 ${caveatCount} 项）` : ''}`);
   if (result.pending.length > 0) lines.push(`阻塞出口：${result.blockedBy.join('、')}`);
   return lines.join('\n');
 }
@@ -167,7 +170,7 @@ function main() {
   const result = evaluateExit({ scenarios, manifest, frozenRows: parseFrozenTable(readme), annotation });
   console.log(renderExitReport(result));
   console.log('');
-  console.log(JSON.stringify({ ok: result.ok, pending: result.blockedBy, checks: result.checks.length }, null, 2));
+  console.log(JSON.stringify({ policyVersion: result.policyVersion, scope: result.scope, runtimeImplemented: result.runtimeImplemented, ok: result.ok, pending: result.blockedBy, checks: result.checks.length }, null, 2));
   process.exit(result.ok ? 0 : 1);
 }
 
