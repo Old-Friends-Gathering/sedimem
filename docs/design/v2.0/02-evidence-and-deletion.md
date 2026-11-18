@@ -41,6 +41,8 @@
 1. **accept 提交时**：必须在同一数据锁内对候选全部 evidence 重新解析 span 并重算 hash 匹配（CAS 三元组中的 `evidenceHash` 校验**与本条款协同**——它是客户端预期值等值校验，不替代重解析判定，见 01 §3）。任一证据 stale、快照缺失且无法重新定位 → **阻止接纳**：候选转 `failed`（`evidence-unsupported`），或退回人工重新圈定证据后以新候选版本重走复核。工具必须提供且只提供这两条路径，不存在「带 stale 证据 accept」的第三条路。
 2. **装配读取面**（检索/pack，P1c 生效、P1a 冻结语义）同样过滤携带 stale 证据的候选与记录。
 3. 复核界面（CLI `candidates show`）对 stale 证据显式标注并禁用 accept 入口，防人工在不知情下确认。
+4. **与 09 §8 协同（r2 补充）**：stale 判定在 R3 与 R7 各做一次；R7 锁内除 CAS 三元组外还必须重查全部 evidence 的 `sourceEpoch` 有效性——撤销发生在「R6 决策后、R7 追加前」时 CAS 全部通过也必须拦截（见 [09 §8](09-extraction-pipeline.md)）。
+5. 「补快照」的边界：只允许对**未撤销 epoch** 的显式重新授权导入；撤销后禁止自动重新 capture（§3），也不得把旧快照从备份复活为可读面。
 
 ## 5. 删除语义（对 v1.4 verify-delete 的扩展）
 

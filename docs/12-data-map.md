@@ -76,4 +76,11 @@ P1a 的评测资产存放在仓库 [`pilot/p1a/`](../pilot/p1a/corpus/README.md)
 
 ## 12.7 自动决策与聊天纠正记录（r2 planned）
 
-用户取消人工前置，权威为[策略08](design/v2.0/08-auto-memory-and-correction.md)。新增自动决策记录包含policy版本、接受/拒绝/未决理由、opId和证据引用；纠正记录包含旧/新命题与生效时间/来源，恢复对账保留结果。均继承sourceEpoch、配额、保留期与来源删除，不复制秘密正文。P1b落地前冻结数值与删除测试；不改现行v1.4资产，原人工复核事件仅在实际可选干预发生时存在，不构成必填或待用户任务。
+用户取消人工前置，权威为[策略08](design/v2.0/08-auto-memory-and-correction.md)；管线契约见[09-extraction-pipeline](design/v2.0/09-extraction-pipeline.md) §9–§13。新增自动决策记录包含policy版本、接受/拒绝/未决理由、opId和证据引用；纠正记录包含旧/新命题与生效时间/来源，恢复对账保留结果。均继承sourceEpoch、配额、保留期与来源删除，不复制秘密正文。P1b落地前冻结数值与删除测试；不改现行v1.4资产，原人工复核事件仅在实际可选干预发生时存在，不构成必填或待用户任务。
+
+| 新资产 | 内容 | 删除与分享边界 | 状态 |
+|---|---|---|---|
+| 阶段事件流（extraction/usage/decision） | `runId`、`rangeId`、阶段耗时、候选与失败枚举计数、token/费用/计价版本、决定结果 | 不复制正文；缺数据标 `incomplete`/`missing`，不得填 0 | planned，P1b |
+| 自动决策记录 | `opId`、`decider=policy:<version>`、decision/reason/rulesHit、CAS 三元组快照 | 随候选生命周期失效；改动须策略版本化 diff | planned，P1b |
+| 聊天纠正记录 | 旧/新命题、生效区间、来源事件、裁决依据 | 继承来源撤销；历史 asOf 可查，当前读取面失效 | planned，P1b |
+| 提交收据与游标 | `opId → 目标记录`、`missingRanges`、`recovery-required` 标记 | 只存放目标标识与 hash，不存正文 | planned，P1b |

@@ -24,6 +24,7 @@
 | [06-annotation-spec.md](06-annotation-spec.md) | D2 标注规范 | 参考字段、自动盲评/裁决、来源声明、防泄漏（r2） |
 | [07-benefits-observability.md](07-benefits-observability.md) | P1b/P1c 新增范围（非原九项冻结） | 收益看板、任务对照、报告导出、token/净成本/质量口径；planned，未实现 |
 | [08-auto-memory-and-correction.md](08-auto-memory-and-correction.md) | 用户修订r2，替代人工前置 | 自动沉淀/聊天纠正/自动评测；planned，尚未实现生产管线 |
+| [09-extraction-pipeline.md](09-extraction-pipeline.md) | P1b 施工（r2） | 阶段 R0–R8、自动决策矩阵、聊天纠正规则、恢复与幂等、r2 保护测试 T-A1..T-A16、P1b 放行条件 |
 | [adr-101-tokenizer.md](adr-101-tokenizer.md) | 6 tokenizer | DeepSeek 计数 + 生成模型声明；zai 查证记录 |
 | [adr-102-cost-quota.md](adr-102-cost-quota.md) | 7 成本/容量上限 | 闸门、额度项、出站安全、配置就绪验收 |
 
