@@ -396,6 +396,11 @@ export async function mountLedger(deps) {
       const summary = el('summary', 'ledger-seg-h');
       summary.append(el('span', 'mono ledger-range', row.range));
       summary.append(el('span', `badge ledger-mode ${row.mode.cls}`, row.mode.label));
+      if (row.anchorShort) {
+        const tag = el('span', 'mono ledger-session', row.anchorShort);
+        tag.title = row.anchorFull;
+        summary.append(tag);
+      }
       if (row.quarantined) summary.append(el('span', 'badge b-warn ledger-q', row.quarantineLabel));
       summary.append(el('span', 'ledger-excerpt', row.excerpt || '（无摘要）'));
       item.append(summary);
