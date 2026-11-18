@@ -33,6 +33,8 @@ const USAGE = `memo session —— 会话临时记忆库（可丢弃、可晋升
   memo session sweep [--older-than 14d] [--json]                 只报告僵尸 session 候选，不删
   memo session list [--json]                                     任务库清单：标题 | 记录数 | 状态 | 更新时间 | scope
   memo session rename --scope session:<id> --title <t> [--json]  任务库改名（1..80 字符，禁换行）
+  memo session bind --scope session:<id> --session-id <hostSessionId> [--json]
+                                                                 绑定宿主会话转录（自动入账精确探测用）
   memo session remove --scope session:<id> [--yes] [--json]      删任务库（移入 trash/；无 --yes 只预览，退出码 2）
 
 提示: 临时库 close 时只晋升 decision/gotcha；fact 禁止写入（E_SCRATCH_KIND_FORBIDDEN）。`;
@@ -478,6 +480,21 @@ export async function sessionCli(args, { service, memoHome, clock = systemClock,
       return emit(
         `session ${scope.slice(SESSION_PREFIX.length)} 已改名: ${JSON.stringify(previous)} → ${JSON.stringify(title)}\n`,
         { scope, title, previous },
+      );
+    }
+
+    case 'bind': {
+      const scope = requireScope(opts);
+      if (opts['session-id'] === undefined || opts['session-id'] === true || opts['session-id'] === '') {
+        throw new UsageError(`需要 --session-id <hostSessionId>（如 \$DSH_SESSION_ID）\n${USAGE}`);
+      }
+      const taskId = scope.slice(SESSION_PREFIX.length);
+      const { bindSession } = await import('../session/ledger.js');
+      const { file, previous } = bindSession({ memoHome, taskId, hostSessionId: String(opts['session-id']) });
+      return emit(
+        `session ${taskId} 已绑定宿主会话: ${JSON.stringify(previous)} → ${JSON.stringify(String(opts['session-id']).trim())}\n` +
+          `自动入账将按此 id 精确定位转录（${path.basename(file)}）。\n`,
+        { scope, hostSessionId: String(opts['session-id']).trim(), previous, file },
       );
     }
 

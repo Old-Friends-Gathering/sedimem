@@ -789,8 +789,10 @@ v1.2 的账本捕获只有 CLI 手动入口，任务库长期使用时账本会�
 （落实账本设计的原始诉求：每约 30k token 上下文自动压缩入账，见 `docs/research/task-context-ledger-design.md`）：
 
 - **挂车捕获**：MCP server 在每次工具调用完成后，若当前 scope 是 `session:<taskId>` 且账本已存在，
-  就检查绑定转录是否增长。转录绑定顺序：① `DSH_SESSION_ID` 环境变量精确匹配（转录目录名唯一，
-  与进程 cwd 无关）→ ② 进程 cwd 折算 slug 目录下最新转录。守卫链全部是 stat 级检查（不解压 zstd、
+  就检查绑定转录是否增长。转录绑定顺序：① `memo session bind` 写进任务 meta 的 `hostSessionId`
+  （精确，推荐——agent shell 里有 `$DSH_SESSION_ID`，宿主 spawn 的 server 进程没有）→
+  ② `DSH_SESSION_ID` 环境变量 → ③ 进程 cwd 折算 slug 目录下最新转录（兜底，多会话并行时不可靠）。
+  守卫链全部是 stat 级检查（不解压 zstd、
   零 token）：转录 mtime/size 与 `sessions/<taskId>/autocapture.json` 记录一致 → 跳过；增长折算 token
   （`growth / bytesPerToken`）< `captureTokens` 且距上次 < `minIntervalMs` → 跳过；达阈值才真正
   `captureTask`（**rules 模式**，确定性零 token；幂等：重复捕获 created=0；段写入走账本锁防重叠）。
