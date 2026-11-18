@@ -1,0 +1,803 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>sedimem 终态架构 · 证据约束的 Agent 记忆与上下文引擎</title>
+<style id="site-css">
+/* 共享浅色基座（design-doc-style base-skeleton.css，整段内联） */
+:root {
+  --ink: #172033;
+  --muted: #5d6678;
+  --bg: #f5f7fb;
+  --panel: #ffffff;
+  --line: #d9deea;
+  --accent: #2b5fd9;
+  --accent-soft: #e7eefc;
+  --green: #15803d;
+  --green-soft: #e3f3eb;
+  --amber: #b45309;
+  --amber-soft: #fdf2e3;
+  --red: #b91c1c;
+  --red-soft: #fbe9e7;
+  --code-bg: #eef2f8;
+  --font: system-ui, -apple-system, "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", "Noto Sans CJK SC", sans-serif;
+  --mono: ui-monospace, "SFMono-Regular", Menlo, Consolas, "Liberation Mono", monospace;
+}
+* { box-sizing: border-box; }
+html { scroll-behavior: smooth; }
+@media (prefers-reduced-motion: reduce) { html { scroll-behavior: auto; } }
+body { margin: 0; background: var(--bg); color: var(--ink); font-family: var(--font); font-size: 15px; line-height: 1.72; }
+.page { max-width: 1180px; margin: 0 auto; padding: 24px 20px 72px; display: grid; grid-template-columns: minmax(0, 1fr); gap: 28px; }
+.page.single { max-width: 1000px; }
+@media (min-width: 1040px) { .page:not(.single) { grid-template-columns: 220px minmax(0, 1fr); gap: 44px; } }
+.doc-outline { font-size: 13.5px; align-self: start; }
+@media (min-width: 1040px) { .doc-outline { position: sticky; top: 20px; } }
+.doc-outline summary { cursor: pointer; font-weight: 700; color: var(--muted); letter-spacing: .06em; }
+.doc-outline nav ol { list-style: none; margin: 10px 0 0; padding: 0; border-left: 1px solid var(--line); display: grid; gap: 2px; }
+.doc-outline nav a { display: block; padding: 3px 0 3px 12px; margin-left: -1px; border-left: 2px solid transparent; color: var(--muted); text-decoration: none; }
+.doc-outline nav a:hover { color: var(--ink); border-left-color: var(--accent); }
+main { min-width: 0; display: grid; gap: 40px; align-content: start; }
+.crumbs { display: flex; flex-wrap: wrap; gap: 4px 10px; font-size: 13px; color: var(--muted); padding-bottom: 10px; border-bottom: 1px solid var(--line); }
+.crumbs a { color: var(--accent); text-decoration: none; font-weight: 600; }
+header.doc-head { display: grid; gap: 10px; }
+.eyebrow { margin: 0; font-size: 12px; letter-spacing: .14em; text-transform: uppercase; color: var(--muted); font-weight: 600; }
+h1 { margin: 0; font-size: 30px; line-height: 1.3; text-wrap: balance; }
+.lead { margin: 0; font-size: 16.5px; max-width: 72ch; }
+.meta { display: flex; flex-wrap: wrap; gap: 6px 18px; font-size: 13px; color: var(--muted); }
+.meta b { color: var(--ink); font-weight: 600; }
+.badge { display: inline-block; padding: 1px 9px; border-radius: 999px; font-size: 12px; font-weight: 700; white-space: nowrap; line-height: 1.6; }
+.badge.proposed { background: var(--amber-soft); color: var(--amber); }
+.badge.accepted { background: var(--green-soft); color: var(--green); }
+.badge.pending { background: var(--red-soft); color: var(--red); }
+.badge.info { background: var(--accent-soft); color: var(--accent); }
+section { display: grid; gap: 14px; scroll-margin-top: 16px; }
+h2 { margin: 0; font-size: 21px; line-height: 1.4; padding-bottom: 6px; border-bottom: 2px solid var(--line); text-wrap: balance; }
+h3 { margin: 6px 0 0; font-size: 16.5px; line-height: 1.5; }
+p { margin: 0; max-width: 74ch; }
+ul, ol { margin: 0; padding-left: 1.3em; display: grid; gap: 5px; max-width: 76ch; }
+a { color: var(--accent); text-underline-offset: 3px; }
+a:focus-visible, summary:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 3px; }
+code { font-family: var(--mono); font-size: .87em; background: var(--code-bg); padding: 1px 5px; border-radius: 4px; overflow-wrap: anywhere; }
+pre { margin: 0; background: var(--code-bg); padding: 12px 14px; border-radius: 8px; overflow-x: auto; font-family: var(--mono); font-size: 13px; line-height: 1.6; }
+pre code { background: none; padding: 0; }
+.muted { color: var(--muted); }
+.table-wrap { overflow-x: auto; border: 1px solid var(--line); border-radius: 8px; background: var(--panel); }
+table { border-collapse: collapse; width: 100%; font-size: 14px; line-height: 1.62; }
+th, td { text-align: left; vertical-align: top; padding: 9px 12px; border-bottom: 1px solid var(--line); }
+tr:last-child td { border-bottom: 0; }
+th { background: var(--bg); color: var(--muted); font-weight: 600; font-size: 12.5px; letter-spacing: .04em; white-space: nowrap; }
+.callout { border-radius: 8px; padding: 12px 16px; max-width: 82ch; font-size: 14.5px; line-height: 1.72; }
+.callout > p + p { margin-top: 6px; }
+.callout.warn { background: var(--amber-soft); }
+.callout.risk { background: var(--red-soft); }
+.callout.info { background: var(--accent-soft); }
+.cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); gap: 14px; }
+.card { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 14px 16px; display: grid; gap: 6px; align-content: start; }
+.card .k { font-size: 12px; color: var(--muted); letter-spacing: .06em; }
+.card .v { font-weight: 700; }
+.card p { font-size: 14px; color: var(--muted); }
+.steps { list-style: none; padding: 0; counter-reset: s; display: grid; gap: 8px; }
+.steps > li { counter-increment: s; display: grid; grid-template-columns: 28px minmax(0, 1fr); gap: 8px; }
+.steps > li::before { content: counter(s); width: 22px; height: 22px; margin-top: 3px; border-radius: 50%; border: 1px solid var(--line); display: grid; place-items: center; font: 12px var(--mono); color: var(--muted); }
+footer.doc-foot { font-size: 13px; color: var(--muted); border-top: 1px solid var(--line); padding-top: 14px; }
+</style>
+<style id="feature-css">
+/* atlas 深色皮肤（design-doc-style tokens.css，整段内联） */
+:root {
+  --atlas-bg: #07110f;
+  --atlas-panel: #0c1915;
+  --atlas-panel-2: #10211c;
+  --atlas-line: #29423a;
+  --atlas-ink: #edf7f2;
+  --atlas-muted: #a8bdb5;
+  --atlas-mint: #66d7b2;
+  --atlas-orange: #ff9b61;
+  --atlas-blue: #79aefc;
+  --atlas-rose: #ff7f8f;
+  --atlas-violet: #b99afb;
+  --atlas-display: Georgia, "Songti SC", "STSong", serif;
+  --atlas-sans: "Trebuchet MS", "PingFang SC", "Microsoft YaHei", sans-serif;
+  --atlas-mono: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+}
+html { background: var(--atlas-bg); }
+body { color: var(--atlas-ink); background-color: var(--atlas-bg);
+  background-image: linear-gradient(rgba(102, 215, 178, .055) 1px, transparent 1px), linear-gradient(90deg, rgba(102, 215, 178, .055) 1px, transparent 1px);
+  background-size: 28px 28px; font-family: var(--atlas-sans); font-size: 16px; }
+body::before { content: ""; position: fixed; inset: 0; pointer-events: none; background: radial-gradient(circle at 72% 2%, rgba(102, 215, 178, .11), transparent 34rem); }
+a { color: var(--atlas-mint); }
+code { color: #d7efe7; background: #142720; }
+p, ul, ol { max-width: none; }
+pre { background: #142720; border: 1px solid var(--atlas-line); }
+pre code { color: #d7efe7; background: none; border: 0; }
+.topbar { position: sticky; top: 0; z-index: 12; min-height: 52px; padding: 0 max(22px, calc((100vw - 1480px) / 2)); display: flex; align-items: center; justify-content: space-between; gap: 24px; border-bottom: 1px solid var(--atlas-line); background: rgba(7, 17, 15, .93); backdrop-filter: blur(14px); font: 700 11px/1.3 var(--atlas-mono); letter-spacing: .09em; text-transform: uppercase; }
+.topbar .brand { color: var(--atlas-ink); text-decoration: none; white-space: nowrap; }
+.topbar .brand i { color: var(--atlas-orange); font-style: normal; }
+.topbar nav { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 8px 20px; }
+.topbar nav a { color: var(--atlas-muted); text-decoration: none; }
+.topbar nav a:hover { color: var(--atlas-mint); }
+.page.atlas-page { position: relative; max-width: 1480px; padding: 34px 28px 92px; grid-template-columns: minmax(0, 1fr); gap: 34px; }
+@media (min-width: 1120px) { .page.atlas-page { grid-template-columns: 220px minmax(0, 1fr); gap: 48px; } }
+.atlas-page .doc-outline { color: var(--atlas-muted); }
+.atlas-page .doc-outline summary { color: var(--atlas-orange); font: 700 11px/1.4 var(--atlas-mono); }
+.atlas-page .doc-outline nav ol { border-left-color: var(--atlas-line); }
+.atlas-page .doc-outline nav a { color: var(--atlas-muted); }
+.atlas-page .doc-outline nav a:hover { color: var(--atlas-mint); border-left-color: var(--atlas-mint); }
+.atlas-page main { gap: 0; grid-template-columns: minmax(0, 1fr); }
+.atlas-page main > *, .atlas-page section > * { min-width: 0; }
+.atlas-page section { grid-template-columns: minmax(0, 1fr); }
+.atlas-page .crumbs { border-color: var(--atlas-line); color: var(--atlas-muted); }
+.atlas-page .crumbs a { color: var(--atlas-mint); }
+.hero { min-height: 440px; padding: 64px 0 54px; display: grid; grid-template-columns: minmax(0, 1.25fr) minmax(300px, .75fr); gap: 56px; align-items: end; border-bottom: 1px solid var(--atlas-line); }
+.hero .eyebrow { color: var(--atlas-orange); font: 700 12px/1.3 var(--atlas-mono); letter-spacing: .16em; }
+.hero h1 { margin-top: 14px; max-width: 900px; color: var(--atlas-ink); font: 500 clamp(46px, 5.6vw, 82px)/.98 var(--atlas-display); letter-spacing: -.035em; }
+.hero h1 em { color: var(--atlas-mint); font-style: italic; }
+.hero .dek { margin-top: 24px; max-width: 850px; color: #cbdcd6; font-size: clamp(17px, 1.7vw, 22px); line-height: 1.58; }
+.hero-side { display: grid; gap: 12px; }
+.hero-note { padding: 17px 18px; border: 1px solid var(--atlas-line); background: var(--atlas-panel-2); }
+.hero-note b { display: block; color: var(--atlas-mint); font: 700 11px/1.3 var(--atlas-mono); letter-spacing: .1em; text-transform: uppercase; }
+.hero-note span { display: block; margin-top: 8px; color: var(--atlas-ink); font-size: 15px; line-height: 1.65; }
+.hero-note.hot { border-top-color: var(--atlas-orange); }
+.hero-note.hot b { color: var(--atlas-orange); }
+.status-line { display: flex; flex-wrap: wrap; gap: 7px; }
+.status-line span, .doc-chip { padding: 5px 9px; border: 1px solid var(--atlas-line); color: var(--atlas-muted); font: 700 10px/1.25 var(--atlas-mono); letter-spacing: .06em; text-transform: uppercase; white-space: nowrap; }
+.status-line .live, .doc-chip.live { border-color: var(--atlas-mint); color: var(--atlas-bg); background: var(--atlas-mint); }
+.doc-chip.pending { border-color: var(--atlas-orange); color: var(--atlas-orange); }
+.doc-chip.verify { border-color: var(--atlas-violet); color: var(--atlas-violet); }
+.part-divider { margin: 0 -24px; padding: 38px 24px; display: grid; grid-template-columns: 100px minmax(0, 1fr); gap: 24px; align-items: center; border-block: 1px solid var(--atlas-line); background: rgba(12, 25, 21, .8); }
+.part-divider .part-index { color: var(--atlas-mint); font: italic 66px/1 var(--atlas-display); }
+.part-divider h2 { padding: 0; border: 0; color: var(--atlas-ink); font: 500 clamp(31px, 4vw, 52px)/1.08 var(--atlas-display); }
+.part-divider p { margin-top: 7px; color: var(--atlas-muted); font-size: 18px; }
+.atlas-page section { padding: 60px 0; gap: 22px; border-bottom: 1px solid var(--atlas-line); }
+.section-head { display: grid; grid-template-columns: 86px minmax(0, 1fr); gap: 24px; align-items: start; }
+.section-no { color: var(--atlas-orange); font: italic 48px/1 var(--atlas-display); }
+.atlas-page section h2 { padding: 0; border: 0; color: var(--atlas-ink); font: 500 clamp(30px, 3.4vw, 48px)/1.08 var(--atlas-display); }
+.atlas-page section h3 { color: var(--atlas-mint); font-size: 20px; }
+.section-copy { margin-top: 10px; max-width: 900px; color: var(--atlas-ink); font-size: 17px; }
+.thesis { padding: 22px 25px; border: 1px solid var(--atlas-mint); background: rgba(102, 215, 178, .06); font: 500 clamp(19px, 2vw, 27px)/1.5 var(--atlas-display); }
+.thesis b { color: var(--atlas-mint); }
+.table-wrap { border-color: var(--atlas-line); border-radius: 0; background: var(--atlas-panel-2); }
+table { color: var(--atlas-ink); }
+th { color: var(--atlas-mint); background: var(--atlas-panel-2); border-color: var(--atlas-line); font: 700 11px/1.45 var(--atlas-mono); letter-spacing: .07em; text-transform: uppercase; }
+td { border-color: var(--atlas-line); }
+td small { color: var(--atlas-muted); }
+.boundary-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; }
+.boundary { padding: 20px; border-top: 2px solid var(--atlas-mint); background: var(--atlas-panel-2); }
+.boundary:nth-child(2) { border-color: var(--atlas-orange); }
+.boundary:nth-child(3) { border-color: var(--atlas-violet); }
+.boundary b { color: var(--atlas-ink); }
+.boundary p { margin-top: 8px; color: var(--atlas-ink); font-size: 15px; }
+.boundary ul { margin-top: 8px; padding-left: 1.2em; font-size: 14.5px; }
+.callout { max-width: none; border-radius: 0; padding: 18px 20px; border: 1px solid var(--atlas-line); border-left: 4px solid var(--atlas-blue); color: var(--atlas-ink); font-size: 15.5px; background: linear-gradient(rgba(121, 174, 252, .14), rgba(121, 174, 252, .14)), var(--atlas-panel); }
+.callout.info { background: linear-gradient(rgba(121, 174, 252, .14), rgba(121, 174, 252, .14)), var(--atlas-panel); }
+.callout.warn { border-left-color: var(--atlas-orange); background: linear-gradient(rgba(255, 155, 97, .14), rgba(255, 155, 97, .14)), var(--atlas-panel); }
+.callout.risk { border-left-color: var(--atlas-rose); background: linear-gradient(rgba(255, 127, 143, .14), rgba(255, 127, 143, .14)), var(--atlas-panel); }
+.callout strong, .callout b { color: var(--atlas-ink); margin-right: .35em; }
+.plate { margin: 0; border: 1px solid var(--atlas-line); background: #091411; }
+.plate-head { min-height: 48px; padding: 13px 16px; display: flex; align-items: center; justify-content: space-between; gap: 16px; border-bottom: 1px solid var(--atlas-line); color: var(--atlas-muted); font: 700 11px/1.4 var(--atlas-mono); letter-spacing: .08em; text-transform: uppercase; }
+.plate-head b { color: var(--atlas-ink); }
+.plate-body { overflow-x: auto; padding: 18px; }
+.plate svg { display: block; width: 100%; min-width: 1040px; height: auto; }
+.plate figcaption { padding: 14px 17px 17px; border-top: 1px solid var(--atlas-line); color: var(--atlas-ink); font-size: 14px; }
+.plate figcaption b { color: var(--atlas-ink); }
+.plate .node { cursor: pointer; }
+.plate .node:focus-visible { outline: 2px solid var(--atlas-mint); outline-offset: 2px; }
+.plate .node[aria-current="step"] .svg-box { stroke-width: 2.4; filter: drop-shadow(0 0 6px rgba(102, 215, 178, .55)); }
+.plate-detail-list { display: grid; gap: 10px; margin-top: 10px; }
+.node-detail { border: 1px solid var(--atlas-line); background: rgba(12, 25, 21, .72); padding: 2px 16px; }
+.node-detail summary { cursor: pointer; padding: 12px 0; color: var(--atlas-ink); font: 700 13px/1.4 var(--atlas-mono); letter-spacing: .04em; }
+.node-detail[open] summary { color: var(--atlas-mint); }
+.node-detail p { padding-bottom: 14px; color: var(--atlas-muted); font-size: 14.5px; }
+.node-detail p b { color: var(--atlas-ink); }
+.svg-line.trace-active { stroke-width: 2.4; }
+@media (prefers-reduced-motion: no-preference) { .svg-line.trace-active { stroke-dasharray: 6 4; animation: trace-flow 900ms linear infinite; } }
+@keyframes trace-flow { to { stroke-dashoffset: -20; } }
+@media print { .plate-detail-list details > *:not(summary) { display: block !important; } }
+.svg-zone { fill: rgba(102, 215, 178, .025); stroke: #29423a; stroke-width: 1.2; stroke-dasharray: 7 5; }
+.svg-box { fill: #0d1b17; stroke: #547268; stroke-width: 1.4; }
+.svg-box.mint { fill: #102720; stroke: #66d7b2; }
+.svg-box.orange { fill: #2a1c14; stroke: #ff9b61; }
+.svg-box.blue { fill: #101d2c; stroke: #79aefc; }
+.svg-box.rose { fill: #2b161b; stroke: #ff7f8f; }
+.svg-title { fill: #edf7f2; font: 700 15px var(--atlas-sans); }
+.svg-copy { fill: #a8bdb5; font: 13px var(--atlas-sans); }
+.svg-mono { fill: #93aaa1; font: 12px var(--atlas-mono); }
+.svg-mint { fill: #66d7b2; }
+.svg-orange { fill: #ff9b61; }
+.svg-blue { fill: #79aefc; }
+.svg-rose { fill: #ff7f8f; }
+.svg-line { fill: none; stroke: #6f8b81; stroke-width: 1.7; }
+.svg-line.mint { stroke: #66d7b2; }
+.svg-line.blue { stroke: #79aefc; }
+.svg-line.orange { stroke: #ff9b61; }
+.svg-line.rose { stroke: #ff7f8f; }
+.svg-dash { stroke-dasharray: 7 5; }
+footer.doc-foot { padding: 28px 0 0; border-color: var(--atlas-line); color: var(--atlas-muted); display: flex; flex-wrap: wrap; justify-content: space-between; gap: 14px; }
+@media (max-width: 900px) {
+  .topbar nav { display: none; }
+  .hero { min-height: auto; grid-template-columns: 1fr; gap: 28px; padding-top: 52px; }
+  .boundary-grid { grid-template-columns: 1fr; }
+  .section-head { grid-template-columns: 58px minmax(0, 1fr); gap: 16px; }
+  .part-divider { grid-template-columns: 62px minmax(0, 1fr); }
+  .part-divider .part-index { font-size: 49px; }
+}
+@media (max-width: 560px) {
+  .page.atlas-page { padding-inline: 16px; }
+  .topbar { padding-inline: 16px; }
+  .hero h1 { font-size: clamp(42px, 14vw, 62px); }
+  .part-divider { margin-inline: -10px; padding-inline: 16px; }
+  .section-head { grid-template-columns: 1fr; }
+  .section-no { font-size: 37px; }
+}
+@media print {
+  :root {
+    --atlas-ink: #172033; --atlas-muted: #5d6678; --atlas-mint: #0f6b52; --atlas-orange: #b45309;
+    --atlas-blue: #1d4ed8; --atlas-rose: #b91c1c; --atlas-violet: #6d28d9;
+  }
+  html, body { background: #fff; color: #172033; }
+  body::before, .topbar, .doc-outline { display: none; }
+  .page.atlas-page { display: block; max-width: none; }
+  .hero { min-height: auto; }
+  .hero-note, .table-wrap, .boundary, .part-divider, .plate, .node-detail { background: #fff; break-inside: avoid; }
+  .plate { border-color: #d9deea; }
+  .part-divider { border-block-color: #d9deea; }
+  .node-detail { border-color: #d9deea; }
+  .hero .dek { color: #5d6678; }
+  .callout, .callout.info, .callout.warn, .callout.risk { color: #172033; background: #fff; border-color: #d9deea; }
+  .plate-body { overflow-x: visible; }
+  .plate svg { min-width: 0; }
+  .plate .node[aria-current="step"] .svg-box { filter: none; }
+  .svg-line.trace-active { animation: none; stroke-dasharray: none; }
+  .svg-zone { fill: rgba(15, 107, 82, .04); stroke: #c9d2c9; }
+  .svg-box { fill: #f3f5f4; stroke: #3f5850; }
+  .svg-box.mint { fill: #e3f3eb; stroke: #0f6b52; }
+  .svg-box.orange { fill: #fdf2e3; stroke: #b45309; }
+  .svg-box.blue { fill: #e7eefc; stroke: #1d4ed8; }
+  .svg-box.rose { fill: #fbe9e7; stroke: #b91c1c; }
+  .svg-title { fill: #172033; }
+  .svg-copy { fill: #3f4a5c; }
+  .svg-mono { fill: #5d6678; }
+  .svg-mint { fill: #0f6b52; }
+  .svg-orange { fill: #b45309; }
+  .svg-blue { fill: #1d4ed8; }
+  .svg-rose { fill: #b91c1c; }
+  .svg-line { stroke: #3f5850; }
+  .svg-line.mint { stroke: #0f6b52; }
+  .svg-line.blue { stroke: #1d4ed8; }
+  .svg-line.orange { stroke: #b45309; }
+  .svg-line.rose { stroke: #b91c1c; }
+}
+</style>
+</head>
+<body>
+<div class="topbar">
+  <a class="brand" href="../../README.md">sedimem <i>·</i> plans</a>
+  <nav>
+    <a href="future-architecture.md">计划权威</a>
+    <a href="../reviews/future-architecture-2026-11-18/REVIEW.md">对抗审核</a>
+    <a href="v1.4-p0b.md">P0b 记录</a>
+  </nav>
+</div>
+
+<div class="page atlas-page">
+  <aside class="doc-outline">
+    <details open>
+      <summary>目录</summary>
+      <nav>
+        <ol>
+          <li><a href="#stage">01 · 主线与波次</a></li>
+          <li><a href="#overview">02 · 终态分层总览</a></li>
+          <li><a href="#lifecycle">03 · 候选生命周期</a></li>
+          <li><a href="#route">04 · 路线门槛与放行</a></li>
+          <li><a href="#state">05 · 现状与差距</a></li>
+        </ol>
+      </nav>
+    </details>
+  </aside>
+
+  <main>
+    <header class="hero">
+      <div>
+        <p class="eyebrow">SEDIMEM · FUTURE ARCHITECTURE · FINAL STATE</p>
+        <h1>终态架构：<em>证据约束</em>的 Agent 记忆与上下文引擎</h1>
+        <p class="dek">按 2026-11-18 定稿的 <code>docs/plans/future-architecture.md</code> 推演到全部波次完成后的形态：v1.4 已上线的骨架不动，向内插入「证据约束抽取 → 人工复核 → 二次提权」候选流水线（P1b），向外接「确定性预算装配 + 注入回执」（P1c），全程被冻结评测集盯着（P1a / P5）。</p>
+        <div class="status-line" style="margin-top:20px;">
+          <span class="live">v1.4 P0B 已上线</span>
+          <span class="doc-chip pending">P1A 当前唯一入口</span>
+          <span class="doc-chip pending">P1B / P1C 规划</span>
+          <span class="doc-chip verify">P2–P4 后置</span>
+        </div>
+      </div>
+      <div class="hero-side">
+        <div class="hero-note hot">
+          <b>最高优先级</b>
+          <span>上下文抽取准确性。候选 ≠ 事实：六道防线走完只到 T2，进可信 facts 需要第二次独立显式 trust promote。</span>
+        </div>
+        <div class="hero-note">
+          <b>评测先行</b>
+          <span>冻结门槛 precision ≥98% · recall ≥90%（中英分别达标）。七类严重错误任一出现即阻断——这是目标，不是已测成绩。</span>
+        </div>
+        <div class="hero-note">
+          <b>本页性质</b>
+          <span>计划的可视化推演，不代表已实现状态。以 <code>future-architecture.md</code>（SHA-256 2476ea5b…）为权威。</span>
+        </div>
+      </div>
+    </header>
+
+    <section id="stage">
+      <div class="section-head">
+        <div class="section-no">01</div>
+        <div>
+          <h2>主线与波次</h2>
+          <p class="section-copy">评测 → 证据约束抽取 → 长期记忆接纳与纠错 → 混合检索 → 预算装配 → Agent 任务验证。旧 P1–P5 阶段线已整体作废（快照在 <code>docs/plans/history/</code>），本轮从 P1a 起步。</p>
+        </div>
+      </div>
+      <div class="thesis">同一版本 v2.0 分三波交付，<b>每波都必须先过评测门禁再谈功能</b>；P2/P3 只在前一波达到条件后启动。</div>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr><th>波次</th><th>版本</th><th>交付</th><th>开始条件</th><th>完成标志</th></tr>
+          </thead>
+          <tbody>
+            <tr><td><b>P1a</b>（当前入口）</td><td>v2.0 · 第一波</td><td>标注规范 · 冻结测试集 · 基线 · 证据 schema 规格</td><td>—</td><td>9 项决策全部冻结（见 §04）</td></tr>
+            <tr><td><b>P1b</b>（重点波）</td><td>v2.0 · 第二波</td><td>证据约束抽取 · CLI 复核 · 幂等提交 · 拒绝回放</td><td>P1a 规格冻结 + 独立 gold 标注可用</td><td>候选 claim P≥98% · R≥90%（中英分别达标）</td></tr>
+            <tr><td><b>P1c</b></td><td>v2.0 · 第三波</td><td>memory_pack · inject 回执 · 真实 Agent 演示</td><td>P1b 达抽取门槛</td><td>pack 门禁通过 + 演示跑通</td></tr>
+            <tr><td><b>P2</b></td><td>v2.1</td><td>纠错生命周期 · 增量整理 · 一种额外只读导入</td><td>v2.0 收口</td><td>—</td></tr>
+            <tr><td><b>P3</b></td><td>v2.2</td><td>embedding / 半自动捕获（按消融指标触发）</td><td>指标触发，非排期</td><td>—</td></tr>
+            <tr><td><b>P5</b></td><td>贯穿</td><td>持续评测，每波必跑</td><td>P1a 建立测试集后</td><td>每波门禁报告</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <section id="overview">
+      <div class="section-head">
+        <div class="section-no">02</div>
+        <div>
+          <h2>终态分层总览</h2>
+          <p class="section-copy">自下而上一条写路径（来源 → 四道门/抽取管线 → 真相层），自上而下一条读路径（真相 → 检索 → 装配 → 宿主 Agent）；端面贯穿读写，评测与审计两条横切轨全程跟着。颜色只回答一个问题：<b>哪些已经上线，哪些还没建。</b></p>
+        </div>
+      </div>
+
+      <figure class="plate">
+        <div class="plate-head"><b>Figure 1 · sedimem 终态分层架构</b><span>MINT = 已上线 · ORANGE = 规划未上线 · BLUE = 外部系统</span></div>
+        <div class="plate-body">
+          <svg viewBox="0 0 1320 1224" role="img" aria-labelledby="fig1-title fig1-desc">
+            <title id="fig1-title">sedimem 终态分层架构：来源层经写入与抽取进入真相层，再经检索与装配回到宿主 Agent，评测与审计两条横切轨贯穿</title>
+            <desc id="fig1-desc">自上而下共七层。第一层端面：MCP stdio、CLI、Web UI 三个入口（已上线，mint），各自带一块规划扩展（橙）：MCP 增加 memory_pack（P1c）、CLI 增加候选复核流程（P1b）、Web UI 增加候选复核视图（P1b 后）；一条虚线从端面右侧贯穿全层，表示读写入口覆盖各层。第二层来源层（蓝，外部）：三端 MCP 写入、DSH transcript（P1a 首个验证源）、任务账本 segments.jsonl、以及 P2 的一种额外只读导入（橙）。第三层写入与抽取：上行是已上线的四道门——schema 校验、脱敏、去重（Dice 0.15 召回 0.85）、冲突标记——全部通过才落库；下行是橙色规划中的证据约束抽取管线（P1b）：锁外 LLM 抽取、六道防线候选、人工复核、T2 落库。写入结果以「唯一提交点 = 长期记录成功追加（acceptOpId）」进入第四层真相层：items.jsonl 追加只写，T1 可信 facts 与 T2 仅 references，sourceEpoch 撤销过滤所有读面；下方三块橙色规划件：双时间轴（P1a 冻结）、纠错生命周期（P2）、传播控制（P1b/P2）。真相层经「只读派生」进入第五层检索层：BM25/FTS5（mint）与语义向量（橙，P3 按消融触发）两路汇入混合排序 RRF k=60（mint），显式 degraded 标注。检索以 recordIds 进入第六层装配层：memory_pack 确定性预算装配（橙，P1c），输出经 MCP 注入第七层宿主 Agent 会话（蓝，外部）。右侧三条横切轨：评测层（橙，P1a 建立、P5 每波必跑，冻结测试集与门禁数字）、审计与事件（events.jsonl 哈希链已上线，候选事件与 inject 回执规划）、数据治理 docs/12（橙，P1a 登记新资产）。宿主 Agent 会话以橙色虚线连回评测层，标注 holdout 评测反馈（P5）。</desc>
+            <defs>
+              <marker id="arw" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" fill="#6f8b81"/></marker>
+              <marker id="arw-mint" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" fill="#66d7b2"/></marker>
+              <marker id="arw-orange" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" fill="#ff9b61"/></marker>
+              <marker id="arw-blue" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" fill="#79aefc"/></marker>
+            </defs>
+
+            <!-- 端面 -->
+            <rect class="svg-zone" x="20" y="14" width="940" height="152"/>
+            <text class="svg-mono" x="36" y="40">端面 · ENTRYPOINTS（读写入口贯穿各层）</text>
+            <rect class="svg-box mint" x="40" y="50" width="290" height="62" rx="6"/>
+            <text class="svg-title" x="185" y="74" text-anchor="middle">MCP stdio · 17 工具</text>
+            <text class="svg-copy" x="185" y="96" text-anchor="middle">write · search · session-tools</text>
+            <rect class="svg-box orange" x="40" y="116" width="290" height="40" rx="6"/>
+            <text class="svg-mono" x="185" y="140" text-anchor="middle">memory_pack【P1c】</text>
+            <rect class="svg-box mint" x="345" y="50" width="290" height="62" rx="6"/>
+            <text class="svg-title" x="490" y="74" text-anchor="middle">CLI</text>
+            <text class="svg-copy" x="490" y="96" text-anchor="middle">trust promote · audit · brief</text>
+            <rect class="svg-box orange" x="345" y="116" width="290" height="40" rx="6"/>
+            <text class="svg-mono" x="490" y="140" text-anchor="middle">candidates 复核流程【P1b】</text>
+            <rect class="svg-box mint" x="650" y="50" width="290" height="62" rx="6"/>
+            <text class="svg-title" x="795" y="74" text-anchor="middle">Web UI 九页观测台</text>
+            <text class="svg-copy" x="795" y="96" text-anchor="middle">只读 · R1 页面禁写</text>
+            <rect class="svg-box orange" x="650" y="116" width="290" height="40" rx="6"/>
+            <text class="svg-mono" x="795" y="140" text-anchor="middle">候选复核视图【P1b 后】</text>
+
+            <!-- 端面贯穿虚线 -->
+            <path class="svg-line svg-dash" d="M 960 90 L 990 90 L 990 998"/>
+            <line class="svg-line svg-dash" x1="990" y1="660" x2="966" y2="660" marker-end="url(#arw)"/>
+            <line class="svg-line svg-dash" x1="990" y1="1066" x2="966" y2="1066" marker-end="url(#arw)"/>
+            <text class="svg-mono" transform="rotate(-90 1006 560)" x="1006" y="560" text-anchor="middle">MCP · CLI 入口覆盖读 / 写 / 装配</text>
+
+            <!-- 来源层 -->
+            <rect class="svg-zone" x="20" y="196" width="940" height="120"/>
+            <text class="svg-mono" x="36" y="222">来源层 · SOURCES（外部输入）</text>
+            <rect class="svg-box blue" x="40" y="230" width="215" height="72" rx="6"/>
+            <text class="svg-title" x="147" y="254" text-anchor="middle">三端 MCP 写入</text>
+            <text class="svg-copy" x="147" y="276" text-anchor="middle">DSH · Codex · Claude</text>
+            <text class="svg-mono" x="147" y="294" text-anchor="middle">同一 ~/.memo 分库</text>
+            <rect class="svg-box blue" x="267" y="230" width="215" height="72" rx="6"/>
+            <text class="svg-title" x="374" y="254" text-anchor="middle">DSH transcript</text>
+            <text class="svg-copy" x="374" y="276" text-anchor="middle">会话转录（zstd）</text>
+            <text class="svg-mono" x="374" y="294" text-anchor="middle">P1a 首个验证源</text>
+            <rect class="svg-box blue" x="494" y="230" width="215" height="72" rx="6"/>
+            <text class="svg-title" x="601" y="254" text-anchor="middle">任务账本</text>
+            <text class="svg-copy" x="601" y="276" text-anchor="middle">segments.jsonl</text>
+            <text class="svg-mono" x="601" y="294" text-anchor="middle">briefJson / includeLedger</text>
+            <rect class="svg-box orange" x="721" y="230" width="215" height="72" rx="6"/>
+            <text class="svg-title" x="828" y="254" text-anchor="middle">+1 只读导入</text>
+            <text class="svg-copy" x="828" y="276" text-anchor="middle">与捕获同管道</text>
+            <text class="svg-mono" x="828" y="294" text-anchor="middle">不同来源【P2】</text>
+
+            <line class="svg-line" x1="200" y1="316" x2="200" y2="346" marker-end="url(#arw)"/>
+            <text class="svg-mono" x="214" y="336">捕获 / 抽取输入</text>
+
+            <!-- 写入与抽取 -->
+            <rect class="svg-zone" x="20" y="352" width="940" height="190"/>
+            <text class="svg-mono" x="36" y="378">写入与抽取 · WRITE PATH</text>
+            <rect class="svg-box mint" x="40" y="392" width="205" height="56" rx="6"/>
+            <text class="svg-title" x="142" y="414" text-anchor="middle">① schema 校验</text>
+            <text class="svg-copy" x="142" y="436" text-anchor="middle">结构与枚举</text>
+            <rect class="svg-box mint" x="262" y="392" width="205" height="56" rx="6"/>
+            <text class="svg-title" x="364" y="414" text-anchor="middle">② 脱敏 hygiene</text>
+            <text class="svg-copy" x="364" y="436" text-anchor="middle">占位符不并主体</text>
+            <rect class="svg-box mint" x="484" y="392" width="205" height="56" rx="6"/>
+            <text class="svg-title" x="586" y="414" text-anchor="middle">③ 去重 Dice</text>
+            <text class="svg-copy" x="586" y="436" text-anchor="middle">0.15 召回 0.85</text>
+            <rect class="svg-box mint" x="706" y="392" width="205" height="56" rx="6"/>
+            <text class="svg-title" x="808" y="414" text-anchor="middle">④ 冲突标记</text>
+            <text class="svg-copy" x="808" y="436" text-anchor="middle">supersede | disputed</text>
+            <line class="svg-line" x1="245" y1="420" x2="258" y2="420" marker-end="url(#arw)"/>
+            <line class="svg-line" x1="467" y1="420" x2="480" y2="420" marker-end="url(#arw)"/>
+            <line class="svg-line" x1="689" y1="420" x2="702" y2="420" marker-end="url(#arw)"/>
+            <text class="svg-mono" x="40" y="466">v1.4 已上线 · 直接写入路径（四道门全过才落库）</text>
+            <rect class="svg-box orange" x="40" y="478" width="880" height="52" rx="6"/>
+            <text class="svg-title" x="60" y="500">证据约束抽取管线【P1b】</text>
+            <text class="svg-copy" x="60" y="520">锁外 LLM 抽取 → 候选（六道防线）→ 人工复核 → T2 落库 · 详见 Figure 2</text>
+
+            <line class="svg-line" x1="200" y1="542" x2="200" y2="572" marker-end="url(#arw)"/>
+            <text class="svg-mono" x="214" y="562">唯一提交点 = 成功追加（acceptOpId）</text>
+
+            <!-- 真相层 -->
+            <rect class="svg-zone" x="20" y="578" width="940" height="170"/>
+            <text class="svg-mono" x="36" y="604">真相层 · SOURCE OF TRUTH（append-only，唯一权威）</text>
+            <rect class="svg-box mint" x="40" y="614" width="880" height="56" rx="6"/>
+            <text class="svg-title" x="60" y="636">items.jsonl · append-only</text>
+            <text class="svg-copy" x="60" y="656">T1 可信 facts · T2 仅 references · sourceEpoch 撤销过滤所有读面</text>
+            <rect class="svg-box orange" x="40" y="684" width="280" height="48" rx="6"/>
+            <text class="svg-mono" x="180" y="702" text-anchor="middle">双时间轴【P1a 冻结】</text>
+            <text class="svg-mono" x="180" y="720" text-anchor="middle">observedAt + assertedValidFrom/To</text>
+            <rect class="svg-box orange" x="336" y="684" width="280" height="48" rx="6"/>
+            <text class="svg-mono" x="476" y="702" text-anchor="middle">纠错生命周期【P2】</text>
+            <text class="svg-mono" x="476" y="720" text-anchor="middle">supersede v+1 · retract</text>
+            <rect class="svg-box orange" x="632" y="684" width="280" height="48" rx="6"/>
+            <text class="svg-mono" x="772" y="702" text-anchor="middle">传播控制【P1b / P2】</text>
+            <text class="svg-mono" x="772" y="720" text-anchor="middle">纠正后旧候选/向量/缓存失效</text>
+
+            <line class="svg-line" x1="200" y1="748" x2="200" y2="778" marker-end="url(#arw)"/>
+            <text class="svg-mono" x="214" y="768">只读派生（索引可弃可重建）</text>
+
+            <!-- 检索层 -->
+            <rect class="svg-zone" x="20" y="784" width="940" height="186"/>
+            <text class="svg-mono" x="36" y="810">检索层 · RETRIEVAL</text>
+            <rect class="svg-box mint" x="40" y="820" width="270" height="60" rx="6"/>
+            <text class="svg-title" x="175" y="844" text-anchor="middle">BM25 · FTS5</text>
+            <text class="svg-copy" x="175" y="866" text-anchor="middle">可重建派生索引</text>
+            <rect class="svg-box orange" x="40" y="894" width="270" height="60" rx="6"/>
+            <text class="svg-title" x="175" y="918" text-anchor="middle">语义向量【P3】</text>
+            <text class="svg-copy" x="175" y="940" text-anchor="middle">固定模型 / 维度 / 数据版本</text>
+            <rect class="svg-box mint" x="630" y="820" width="290" height="120" rx="6"/>
+            <text class="svg-title" x="775" y="856" text-anchor="middle">混合排序 · RRF k=60</text>
+            <text class="svg-copy" x="775" y="880" text-anchor="middle">显式 degraded 标注</text>
+            <text class="svg-mono" x="775" y="900" text-anchor="middle">现状 semantic-disabled</text>
+            <text class="svg-mono" x="775" y="918" text-anchor="middle">hits 不参与排序/过滤/缓存</text>
+            <line class="svg-line" x1="310" y1="850" x2="626" y2="850" marker-end="url(#arw)"/>
+            <path class="svg-line" d="M 310 924 L 560 924 L 560 876 L 626 876" marker-end="url(#arw)"/>
+
+            <line class="svg-line" x1="200" y1="970" x2="200" y2="1000" marker-end="url(#arw)"/>
+            <text class="svg-mono" x="214" y="990">recordIds（hits 永不参与排序）</text>
+
+            <!-- 装配层 -->
+            <rect class="svg-zone" x="20" y="1006" width="940" height="120"/>
+            <text class="svg-mono" x="36" y="1032">装配层 · CONTEXT PACK【P1c】</text>
+            <rect class="svg-box orange" x="40" y="1046" width="880" height="64" rx="6"/>
+            <text class="svg-title" x="60" y="1068">memory_pack · 确定性预算装配【P1c】</text>
+            <text class="svg-mono" x="60" y="1092">task·scope·asOf·includeLedger·tokenizer·tokenBudget → 分区 facts/currentTask/references/unresolved</text>
+
+            <line class="svg-line" x1="200" y1="1126" x2="200" y2="1152" marker-end="url(#arw)"/>
+            <text class="svg-mono" x="214" y="1146">经 MCP 注入</text>
+
+            <rect class="svg-box blue" x="300" y="1156" width="580" height="56" rx="6"/>
+            <text class="svg-title" x="590" y="1178" text-anchor="middle">宿主 Agent 会话（DSH / Codex / Claude）</text>
+            <text class="svg-mono" x="590" y="1200" text-anchor="middle">pack 注入 → 执行 → holdout 评测【P5】</text>
+
+            <!-- P5 评测反馈虚线 -->
+            <path class="svg-line orange svg-dash" d="M 880 1184 L 1160 1184 L 1160 348" marker-end="url(#arw-orange)"/>
+            <text class="svg-mono svg-orange" transform="rotate(-90 1172 770)" x="1172" y="770" text-anchor="middle">holdout 评测反馈【P5】</text>
+
+            <!-- 右侧横切轨 -->
+            <rect class="svg-zone" x="1020" y="14" width="280" height="330"/>
+            <text class="svg-mono" x="1036" y="40">横切① 评测层</text>
+            <text class="svg-mono svg-orange" x="1036" y="58">P1A 建立 · P5 每波必跑</text>
+            <text class="svg-copy" x="1036" y="90">冻结测试集 ≥200 场景</text>
+            <text class="svg-mono" x="1036" y="112">dev100 / test100 · 中英各≥40</text>
+            <text class="svg-copy" x="1036" y="136">≥200 gold claims · 50 无可记</text>
+            <text class="svg-mono" x="1036" y="158">对抗 10 类 × 每类≥10 例</text>
+            <text class="svg-copy" x="1036" y="182">机器门禁 precision ≥98%</text>
+            <text class="svg-mono" x="1036" y="204">recall ≥90% · 证据解析率 100%</text>
+            <text class="svg-copy svg-rose" x="1036" y="228">七类严重错误任一出现即阻断</text>
+            <text class="svg-copy" x="1036" y="252">端到端 ≥30 holdout 跨会话</text>
+            <text class="svg-mono" x="1036" y="274">五组对比 · 收益三条件同满</text>
+            <text class="svg-mono" x="1036" y="300">TP/FP/FN 一对一计分</text>
+
+            <rect class="svg-zone" x="1020" y="376" width="280" height="240"/>
+            <text class="svg-mono" x="1036" y="402">横切② 审计与事件</text>
+            <text class="svg-mono" x="1036" y="420">append-only 事件流</text>
+            <text class="svg-copy" x="1036" y="448">events.jsonl 哈希链【v1.4】</text>
+            <text class="svg-mono" x="1036" y="470">memo audit verify | anchor</text>
+            <text class="svg-copy" x="1036" y="496">候选·复核·拒绝事件【P1b】</text>
+            <text class="svg-copy" x="1036" y="520">inject 回执【P1c】</text>
+            <text class="svg-mono" x="1036" y="544">recordIds·来源 hash·packHash</text>
+            <text class="svg-mono" x="1036" y="568">canonicalPack 与运行元数据分离</text>
+            <text class="svg-mono" x="1036" y="592">无宿主 ACK 只能称生成/交付</text>
+
+            <rect class="svg-zone" x="1020" y="648" width="280" height="170"/>
+            <text class="svg-mono" x="1036" y="674">数据治理 · docs/12【P1A】</text>
+            <text class="svg-copy" x="1036" y="702">新资产登记 + 可删性标注</text>
+            <text class="svg-mono" x="1036" y="726">证据快照 = 可删来源缓存</text>
+            <text class="svg-mono" x="1036" y="748">（非真相层，可重建）</text>
+            <text class="svg-copy" x="1036" y="774">脱敏占位符不合并主体</text>
+            <text class="svg-mono" x="1036" y="796">sourceEpoch 撤销禁自动重捕</text>
+          </svg>
+        </div>
+        <figcaption><b>图 1 附注。</b>实线 = 自动数据流；虚线 = 入口覆盖或评测反馈。mint = v1.4 已上线；orange = 本轮规划（P1a–P1c）或后置（P2/P3），两者以框内【波次】标注区分；blue = 外部系统。三点弦外之音：① 任务账本段（segments）在 pack 中只以 references + summary 出现，<b>永不进 facts</b>（I-15）；② hits 类热度计数不参与排序/过滤/缓存（迁往 metrics/events，ADR-002）；③ 装配输出在拿到宿主 ACK 之前只能称「生成/交付」，不能称「已注入生效」。</figcaption>
+      </figure>
+    </section>
+
+    <section id="lifecycle">
+      <div class="section-head">
+        <div class="section-no">03</div>
+        <div>
+          <h2>候选生命周期（P1b 核心）</h2>
+          <p class="section-copy">从原始转录到可信 facts，一条候选要走完六道防线、一次人工接纳、一次独立提权。这是本次重构与竞品（Mem0 / claude-mem 等 ADD-only 抽取）的本质差异：<b>抽取不落库，复核才落库，提权才可信。</b></p>
+        </div>
+      </div>
+
+      <div class="diagram-unit" data-diagram="lifecycle">
+        <figure class="plate">
+          <div class="plate-head"><b>Figure 2 · 候选生命周期：transcript → 候选 → 复核 → T2 → T1</b><span>点节点展开细节</span></div>
+          <div class="plate-body">
+            <svg viewBox="0 0 1320 660" role="img" aria-labelledby="fig2-title fig2-desc">
+              <title id="fig2-title">候选从 DSH 转录经 LLM 抽取与六道防线，进入人工复核，accept 后以 T2 落库，二次提权后成为 T1 facts；reject 与无法判定为两条旁路</title>
+              <desc id="fig2-desc">主路径从左到右：DSH transcript（蓝，外部来源，携带 sourceEpoch/rangeId）经实线进入 LLM 抽取（橙，P1b，锁外调用，血缘记录 provider/model/prompt 版本/runId），产出候选 candidate（橙）：单一 claim、断言（谁说的/否定/条件/建议或同意或完成或撤销）、双时间、关系 ID 约束、证据 span/hash/eventId。候选进入六道防线区（橙）：结构 schema、证据存在、语义核对、冲突与纠正、人工接纳、传播控制。防线通过后进入人工复核 CLI（橙）：list、show、diff、accept、reject、status，逐条展示不可默认勾选。accept 沿实线向下到 T2 落库 = 提交点（橙）：acceptOpId、CAS（candidateVersion + evidenceHash + expectedTruthRevision），追加进真相层；再沿实线向下经 trust promote（mint，v1.4 已上线，二次独立显式提升、带理由）成为 T1 facts，可进 pack 的 facts 分区。两条旁路：六道防线区沿虚线（玫红）向下到 reject → 拒绝样本留存（玫红）：评测负例、回放防复发；候选沿虚线（玫红）到 recovery-required（玫红）：无法判定、禁止自动重试。左下角橙色块：防线⑥传播控制——摘要继承最低信任，纠正后旧候选/向量/pack 缓存失效，候选工作流与 trust 独立（pending/accepted）。图顶注释：锁不覆盖 LLM 网络调用——锁外抽取、锁内 CAS 核对落盘。</desc>
+              <defs>
+                <marker id="arw2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" fill="#6f8b81"/></marker>
+                <marker id="arw2-rose" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" fill="#ff7f8f"/></marker>
+                <marker id="arw2-orange" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" fill="#ff9b61"/></marker>
+                <marker id="arw2-mint" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" fill="#66d7b2"/></marker>
+              </defs>
+
+              <text class="svg-mono" x="30" y="36">锁不覆盖 LLM 网络调用：锁外抽取 · 锁内 CAS 核对落盘（计划 §3.5）</text>
+
+              <g class="node" data-node="source" tabindex="0" role="button" aria-label="展开 DSH transcript 节点详情">
+                <rect class="svg-box blue" x="30" y="120" width="190" height="120" rx="6"/>
+                <text class="svg-title" x="125" y="150" text-anchor="middle">DSH transcript</text>
+                <text class="svg-copy" x="125" y="174" text-anchor="middle">原始证据</text>
+                <text class="svg-mono" x="125" y="196" text-anchor="middle">sourceEpoch·rangeId</text>
+                <text class="svg-mono" x="125" y="214" text-anchor="middle">P1a 首个验证源</text>
+              </g>
+              <line class="svg-line" x1="220" y1="180" x2="246" y2="180" marker-end="url(#arw2)"/>
+
+              <g class="node" data-node="extract" tabindex="0" role="button" aria-label="展开 LLM 抽取节点详情">
+                <rect class="svg-box orange" x="250" y="120" width="210" height="120" rx="6"/>
+                <text class="svg-title" x="355" y="150" text-anchor="middle">LLM 抽取【P1b】</text>
+                <text class="svg-copy" x="355" y="174" text-anchor="middle">锁外调用</text>
+                <text class="svg-mono" x="355" y="196" text-anchor="middle">血缘 provider/model</text>
+                <text class="svg-mono" x="355" y="214" text-anchor="middle">prompt 版本·runId</text>
+              </g>
+              <line class="svg-line" x1="460" y1="180" x2="486" y2="180" marker-end="url(#arw2)"/>
+
+              <g class="node" data-node="candidate" tabindex="0" role="button" aria-label="展开候选 candidate 节点详情">
+                <rect class="svg-box orange" x="490" y="120" width="230" height="120" rx="6"/>
+                <text class="svg-title" x="605" y="150" text-anchor="middle">候选 candidate</text>
+                <text class="svg-mono" x="605" y="174" text-anchor="middle">单一 claim · 断言</text>
+                <text class="svg-mono" x="605" y="192" text-anchor="middle">双时间 · 关系 ID 约束</text>
+                <text class="svg-mono" x="605" y="210" text-anchor="middle">span/hash/eventId</text>
+              </g>
+              <line class="svg-line" x1="720" y1="180" x2="746" y2="180" marker-end="url(#arw2)"/>
+
+              <g class="node" data-node="defenses" tabindex="0" role="button" aria-label="展开六道防线节点详情">
+                <rect class="svg-box orange" x="750" y="112" width="240" height="136" rx="6"/>
+                <text class="svg-title" x="870" y="138" text-anchor="middle">六道防线</text>
+                <text class="svg-mono" x="870" y="160" text-anchor="middle">① 结构 schema</text>
+                <text class="svg-mono" x="870" y="176" text-anchor="middle">② 证据存在</text>
+                <text class="svg-mono" x="870" y="192" text-anchor="middle">③ 语义核对</text>
+                <text class="svg-mono" x="870" y="208" text-anchor="middle">④ 冲突与纠正</text>
+                <text class="svg-mono" x="870" y="224" text-anchor="middle">⑤ 人工接纳</text>
+                <text class="svg-mono" x="870" y="240" text-anchor="middle">⑥ 传播控制</text>
+              </g>
+              <line class="svg-line" x1="990" y1="180" x2="1016" y2="180" marker-end="url(#arw2)"/>
+
+              <g class="node" data-node="review" tabindex="0" role="button" aria-label="展开人工复核节点详情">
+                <rect class="svg-box orange" x="1020" y="120" width="270" height="120" rx="6"/>
+                <text class="svg-title" x="1155" y="148" text-anchor="middle">人工复核 CLI【P1b】</text>
+                <text class="svg-mono" x="1155" y="172" text-anchor="middle">list→show→diff→accept</text>
+                <text class="svg-mono" x="1155" y="190" text-anchor="middle">reject · status</text>
+                <text class="svg-copy" x="1155" y="212" text-anchor="middle">逐条展示 · 不可默认勾选</text>
+              </g>
+
+              <line class="svg-line orange" x1="1155" y1="240" x2="1155" y2="326" marker-end="url(#arw2-orange)"/>
+              <text class="svg-mono svg-orange" x="1167" y="290">accept</text>
+
+              <g class="node" data-node="accept" tabindex="0" role="button" aria-label="展开 T2 落库节点详情">
+                <rect class="svg-box orange" x="1020" y="330" width="270" height="116" rx="6"/>
+                <text class="svg-title" x="1155" y="358" text-anchor="middle">T2 落库 = 提交点</text>
+                <text class="svg-mono" x="1155" y="382" text-anchor="middle">acceptOpId · CAS</text>
+                <text class="svg-mono" x="1155" y="400" text-anchor="middle">candidateVersion</text>
+                <text class="svg-mono" x="1155" y="418" text-anchor="middle">+evidenceHash</text>
+                <text class="svg-mono" x="1155" y="436" text-anchor="middle">+expectedTruthRevision</text>
+              </g>
+
+              <line class="svg-line mint" x1="1155" y1="446" x2="1155" y2="496" marker-end="url(#arw2-mint)"/>
+              <text class="svg-mono svg-mint" x="1167" y="476">二次提升</text>
+
+              <g class="node" data-node="promote" tabindex="0" role="button" aria-label="展开 trust promote 节点详情">
+                <rect class="svg-box mint" x="1020" y="500" width="270" height="110" rx="6"/>
+                <text class="svg-title" x="1155" y="528" text-anchor="middle">trust promote【v1.4】</text>
+                <text class="svg-copy" x="1155" y="552" text-anchor="middle">二次独立显式提升 · 带理由</text>
+                <text class="svg-mono" x="1155" y="576" text-anchor="middle">T1 → pack facts 分区</text>
+              </g>
+
+              <line class="svg-line rose svg-dash" x1="870" y1="248" x2="870" y2="326" marker-end="url(#arw2-rose)"/>
+              <text class="svg-mono svg-rose" x="882" y="292">reject</text>
+
+              <g class="node" data-node="reject" tabindex="0" role="button" aria-label="展开 reject 旁路节点详情">
+                <rect class="svg-box rose" x="750" y="330" width="240" height="96" rx="6"/>
+                <text class="svg-title" x="870" y="358" text-anchor="middle">reject → 拒绝样本留存</text>
+                <text class="svg-copy" x="870" y="382" text-anchor="middle">评测负例 · 回放防复发</text>
+              </g>
+
+              <line class="svg-line rose svg-dash" x1="605" y1="240" x2="605" y2="326" marker-end="url(#arw2-rose)"/>
+              <text class="svg-mono svg-rose" x="617" y="292">无法判定</text>
+
+              <g class="node" data-node="recovery" tabindex="0" role="button" aria-label="展开 recovery-required 旁路节点详情">
+                <rect class="svg-box rose" x="490" y="330" width="230" height="96" rx="6"/>
+                <text class="svg-title" x="605" y="358" text-anchor="middle">recovery-required</text>
+                <text class="svg-copy" x="605" y="382" text-anchor="middle">无法判定 · 禁止自动重试</text>
+              </g>
+
+              <rect class="svg-box orange" x="30" y="330" width="400" height="130" rx="6"/>
+              <text class="svg-title" x="50" y="358">防线⑥ 传播控制【P1b 起 · P2 完整】</text>
+              <text class="svg-copy" x="50" y="384">摘要继承最低信任</text>
+              <text class="svg-copy" x="50" y="406">纠正后旧候选 / 向量 / pack 缓存失效</text>
+              <text class="svg-mono" x="50" y="430">候选工作流与 trust 独立（pending/accepted）</text>
+            </svg>
+          </div>
+          <figcaption><b>图 2 附注。</b>实线 = 主路径；虚线 = 拒绝 / 人工介入旁路。mint = v1.4 已上线；orange = P1b 规划；rose = 阻断与拒绝路径；blue = 外部来源。两条弦外之音：① accept 与 trust promote 之间是<b>两道独立的人类动作</b>——批量「接受一批候选」不会连带提权，提权必须逐条带理由，这是 A01 对抗修订的核心结论；② recovery-required 是显式状态而非重试队列——系统无法判定提交结果时禁止自动重试，避免同一段输入被重复入库。</figcaption>
+        </figure>
+
+        <div class="plate-detail-list">
+          <details class="node-detail" id="node-source" data-node="source">
+            <summary>DSH transcript · 原始来源</summary>
+            <p><b>是什么：</b>DSH 会话转录（zstd 多帧），P1a 唯一放行的首个验证来源。<b>标识：</b>sourceEpoch（来源纪元，撤销时过滤所有新读面并禁止自动重新 capture）+ rangeId（抽取区间）。<b>边界：</b>原文存在只证明出处，不证明为真——因此只作为证据层输入，不直接生成事实。其他来源（任务账本、P2 只读导入）必须走同一抽取管线，不同仅在入口。</p>
+          </details>
+          <details class="node-detail" id="node-extract" data-node="extract">
+            <summary>LLM 抽取 · 锁外调用【P1b】</summary>
+            <p><b>时序约束：</b>数据锁不覆盖 LLM 网络调用——锁外抽取、锁内核对落盘（计划 §3.5）。<b>血缘（候选字段）：</b>provider、model、prompt 版本、配置 hash、runId，全部随候选落盘，评审时可追溯到具体一次抽取。<b>闸门：</b>真实模型调用前必须先配成本 / 并发 / 重试 / 配额闸门（§8），LlmPort 新用途与限额进 policy。<b>规约：</b>抽取不是「把聊天缩短」——必须保留谁说的、关于谁、建议还是决定、何时适用、依据、是否已被纠正。</p>
+          </details>
+          <details class="node-detail" id="node-candidate" data-node="candidate">
+            <summary>候选 candidate · 字段语义（计划字段，非现行 schema）</summary>
+            <p><b>核心字段：</b>candidateId、schemaVersion、scope、输入范围 hash。<b>内容：</b>单一 claim（一条候选只说一件事）；类型 fact / decision / preference / gotcha / task-state / hypothesis（与现有 kind 的映射由 P1a 规格定义，<b>不直接扩 kind</b>）。<b>断言：</b>谁说的、引述、否定、条件、建议｜同意｜完成｜撤销。<b>双时间：</b>observedAt + assertedValidFrom/To（业务时间）独立于 MemoryRecord.validFrom/validTo（系统可见区间），防止 asOf 穿越。<b>关系：</b>关系 ID 必须来自输入允许集合，不得幻觉引用。<b>工作流：</b>pending / rejected / accepted 与 trust 完全独立。</p>
+          </details>
+          <details class="node-detail" id="node-defenses" data-node="defenses">
+            <summary>六道防线 · 抽取质量的结构化保证</summary>
+            <p>① <b>结构 schema</b>：候选必须通过机器可校验的结构定义；② <b>证据存在</b>：每条 claim 携带 span/hash/eventId，必须能在原文中定位，证据解析率门禁 100%；③ <b>语义核对</b>：claim 与证据语义一致，不允许「证据说 A、候选写 B」；④ <b>冲突与纠正</b>：与既有记录冲突时走纠正路径而非静默新增；⑤ <b>人工接纳</b>：accept 后仍 T2，只进 references；⑥ <b>传播控制</b>：摘要继承最低信任，纠正后旧候选/向量/pack 缓存失效。前四道机器执行，第五道人类执行，第六道跨波次生效（P1b 起、P2 完整）。</p>
+          </details>
+          <details class="node-detail" id="node-review" data-node="review">
+            <summary>人工复核 CLI【P1b 首发，UI 后续】</summary>
+            <p><b>完整流程：</b><code>candidates list → show → diff → accept / reject → status</code>。<b>交互红线：</b>逐条展示、不可默认勾选——批量操作只允许批量「查看」，不允许批量「接受并提权」。<b>落点：</b>accept 只把候选置为 accepted 并以 T2 追加进真相层（references 可见）；提权是另一次独立动作。<b>证据：</b>复核记录本身入审计事件流，可回放。</p>
+          </details>
+          <details class="node-detail" id="node-accept" data-node="accept">
+            <summary>T2 落库 = 唯一提交点【P1b】</summary>
+            <p><b>幂等五元组：</b>sourceEpoch、rangeId、extractionRunKey、candidateVersion、acceptOpId。<b>CAS 校验（同一数据锁内）：</b>candidateVersion + evidenceHash + expectedTruthRevision 三者匹配才允许追加；长期记录成功追加即为提交点。<b>no-op / merge：</b>需持久收据（opId → 目标记录），不能只留内存结果。<b>区间幂等：</b>重叠写入返回 E_ALREADY_CAPTURED 且零写入。<b>崩溃恢复：</b>无法判定提交结果时标 recovery-required（见旁路节点），带恢复测试覆盖。</p>
+          </details>
+          <details class="node-detail" id="node-promote" data-node="promote">
+            <summary>trust promote → T1 facts【v1.4 已上线】</summary>
+            <p><b>动作：</b><code>memo trust promote</code>，带理由，逐条执行——这是 T2 升 T1 的唯一路径（P0b B2 交付）。<b>与 accept 的关系：</b>accept 是候选工作流状态（accepted），promote 是信任状态（T1→），两者独立、先后两次人工确认。<b>效果：</b>T1 记录才可进 memory_pack 的 facts 分区；T2 记录只能以 references 出现。<b>对抗背景：</b>首轮审核 A01（blocker）指出「accept 不提升 trust 却无可信 facts 路径」的矛盾，最终以「二次独立 promote」收口。</p>
+          </details>
+          <details class="node-detail" id="node-reject" data-node="reject">
+            <summary>reject → 拒绝样本留存</summary>
+            <p><b>不丢弃：</b>被拒绝的候选作为<b>评测负例</b>持久留存（按数据地图登记可删性），进入冻结测试集的对抗维度（建议未接受、后续纠正等十类）。<b>回放：</b>每次抽取管线迭代后在拒绝样本上回放，防止同类错误复发。<b>审计：</b>拒绝动作与理由写入事件流（P1b 交付），与 accept 对称。</p>
+          </details>
+          <details class="node-detail" id="node-recovery" data-node="recovery">
+            <summary>recovery-required · 显式恢复态</summary>
+            <p><b>触发：</b>提交结果无法判定（如锁内 CAS 核对后进程崩溃，追加是否落盘未知）。<b>纪律：</b>该状态<b>禁止自动重试</b>——自动重试可能把同一段输入重复入库，破坏区间幂等。<b>恢复：</b>由人工按 opId 对账后推进；恢复路径有专项测试覆盖（对抗修订 A03 / D02）。<b>与 reject 的区别：</b>reject 是「人看了，决定不要」；recovery-required 是「系统不知道结果」，两者都阻断传播，但语义与处置不同。</p>
+          </details>
+        </div>
+      </div>
+
+      <script>
+      (() => {
+        document.querySelectorAll('.diagram-unit').forEach(unit => {
+          const nodes = [...unit.querySelectorAll('.plate .node[data-node]')];
+          const details = [...unit.querySelectorAll('.node-detail[data-node]')];
+          function select(key) {
+            const target = details.find(d => d.dataset.node === key);
+            if (!target || !unit.contains(target)) return;
+            details.forEach(d => { d.open = d === target; });
+            nodes.forEach(n => n.dataset.node === key ? n.setAttribute('aria-current', 'step') : n.removeAttribute('aria-current'));
+            target.scrollIntoView({ block: 'nearest', behavior: matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth' });
+          }
+          nodes.forEach(n => {
+            n.addEventListener('click', () => select(n.dataset.node));
+            n.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); select(n.dataset.node); } });
+          });
+          details.forEach(d => d.addEventListener('toggle', () => {
+            if (!d.open) nodes.filter(n => n.dataset.node === d.dataset.node).forEach(n => n.removeAttribute('aria-current'));
+          }));
+        });
+      })();
+      </script>
+    </section>
+
+    <section id="route">
+      <div class="section-head">
+        <div class="section-no">04</div>
+        <div>
+          <h2>路线门槛与放行</h2>
+          <p class="section-copy">P1a 是当前唯一入口；P1a 结束前九项决策必须冻结，缺一不得开 P1b。所有门槛数字是<b>冻结目标</b>，不是已测成绩。</p>
+        </div>
+      </div>
+
+      <div class="callout info">
+        <p><b>P1a 结束前冻结九项：</b>候选状态 · 幂等协议 · 证据范围与删除语义 · 双时间 · kind 映射 · 信任提升路径 · 精确 tokenizer（含目标模型组合）· 成本容量上限 · 测试切分与打分规约。</p>
+      </div>
+      <div class="callout risk">
+        <p><b>七类严重错误（评测中任一出现即阻断，不看总分）：</b>无依据事实 · 角色错归 · 否定反转 · 建议变批准 · 未做变已做 · 跨 scope 泄漏 · 撤回当当前。</p>
+      </div>
+      <div class="callout warn">
+        <p><b>本轮放行边界：</b>只放行 P1a 的规格、标注准备与最小试跑。不建 v2.0 版本目录、不切 CURRENT；v2.0 规格先写 <code>docs/design/v2.0/</code> 草案（planned），等 CURRENT 切换时才同步现行 <code>docs/02 / 04 / 07 / 12</code>。</p>
+      </div>
+      <div class="callout">
+        <p><b>发布收益三条件（端到端实验，三项同时满足才谈发布）：</b>pack 证据覆盖率不降 · memory token 中位数降 ≥20% · 任务成功率不降。对比组五档（无记忆 / 最近窗口 / BM25 / 混合 / 混合+pack）共享同一份人工接纳与 trust 结果，成对比较、每组 ≥3 次运行。</p>
+      </div>
+    </section>
+
+    <section id="state">
+      <div class="section-head">
+        <div class="section-no">05</div>
+        <div>
+          <h2>现状与差距</h2>
+          <p class="section-copy">终态各部件按「已上线 / 本轮建设 / 后置待决」三栏对账，与 <code>future-architecture.md</code> §0.2–§0.4 一一对应。</p>
+        </div>
+      </div>
+      <div class="boundary-grid">
+        <div class="boundary">
+          <b>已上线（v1.4 / P0a+P0b）</b>
+          <ul>
+            <li>写入四道门（schema / 脱敏 / 去重 / 冲突）</li>
+            <li>items.jsonl 真相层 + trust promote（T1/T2）</li>
+            <li>BM25(FTS5) 检索 + RRF，显式 degraded</li>
+            <li>events.jsonl 哈希链 · memo audit</li>
+            <li>任务账本 segments.jsonl + briefJson</li>
+            <li>九页只读观测台 · 831 tests 三端部署</li>
+            <li>数据锁 / 删除路径 / MCP token opt-in</li>
+          </ul>
+        </div>
+        <div class="boundary">
+          <b>本轮建设（P1a → P1c，v2.0）</b>
+          <ul>
+            <li>P1a：标注规范 · 冻结测试集 · 基线 · 证据 schema 规格 · 九项冻结</li>
+            <li>P1b：证据约束抽取 · 六道防线 · CLI 复核 · 幂等 CAS 提交 · 拒绝回放</li>
+            <li>P1c：memory_pack（分区 / 预算 / 确定性）· inject 回执 · 真实 Agent 演示</li>
+            <li>全程：P5 持续评测门禁</li>
+          </ul>
+        </div>
+        <div class="boundary">
+          <b>后置 / 待决（P2–P4）</b>
+          <ul>
+            <li>P2（v2.1）：纠错完整生命周期 · 增量整理 · 一种额外只读导入</li>
+            <li>P3（v2.2）：embedding / 半自动捕获，按消融指标触发，非排期</li>
+            <li>P4：backlog（暂无承诺）</li>
+            <li>候选复核 Web UI：P1b CLI 之后的增强项</li>
+          </ul>
+        </div>
+      </div>
+    </section>
+
+    <footer class="doc-foot">
+      <span>权威计划：<a href="future-architecture.md">docs/plans/future-architecture.md</a>（SHA-256 2476ea5b…0160） · 对抗审核：<a href="../reviews/future-architecture-2026-11-18/REVIEW.md">REVIEW.md</a></span>
+      <span>可视化随计划更新 · 2026-11-18 · 不代表已实现状态</span>
+    </footer>
+  </main>
+</div>
+</body>
+</html>

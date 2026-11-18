@@ -1119,7 +1119,7 @@ Q5 契约覆盖按「导出名必须出现在 docs/」判定，这里逐模块�
 ### §3.24.1 trust 四档与写入不变式
 
 `trust` 取值 `T0|T1|T2|T3`（`TRUST_LEVELS`），缺省读作 `T2`（`DEFAULT_TRUST`）。
-语义以 [`docs/plans/future-architecture.md`](plans/future-architecture.md) §4.1 为准：
+历史定义见 [旧计划](plans/history/future-architecture-2026-11-17.md) §4.1；本版写入、派生与提升规则以本节为准：
 T0 = 维护者本人/本机 CLI，T1 = 本机可信来源，T2 = 远程内容（默认不进 facts），T3 = 未注册来源。
 
 - **普通写路径不得自报 T0**：`service.write`/CLI/`capture accept` 只能接受 adapter 声明的上限；
