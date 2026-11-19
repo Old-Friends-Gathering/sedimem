@@ -98,6 +98,10 @@ R0 范围确定 → R1 锁外抽取 → R2 结构校验 → R3 证据核对 → 
 
 - 生成器输出 `{objection: {kind, resolvable, reason, targetRecordId} | null}`；`null` 表示未发现异议。
 - 可消解 → 进入决策矩阵行 8（追加 `relations.supersedes` 后**真重入**行 1–7）；不可消解 → 行 6 `hold(unresolved)`。
+- **效力对称（审核 M1）**：不可消解异议必须**主动拦截 accept**（`decide()` 中 `objection.resolvable === false && 决策为 accept` → 转 `hold(unresolved)`，`rulesHit` 记 `objection-unresolvable`、结果带 `objectionKind`）；只对可消解异议生效等于生成器形同虚设。
+- **可消解判据不得被正文伪造（审核 M2）**：裸「不是」不算更正标记，必须是否定式更正（`不是…而是/应…`）或显式改写词（改成/改为/应为/纠正/而应/instead/correct to/should be/rather than）；且声明值的**全部**数字都要在正文/引文中出现，只中第一个不放行。
+- **数字归一（审核 m2）**：比较前做归一（`v2.0→2`、`30.0→30`），避免同值不同写法误报；单位核对不在本批（若后续需要，按 manifest 版本化补）。
+- **回放门禁（审核 m1）**：`replayObjection` 需 policy `allowReplayObjection=true`，否则抛 `E_REPLAY_NOT_ALLOWED`。
 - **裁判顺序**：`scope-alias` → `temporal-drift` → `quote-value-mismatch` → `value-conflict`，命中即停；`scope-alias` / `temporal-drift` 在行 1–2 已被拒绝，生成器的同名异议只作为**原因标注**，不改变行序。
 - **入口纪律**：生产入口由管线自己调用生成器（`pilot/p1b/tools/objection.mjs` 的 `generateObjection`）；调用方传 `objection` 仅在 `allowCallerObjection=true`（测试）或 `replayObjection`（回放）时生效，默认忽略并记 `ignoredCallerObjection`。
 - 落地用例：`pilot/p1b/tests/objection.test.mjs`（R4-1..R4-7）+ `pilot/p1b/tests/pipeline.test.mjs` 的 T-C8/T-C19（真重入）/T-C26（禁止注入）。
@@ -166,6 +170,10 @@ R0 范围确定 → R1 锁外抽取 → R2 结构校验 → R3 证据核对 → 
 
 - 匹配键优先 `scope+subject+predicate`；缺 `predicate` 时退化为 `scope+about+归一文本`，并在 run 事件标 `correctionMatcher=degraded`（本批落地后仍为 degraded，因为 01 的 `predicate` 是 planned 扩展）。
 - matcher 只做归类与目标定位，**不写真相层**；写入仍由 R7 提交路径完成（CAS/收据/epoch 全套校验）。
+- **证据绑定（审核 M3）**：`correction` 的新值必须出现在某条证据引文中（纠正消息本身先入 events/snapshots）；否则 `reject(evidence-unsupported, detail=new-value-not-in-evidence)`，不得把新值挂在旧引文上进真相层。
+- **newValue 取窗口（审核 M4）**：优先取更正标记后 40 字符窗口内的数字（排除旧值），避免抓到句中无关数值；`confidence` 为确定性值（exact 0.9 / degraded 0.6），不做概率推断。
+- **目标阈值（审核 m3）**：`pickTarget` 需打分 ≥2（文本重合 + 值命中）才认定目标，低于阈值视为无目标。
+- **无人值守部署（审核 m6）**：`cross-scope` 纠正要求管线配置 `sourceScope`；未配置时 fail-closed 拒绝（`cross-scope-leak / source-scope-unbound`），不靠伪造 `${scope}#foreign` 通过行 2。
 - 入口 `pipeline.correct({text, scope, role, evidence, opId})`：matcher → 七类候选形态（`correction` 带 `relations.supersedes` 且 `status=active`；`retraction` 带 `status=retracted`；`quote` 的 `assertion.speaker=quoted`；`assistant-claim` 为 `task-state/not-done` 且不覆盖既有值；`tool-failure` 为 `task-state/not-done`；`cross-scope` 的 `scope` 与来源绑定不同，由行 2 拒绝）→ `ingest` → `decide`。提交仍由调用方显式 `commit(opId)`。
 - 带 `relations.supersedes` 的候选被接受时，`reason` 必须如实为 `correction-applied`（不是 `policy-accept`），以便回执/看板区分「首次接纳」与「修订生效」。
 

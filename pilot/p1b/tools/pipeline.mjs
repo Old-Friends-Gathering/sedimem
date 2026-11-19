@@ -28,6 +28,9 @@ export const DECISION_ROWS = Object.freeze([
   { row: 9, condition: 'all-pass', decision: 'accept', reason: 'policy-accept' },
 ]);
 
+// m4：决策必须来自矩阵常量（改表即改行为，T-C1..T-C9 会变红）
+export const rowDecision = (n) => DECISION_ROWS[n - 1].decision;
+
 const INJECTION_PATTERNS = [
   /忽略(以上|之前|上述).{0,6}(规则|指令|提示)/u,
   /导出.{0,6}(全部|所有)?.{0,4}(密钥|凭据|密码)/u,
@@ -86,7 +89,7 @@ export function createPipeline({
   policy = {},
   clock = () => new Date().toISOString(),
 } = {}) {
-  const cfg = { maxCasRefresh: 2, quotaExceeded: false, allowCallerObjection: false, ...policy };
+  const cfg = { maxCasRefresh: 2, quotaExceeded: false, allowCallerObjection: false, allowReplayObjection: false, ...policy };
 
   const candidates = new Map();
   const truth = [];
@@ -173,7 +176,7 @@ export function createPipeline({
 
     // 行 1：证据存在 + R3 查 epoch 撤销
     if (revoked.has(meta.sourceEpoch)) {
-      return { decision: 'reject', reason: 'evidence-unsupported', rulesHit: ['source-revoked'], failures: [{ reason: 'source-revoked' }] };
+      return { row: 1, decision: rowDecision(1), reason: 'evidence-unsupported', rulesHit: ['source-revoked'], failures: [{ reason: 'source-revoked' }] };
     }
     const evRes = resolveEvidence({
       events,
@@ -183,18 +186,18 @@ export function createPipeline({
       sourceEpoch: meta.sourceEpoch,
     });
     if (!evRes.ok) {
-      return { decision: 'reject', reason: 'evidence-unsupported', rulesHit: ['evidence-failed'], failures: evRes.failures };
+      return { row: 1, decision: rowDecision(1), reason: 'evidence-unsupported', rulesHit: ['evidence-failed'], failures: evRes.failures };
     }
     rulesHit.push('evidence-ok');
     meta.evidenceHash = evRes.evidence.map((e) => `${e.eventId}@${e.span.start}-${e.span.end}#${e.hash}`).join(',');
 
     // 行 2：跨 scope（真实判据：来源绑定的 scope）
     if (sourceScope && meta.scope && meta.scope !== sourceScope) {
-      return { decision: 'reject', reason: 'cross-scope-leak', rulesHit: ['cross-scope'] };
+      return { row: 2, decision: rowDecision(2), reason: 'cross-scope-leak', rulesHit: ['cross-scope'] };
     }
     const foreign = truth.find((t) => t.key !== c.key && t.scope !== meta.scope && t.assertion?.subject === meta.assertion?.subject && t.assertion?.predicate === meta.assertion?.predicate);
     if (foreign) {
-      return { decision: 'reject', reason: 'cross-scope-leak', rulesHit: ['cross-scope-foreign-subject'], detail: foreign.recordId };
+      return { row: 2, decision: rowDecision(2), reason: 'cross-scope-leak', rulesHit: ['cross-scope-foreign-subject'], detail: foreign.recordId };
     }
     rulesHit.push('scope-ok');
 
@@ -203,14 +206,14 @@ export function createPipeline({
       .map((e) => `${e.quote} ${events.get(e.eventId)?.text ?? ''}`)
       .join(' ');
     if (isInjection(meta.claimText) || isInjection(cited)) {
-      return { decision: 'reject', reason: 'injection-suspected', rulesHit: ['injection-detected'] };
+      return { row: 3, decision: rowDecision(3), reason: 'injection-suspected', rulesHit: ['injection-detected'] };
     }
     rulesHit.push('no-injection');
 
     // 行 4：身份/角色不明（真实判据：证据 role）
     const unknown = evRes.evidence.filter((e) => !roleIsKnown(e.role));
     if (unknown.length) {
-      return { decision: 'reject', reason: 'identity-unknown', rulesHit: ['identity-unknown'], detail: unknown.map((u) => u.eventId) };
+      return { row: 4, decision: rowDecision(4), reason: 'identity-unknown', rulesHit: ['identity-unknown'], detail: unknown.map((u) => u.eventId) };
     }
     rulesHit.push('identity-ok');
 
@@ -221,7 +224,7 @@ export function createPipeline({
       evidence: evRes.evidence,
     });
     if (!as.ok) {
-      return { decision: 'reject', reason: 'assertion-mismatch', rulesHit: ['assertion-failed'], violations: as.violations };
+      return { row: 5, decision: rowDecision(5), reason: 'assertion-mismatch', rulesHit: ['assertion-failed'], violations: as.violations };
     }
     rulesHit.push('assertion-ok');
 
@@ -232,7 +235,7 @@ export function createPipeline({
         (rel) => rel.kind === 'supersedes' && (rel.targetRecordId === conflict.recordId || rel.target === conflict.recordId),
       );
       if (!superseded) {
-        return { decision: 'hold', reason: 'unresolved', rulesHit: [...rulesHit, 'conflict-unresolvable'], conflict: conflict.recordId };
+        return { row: 6, decision: rowDecision(6), reason: 'unresolved', rulesHit: [...rulesHit, 'conflict-unresolvable'], conflict: conflict.recordId };
       }
       rulesHit.push('conflict-superseded');
     } else {
@@ -241,7 +244,7 @@ export function createPipeline({
 
     // 行 7：配额
     if (cfg.quotaExceeded) {
-      return { decision: 'reject', reason: 'policy-blocked', rulesHit: [...rulesHit, 'quota-exceeded'] };
+      return { row: 7, decision: rowDecision(7), reason: 'policy-blocked', rulesHit: [...rulesHit, 'quota-exceeded'] };
     }
     rulesHit.push('quota-ok');
 
@@ -249,7 +252,8 @@ export function createPipeline({
     const correctedByRelation = (meta.relations ?? []).some((rel) => rel.kind === 'supersedes');
     if (correctionApplied || correctedByRelation) rulesHit.push('correction-applied');
     return {
-      decision: 'accept',
+      row: correctionApplied || correctedByRelation ? 8 : 9,
+      decision: rowDecision(correctionApplied || correctedByRelation ? 8 : 9),
       reason: correctionApplied || correctedByRelation ? 'correction-applied' : 'policy-accept',
       rulesHit,
     };
@@ -257,7 +261,10 @@ export function createPipeline({
 
   // R4 异议生产入口：默认由生成器独立核对；调用方注入仅测试/回放（09 §5）
   function resolveObjection(c, ctx) {
-    if (ctx.replayObjection !== undefined) return ctx.replayObjection;
+    if (ctx.replayObjection !== undefined) {
+    if (!cfg.allowReplayObjection) throw new Error('E_REPLAY_NOT_ALLOWED');
+    return ctx.replayObjection;
+  }
     if (ctx.objection !== undefined && cfg.allowCallerObjection) return ctx.objection;
     const meta = c.meta;
     const { objection } = generateObjection({
@@ -331,6 +338,19 @@ export function createPipeline({
       claim = { claim: text, scope: `${scope}#foreign`, type: 'fact', status: 'active', assertion: { ...assertionBase }, relations: [], evidence };
     }
 
+    // m6：跨项目纠正必须有来源绑定 scope 才能判定，否则 fail-closed
+    if (m.kind === 'cross-scope' && !sourceScope) {
+      return { kind: 'cross-scope', matcher: m.matcher, decision: 'reject', reason: 'cross-scope-leak', detail: 'source-scope-unbound' };
+    }
+
+    // M3：修订/撤回必须让新值出现在证据引文中（纠正消息自身应是事件），否则证据悬空
+    if (m.kind === 'correction') {
+      const bound = (evidence ?? []).some((e) => String(e.quote ?? '').includes(String(m.newValue ?? '')));
+      if (!bound) {
+        return { kind: 'correction', matcher: m.matcher, decision: 'reject', reason: 'evidence-unsupported', detail: 'new-value-not-in-evidence' };
+      }
+    }
+
     const [ingested] = ingest({ runKey, claims: [claim] });
     if (!ingested || ingested.noop) {
       return { kind: m.kind, matcher: m.matcher, candidateId: ingested?.candidateId ?? null, decision: 'noop', noopReason: ingested?.noopReason ?? null };
@@ -362,6 +382,16 @@ export function createPipeline({
     let r = evaluate(c);
     if (objection?.resolvable && r.decision === 'accept') {
       r.rulesHit.push('objection-without-target');
+    }
+    // M1：不可消解异议必须拦住 accept（规格 §5「不可消解 → hold(unresolved)」）
+    if (objection && objection.resolvable === false && r.decision === 'accept') {
+      r = {
+        row: 6,
+        decision: rowDecision(6),
+        reason: 'unresolved',
+        rulesHit: [...r.rulesHit, 'objection-unresolvable'],
+        objectionKind: objection.kind,
+      };
     }
     if ((r.decision === 'hold' || r.decision === 'reject') && objection?.resolvable) {
       c.meta.relations = [
@@ -404,7 +434,15 @@ export function createPipeline({
 
     c.lastDecision = { decision: r.decision, reason: r.reason, at: clock() };
     auditOf({ kind: 'decision', candidateId, decision: r.decision, reason: r.reason });
-    return { ...decisionBase, decision: r.decision, reason: r.reason, rulesHit: r.rulesHit, ...(r.violations ? { violations: r.violations } : {}) };
+    return {
+      ...decisionBase,
+      decision: r.decision,
+      reason: r.reason,
+      rulesHit: r.rulesHit,
+      ...(r.violations ? { violations: r.violations } : {}),
+      ...(r.row ? { row: r.row } : {}),
+      ...(r.objectionKind ? { objectionKind: r.objectionKind } : {}),
+    };
   }
 
   function commit(candidateId, { opId, expected = null } = {}) {

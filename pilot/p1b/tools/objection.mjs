@@ -5,20 +5,30 @@
 //   - 输出 { objection: {kind, resolvable, reason, targetRecordId} | null }；
 //   - 判定顺序固定：scope-alias → temporal-drift → quote-value-mismatch → value-conflict。
 
-const CORRECTION_MARKERS = [
-  '改成', '改为', '应为', '应该是', '纠正', '不是', '而应', 'instead',
-  'correct to', 'should be', 'rather than',
-];
+// 更正式标记（M2：裸「不是」不算，必须是否定式更正「不是…而是/应…」或显式改写词）
+const CORRECTION_MARKERS = ['改成', '改为', '应为', '应该是', '纠正', '而应', 'instead', 'correct to', 'should be', 'rather than'];
+const NOT_BUT_RE = /不是[^。；;\n]{0,20}(而是|应|改成|改为)/u;
 
 const DIGITS_RE = /\d+(?:\.\d+)?/gu;
 
+// m2：数字归一再比较（v2.0 → 2，30.0 → 30），避免同值不同写法误报
+function normalizeNumber(raw) {
+  const t = String(raw).replace(/^[vV]/u, '');
+  if (/^\d+(?:\.\d+)?$/u.test(t)) return String(Number(t));
+  return t;
+}
+
 function numbersIn(text) {
-  return new Set(String(text ?? '').match(DIGITS_RE) ?? []);
+  const raw = String(text ?? '');
+  const out = new Set();
+  for (const m of raw.match(DIGITS_RE) ?? []) out.add(normalizeNumber(m));
+  for (const m of raw.match(/[vV]\d+(?:\.\d+)?/gu) ?? []) out.add(normalizeNumber(m));
+  return out;
 }
 
 function hasCorrectionMarker(text) {
   const t = String(text ?? '').toLowerCase();
-  return CORRECTION_MARKERS.some((m) => t.includes(m.toLowerCase()));
+  return CORRECTION_MARKERS.some((m) => t.includes(m.toLowerCase())) || NOT_BUT_RE.test(String(text ?? ''));
 }
 
 function sameKeyValue(a, b) {
@@ -103,10 +113,10 @@ export function generateObjection({ claim, truth = [], sourceScope = null, objec
   // 4) value-conflict：真相层同 scope+subject+predicate 但值不同
   const conflict = findConflict(truth, claim);
   if (conflict) {
-    const declared = numbersIn(String(a.value));
-    const marker = hasCorrectionMarker(texts.join(' '));
-    // 可消解要求：存在更正式，且更正后的值就是候选值（不是把冲突解释成两头都不对）
-    const resolvable = marker && declared.size > 0 && numbersIn(texts.join(' ')).has([...declared][0]);
+    const declared = [...numbersIn(String(a.value))];
+    const mentioned = numbersIn(texts.join(' '));
+    // M2：可消解要求（a）显式更正标记（b）全部声明数字都在文本出现（不是只中第一个）
+    const resolvable = hasCorrectionMarker(texts.join(' ')) && declared.length > 0 && declared.every((n) => mentioned.has(n));
     out.objection = {
       kind: 'value-conflict',
       resolvable,
