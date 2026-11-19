@@ -27,11 +27,11 @@
 
 **「无可记」场景**：标注 `shouldReject` 理由（为什么整段无可记：闲聊/纯操作回显/无命题）；无可记场景与正场景互斥（同一输入不得既在 gold 又标无可记）。
 
-### 1.1 命题粒度（granularity@v1，可执行）
+### 1.1 命题粒度（granularity@v2，可执行）
 
 两遍盲评只对上 5.6% 的 claim、字段一致率 78.5%，主因不是判断力差异，而是**粒度没有定义**：同一段文本里"什么算一条、一句含两事实怎么切、同义改写算不算同一条"三件事此前无规可依。本节把它定死，并配套可执行校验（`pilot/p1a/tools/granularity-check.mjs`）与 12 场景校准集（`pilot/p1a/granularity/calibration.jsonl`）。
 
-**规则集版本**：`granularity@v1`（manifest `thresholds.granularityRuleSet` 机读；改规则必须升版本 + 重跑全部参考集，原成绩保留不覆盖）。
+**规则集版本**：`granularity@v2`（manifest `thresholds.granularityRuleSet` 机读；改规则必须升版本 + 重跑全部参考集，原成绩保留不覆盖）。
 
 #### 1.1.1 原子性判据（决定"是不是一条"）
 
@@ -78,6 +78,7 @@ A3 的边界（最容易分歧的三处，按此执行）：
 |---|---|---|
 | U1 | 复合专名/复合标识 | `db-primary-01`、`repo:demo` |
 | U2 | 数值+单位/量纲 | `8080`、`30s`、`3 倍` |
+| U4 | 单属性多值枚举（同一属性的取值列表，如「端口 8080、8081、8082」「维护窗口是 2026-11-18、2026-11-19」） | 整体一条；不同于 S3 的属性并列 |
 | U3 | 否定修饰 | "不支持 8081" → 1 条（negated=true），**禁止**拆成"支持 8081"+"否定" |
 
 #### 1.1.4 同一性判定（决定"两条算不算同一条"）
@@ -102,7 +103,7 @@ A3 的边界（最容易分歧的三处，按此执行）：
 - 抽取器（[09](09-extraction-pipeline.md) §2）输出必须逐条原子；一次抽取返回含 S1–S3 形态的单条命题，等同结构校验失败，落 `schema-invalid`。
 - 校准不等于改数据：粒度规则变更产生新的参考集版本（`goldset-vN`），原版本与成绩只读保留。
 
-#### 1.1.6 校准集（16 场景）
+#### 1.1.6 校准集（20 场景）
 
 `pilot/p1a/granularity/calibration.jsonl` 每行给出：`calibrationId`、`language`、`text`（一段合成脱敏文本）、`expectedClaims`（期望拆出的条数）、`hits`（命中的规则编号，如 `["S1"]`）、`verdict`（`valid-atomic` / `must-split` / `not-a-claim`）、`textHash`（`normalizeText` 的 sha256 前 8 位，防样本被静默替换）、`source`（`spec-derived` 或 `independent-audit`）。
 

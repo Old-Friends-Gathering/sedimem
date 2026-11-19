@@ -27,7 +27,7 @@
 
 1. 一对一匹配由**冻结的自动匹配规约与记录化模型judge**（对照 [06-annotation-spec.md](06-annotation-spec.md) §1 gold 与候选输出逐对判定），裁决记录随参考集/匹配器版本化存档；无人工前置，未决配对按保守FP/FN记录，不悄悄忽略。
 2. **tie-break**：同一 gold 命中多个候选时，「证据更完整者优先」——evidence 覆盖 span 更完整、quote 与 gold 引文一致性更高者得 TP，其余按重复候选计 FP；仍无法区分 → 该 gold 计 FN、全部相关候选计 FP（保守计分，宁可低报）。
-3. **子/超集命题计分**：候选是 gold 的子命题（信息缺失）→ 不计 TP，gold 计 FN、该候选计 FP；候选是超集（复合命题）→ 本应被 01 schema 校验拒绝，若逃逸到评分层计 FP；两种情形都在裁决记录中标注子/超集类型。判定的判定键与同一性口径见 [06 §1.1.4](06-annotation-spec.md)（`granularity@v1`）：判定键全等且 speechAct/negated 一致才算同一条，措辞不同的同义改写**不重复计分**。
+3. **子/超集命题计分**：候选是 gold 的子命题（信息缺失）→ 不计 TP，gold 计 FN、该候选计 FP；候选是超集（复合命题）→ 本应被 01 schema 校验拒绝，若逃逸到评分层计 FP；两种情形都在裁决记录中标注子/超集类型。判定的判定键与同一性口径见 [06 §1.1.4](06-annotation-spec.md)（`granularity@v2`）：判定键全等且 speechAct/negated 一致才算同一条，措辞不同的同义改写**不重复计分**。
 
 **mixed 语言归组**：`language: mixed` 场景的成绩**同时计入 zh 与 en 两组**（保守口径：两组都必须独立达标，mixed 不允许成为任一组的盲区）；语料配额计数中 mixed 另算、不占中英各 ≥40 的名额（与 manifest 口径一致）。
 

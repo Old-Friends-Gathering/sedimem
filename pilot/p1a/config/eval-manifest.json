@@ -1,7 +1,7 @@
 {
-  "manifestVersion": 4,
-  "frozenAt": "2026-11-18T05:01:00Z",
-  "revisionNote": "v4：新增 thresholds.granularityRuleSet（granularity@v1，含 06 §1.1 粒度规范与 12 场景校准集）；其余阈值不变。",
+  "manifestVersion": 5,
+  "frozenAt": "2026-11-19T12:30:00Z",
+  "revisionNote": "v5（2026-11-19）：粒度规范升 granularity@v2（S1b/S6b、U4 单属性多值枚举、形态不豁免、I3′ 空串≠缺失）；校准集 18→20 条（新增 cal-19/20 为 U4 回归，源自独立复核）；语料 gold 347→353（5 条复合 gold 按规则拆分）；数字口径未变。",
   "spec": "docs/design/v2.0/05-threshold-manifest.md",
   "stage": "pilot",
   "thresholds": {
@@ -38,7 +38,8 @@
         "exitLevel": 200,
         "pilot": 60,
         "source": "future-architecture §7.1（语料行）/ v2.0-p1 §3 D3",
-        "rollback": "pilot ≥60 为 D3 规模；出口级以本表为准"
+        "rollback": "pilot ≥60 为 D3 规模；出口级以本表为准",
+        "value": 200
       },
       "minNonRecordable": {
         "exitLevel": 50,
@@ -111,7 +112,7 @@
       "rollback": "不可回滚——红线"
     },
     "evidenceResolutionRate": {
-      "value": 1.0,
+      "value": 1,
       "source": "future-architecture §7.1",
       "rollback": "不可回滚"
     },
@@ -181,7 +182,7 @@
       "rollback": "扩表先对照 B1/B3 全量组合分布并在 REVIEW 记录"
     },
     "granularityRuleSet": {
-      "value": "granularity@v1",
+      "value": "granularity@v2",
       "source": "06 §1.1（两遍盲评 claim 重合仅 5.6% 的主因是粒度未定义）；校准集 pilot/p1a/granularity/calibration.jsonl",
       "rollback": "改规则必须升版本（granularity@v2）+ 重跑全部参考集与校准集，原成绩只读保留"
     }

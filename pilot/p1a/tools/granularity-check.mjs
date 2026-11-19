@@ -1,10 +1,10 @@
-// granularity-check.mjs —— 命题粒度规则 granularity@v1 的可执行校验
+// granularity-check.mjs —— 命题粒度规则 granularity@v2 的可执行校验
 // 规格：docs/design/v2.0/06-annotation-spec.md §1.1
 // 边界：只做规则判定与校准集校验；不评分、不改参考集、不写真相层。
 import { readFileSync } from 'node:fs';
 import { createHash } from 'node:crypto';
 
-export const RULESET_VERSION = 'granularity@v1';
+export const RULESET_VERSION = 'granularity@v2';
 
 // 归一化：全半角统一 → 去首尾空白与句末标点 → 折叠空白 → 小写（ASCII）
 export function normalizeText(input) {
@@ -116,15 +116,17 @@ export function splitHints(text) {
     }
   }
 
-  // S3：顿号列举 ≥2 个取值项（不限数值：支持 http、https 也算）
+  // S3：顿号列举 ≥2 个**带属性名**的取值项（"端口 8080、超时 30s"）
+  // U4 反向豁免：单属性多值枚举（"端口 8080、8081、8082"、"维护窗口是 2026-11-18、2026-11-19"）
+  //           是同一属性的一组取值，整体一条，不按项拆（审核 N2）；能力枚举（"支持 http、https"）仍拆。
   if (LIST_SPLIT_RE.test(s)) {
     const items = s.split(LIST_SPLIT_RE).map((i) => i.trim()).filter(Boolean);
     if (items.length >= 2) {
+      const labelled = items.filter((i) => /[\u4e00-\u9fa5a-z]{2,}\s*[:：]?\s*\d/iu.test(i) && !VALUE_TOKEN_LIST.some((t) => i === t));
       const valueItems = items.filter((i) => hasValueToken(i) || VALUE_TOKEN_LIST.some((t) => i.includes(t)));
-      // 首项常带主语前缀（"支持 http"），只要 ≥2 项可判真假即拆
-      if (valueItems.length >= 2 || (valueItems.length >= 1 && items.length >= 2 && PREDICATE_MARK_RE.test(s))) {
-        hits.push('S3');
-      }
+      const bareNumeric = items.filter((i) => /^\d/iu.test(i));
+      if (labelled.length >= 2) hits.push('S3');
+      else if (labelled.length === 0 && valueItems.length >= 2 && bareNumeric.length < 2) hits.push('S3');
     }
   }
 
@@ -161,6 +163,11 @@ export function countSplitParts(text) {
   if (!hits.some((h) => ['S1', 'S1b', 'S2', 'S3', 'S6b'].includes(h))) return isAclaim(s) ? 1 : 0;
   if (hits.includes('S6b')) return (s.match(/比/gu) ?? []).length;
   if (hits.includes('S3')) {
+    const labelled = s
+      .split(LIST_SPLIT_RE)
+      .map((i) => i.trim())
+      .filter((i) => /[\u4e00-\u9fa5a-z]{2,}\s*[:：]?\s*\d/iu.test(i) && !VALUE_TOKEN_LIST.some((t) => i === t));
+    if (labelled.length >= 2) return labelled.length;
     const items = s.split(LIST_SPLIT_RE).map((i) => i.trim()).filter(Boolean);
     return Math.max(2, items.length);
   }

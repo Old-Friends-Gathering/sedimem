@@ -29,8 +29,8 @@ function loadCalibration() {
     .map((l) => JSON.parse(l));
 }
 
-test('规则集版本冻结为 granularity@v1（改规则必须升版本并重跑参考集）', () => {
-  assert.equal(RULESET_VERSION, 'granularity@v1');
+test('规则集版本冻结为 granularity@v2（改规则必须升版本并重跑参考集）', () => {
+  assert.equal(RULESET_VERSION, 'granularity@v2');
 });
 
 test('归一化：全半角、空白、单位写法统一', () => {
@@ -135,9 +135,9 @@ test('单条诊断：超长与复合命题都要报出来', () => {
   assert.ok(compound.some((p) => p.startsWith('must-split')));
 });
 
-test('真实校准集：18 条全部通过且规则覆盖齐全', () => {
+test('真实校准集：20 条全部通过且规则覆盖齐全', () => {
   const records = loadCalibration();
-  assert.equal(records.length, 18);
+  assert.equal(records.length, 20);
   assert.deepEqual(evaluateCalibration(records), []);
   const hits = new Set(records.flatMap((r) => r.hits));
   for (const rule of ['S1', 'S2', 'S3', 'S4', 'S5', 'S6']) assert.ok(hits.has(rule), `缺 ${rule} 样本`);
@@ -153,6 +153,12 @@ test('真实校准集：18 条全部通过且规则覆盖齐全', () => {
   assert.ok(records.some((r) => r.text.includes('db-primary-01')));
   assert.ok(records.some((r) => /30\s*s/.test(r.text)));
   assert.ok(records.some((r) => r.text.includes('不支持')));
+  // 审核 N2 回归：U4 单属性多值枚举整体一条（端口列表 / 跨日窗口）
+  const u4 = records.filter((r) => r.verdict === 'valid-atomic' && /、/u.test(r.text));
+  assert.ok(u4.length >= 2, `U4 样本应 ≥2，实际 ${u4.length}`);
+  assert.equal(countSplitParts('端口 8080、8081、8082 都对外开放'), 1);
+  assert.equal(countSplitParts('维护窗口是 2026-11-18、2026-11-19'), 1);
+  assert.equal(countSplitParts('端口 8080、超时 30s'), 2);
 });
 
 test('校准集是可证伪的：篡改期望值必须报错', () => {

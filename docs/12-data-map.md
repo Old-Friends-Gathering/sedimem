@@ -58,7 +58,7 @@ P1a 的评测资产存放在仓库 [`pilot/p1a/`](../pilot/p1a/corpus/README.md)
 | 校验/基线/评分/复核/切分/盲评/守卫工具 | `pilot/p1a/tools/` | corpus-validate / baseline-runner / score / review / protocol-sim / split-corpus / annotation-pass / contract-guards | 已提交（PR #221、B2、B3、B4） |
 | 盲评包与裁决工作表 | `pilot/p1a/out/blind/`（gitignore） | 盲评包（剥离 gold 侧字段）+ 导入校验 + 一致性报告 + 裁决工作表；含自动盲评与裁决产物（r2：不要求人工标注） | 本地生成，不入库（含参考标注内容） |
 | 冻结配置 | `pilot/p1a/config/eval-manifest.json` | 门槛与配额（改数须版本化 diff + 签署） | 已提交（PR #220） |
-| 命题粒度规范与校准集 | `pilot/p1a/granularity/calibration.jsonl` + `pilot/p1a/tools/granularity-check.mjs` | 规则集 `granularity@v1`（原子性 S1–S6/U1–U3/A1–A3/I1–I3）+ 12 条校准样本；改规则须升版本并重跑参考集 | 已提交（G1） |
+| 命题粒度规范与校准集 | `pilot/p1a/granularity/calibration.jsonl` + `pilot/p1a/tools/granularity-check.mjs` | 规则集 `granularity@v2`（原子性 S1–S6/U1–U3/A1–A3/I1–I3）+ 20 条校准样本；改规则须升版本并重跑参考集 | 已提交（G1） |
 | 验证轨输出 | `pilot/p1a/out/`（gitignore） | 候选 jsonl / meta / 评分报告；本地可重建，不入库 | 每次运行带 runId |
 
 要求：baseline/score 每次运行输出必须带 runId 落盘（输入与结论成对保留）；语料场景删除/修改须在对应 REVIEW 留痕；pilot 阶段评分器不得输出 pass/fail（fail-closed）。

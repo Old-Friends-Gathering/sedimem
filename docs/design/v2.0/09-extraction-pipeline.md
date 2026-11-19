@@ -48,7 +48,7 @@ R0 范围确定 → R1 锁外抽取 → R2 结构校验 → R3 证据核对 → 
 - R1 的 prompt、schema 版本、模型标识、`configHash` 全部进 `provenance`；`extractionRunKey` 由 `(sourceId, sourceEpoch, rangeId, promptVersion, model, configHash)` 派生。
 - **跨 runKey 同 claim 仍然是 noop**（对齐 [01 §3.1](01-candidate-schema.md) R2-N1 判定边界）：`candidateId` 只含内容四元组，不含 model/configHash——模型或配置变了但 claim 规范化形式相同 → 命中同一 `candidateId` → 写入幂等 `noop`，`provenance` 以**首写**为准；只有 claim 变化才走修订路径（新 ID + `supersedes`）。实现者不得把「换模型重跑」写成修订。
 - 单来源候选/证据配额按 [adr-102](adr-102-cost-quota.md) 执行；超配额 → 该来源本阶段 `policy-blocked`，不静默截断（截断会让 precision 虚高）。
-- **命题粒度原子性（硬要求）**：R1 输出的每条候选必须是 [06 §1.1](06-annotation-spec.md) 定义的原子命题；返回含 S1/S2/S3 形态的复合命题（并列谓词、多主谓分句、属性并列列举）视为结构校验失败 → 候选落 `schema-invalid`，不得进入 R3/R4。粒度的归一化与同一性判定（I1–I3）由 `pilot/p1a/tools/granularity-check.mjs` 提供（规则集 `granularity@v1`），实现侧必须复用同一规则集，不得自造第二套。
+- **命题粒度原子性（硬要求）**：R1 输出的每条候选必须是 [06 §1.1](06-annotation-spec.md) 定义的原子命题；返回含 S1/S2/S3 形态的复合命题（并列谓词、多主谓分句、属性并列列举）视为结构校验失败 → 候选落 `schema-invalid`，不得进入 R3/R4。粒度的归一化与同一性判定（I1–I3）由 `pilot/p1a/tools/granularity-check.mjs` 提供（规则集 `granularity@v2`），实现侧必须复用同一规则集，不得自造第二套。
 
 ## 3. R3：证据存在（防线②的机判落地）
 
