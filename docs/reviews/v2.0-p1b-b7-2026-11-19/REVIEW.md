@@ -57,7 +57,21 @@
 
 ## R3：delta 复核
 
-（见下节，R3 结论回填）
+R3（独立实例，只读 + /tmp 探针实测）判定 **不通过：blocker 1 / major 3 / minor 5**——上一轮 11 项全部✅落地（逐条文件:行证据 + P1–P10 探针），但暴露「测试绿灯不覆盖的真实路径」缺陷：
+
+| 编号 | 严重度 | 发现 | 修订 |
+|---|---|---|---|
+| B1 | blocker | `commit()` 不校验最近决策：`rejected`/`hold` 候选可直接落真相层，九行矩阵在 R7 被绕过（探针：identity-unknown 拒绝后 commit 成功） | commit 前置校验：`lastDecision.decision !== 'accept'` → `E_NOT_ACCEPTED`；未消解 hold → `E_HOLD_UNRESOLVED`；accepted 无 supersede → `E_ILLEGAL_TRANSITION` |
+| B2 | major | 修订 accept 后旧候选不转 `superseded`、旧记录无失效标记，读取面双值并存 | commit 时按 `relations.supersedes` 给目标记录打 `superseded/supersededBy/supersededAt`，目标候选转 `superseded` |
+| B3 | major | audit-pending 死锁：审计先失败（真相层未追加）时 reconcile 走 `no-record` 且不解除 pending | 新增分支 `replay-allowed`：审计已恢复且真相层无记录 → 解除 pending 允许原位重放 |
+| B4 | major | `semanticKey` 未含 type/status/speechAct → 撤回/类型翻转被 `noop(already-committed)` 吞掉 | 语义键纳入 `type|status|speechAct`；撤回/类型变化产生新候选 |
+| B5 | minor | CAS 刷新中得出 reject 时被 `hold(cas-conflict)` 覆盖，拒绝语义被掩盖 | 刷新后决策非 accept → 直接采用该决策返回（`hold`/`rejected`） |
+| B6 | minor | `QUESTION_RE` 漏英文疑问式（无问号）与「完成了没/了么」 | 增补 `EN_QUESTION_RE`（is/are/did/does/can/has/was/were/will + finish/done/deploy 类）与 `了没|了么|没有呢` |
+| B7 | minor | 行 8 仅在首评 hold/reject 可达；首评 accept 且带可消解异议时走 `policy-accept` | 明确「无冲突即无纠正对象」：记 `objection-without-target` 且不改变 accept（读法张力在规格注释中说明） |
+| B8 | minor | `expected.evidenceHash == null` 时跳过 hash 维，CAS 降为二元 | 三元组必须显式：null 视为冲突 |
+| B9 | minor | `decide()` 无状态机守卫，终态候选可反复 decide | 入口守卫：终态 → `E_ILLEGAL_TRANSITION`；accepted 仅允许 supersede 修订 |
+
+修订后：pipeline 测试 25 → **34**（新增 T-C18..T-C25 覆盖 B1/B2/B3/B4/B7/B8/B9 真实路径）、assertion-checks 21 → **22**（B6 英文疑问式）；pilot 全量 **265/265**；quality 15/15、security 9/9、docs-drift 无 finding（44 文档）。
 
 ## 保留门禁
 

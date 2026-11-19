@@ -104,7 +104,9 @@ function checkSuggest(assertion, status, evidence) {
 
 // —— speechAct=complete（规格表第 4 行）——
 const USER_CONFIRM_MARKERS = ['已', '完成', 'done', 'confirm', '确认', '修好', '搞定'];
-const QUESTION_RE = /[?？]|吗|呢|是否/u;
+const QUESTION_RE = /[?？]|吗|呢|是否|了没|了么|没有呢/iu;
+// 英文疑问式（无问号也算提问）：is/are/did/does/can/has/have/was/were/will + 完成类词
+const EN_QUESTION_RE = /\b(?:is|are|did|does|can|could|has|have|was|were|will|would)\b[^.?!]*\b(?:finished|done|complete|completed|fixed|deployed)\b/iu;
 
 function checkComplete(claimObj, assertion, evidence) {
   if (assertion.speechAct !== 'complete') return [];
@@ -118,7 +120,8 @@ function checkComplete(claimObj, assertion, evidence) {
     const isTool = role === 'tool' || role.startsWith('tool:');
     // 用户确认必须是**确认式**表述：含确认词且不是疑问（「完成了吗」是提问，不构成完成证据）
     const quote = e.quote || '';
-    const isUserConfirm = role === 'user' && USER_CONFIRM_MARKERS.some((m) => quote.includes(m)) && !QUESTION_RE.test(quote);
+    const isQuestion = QUESTION_RE.test(quote) || EN_QUESTION_RE.test(quote);
+    const isUserConfirm = role === 'user' && USER_CONFIRM_MARKERS.some((m) => quote.includes(m)) && !isQuestion;
     if (isTool || isUserConfirm) continue;
     if (role === 'assistant') {
       violations.push({ check: 'speechAct-complete', reason: `evidence ${e.eventId}: 助手自称完成不得作为 complete 证据` });

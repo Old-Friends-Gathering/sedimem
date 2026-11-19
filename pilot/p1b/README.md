@@ -24,7 +24,7 @@
 常用命令：
 
 ```bash
-# 全部 p1b 测试（97 条：20 条 r2 保护测试 + 77 条真实现测试）
+# 全部 p1b 测试（105 条：20 条 r2 保护测试 + 85 条真实现测试）
 node --test pilot/p1b/tests/*.test.mjs
 
 # 只跑决策与断言机判
@@ -37,6 +37,7 @@ node --test pilot/p1b/tests/r2-decisions.test.mjs
 |---|---|
 | `tests/r2-decisions.test.mjs` | T-A1 恒 T2 无隐式提权 / T-A2 T2 可进 pack 但权限面拒绝 / T-A3 证据不可定位→failed / T-A4 跨 scope 泄漏 / T-A5 注入 / **T-A5b 脏上下文+干净 quote 仍判注入** / T-A6 未决冲突 hold / T-A19 断言机判四类反例 |
 | `tests/r2-corrections.test.mjs` | T-A7 直接更正与 asOf 回溯 / T-A8 「先别改」→ retraction / T-A9 引用与助手自称不覆盖 / T-A10 撤销 epoch 不重新采集 / T-A17 决策后追加前撤销→cancelled |
+| `tests/pipeline.test.mjs` | 决策矩阵 9 行真实路径（证据/scope/注入/身份/断言/冲突/配额/纠正）、R7（收据幂等/epoch 重查/CAS 三含 hash/刷新采用新决策/audit-pending 阻塞与重放/对账三分支/supersede 生效/终态守卫） |
 | `tests/r2-recovery.test.mjs` | T-A11 同 runKey 重放 noop / T-A12 CAS 有限刷新后 hold / T-A13 追加失败重试 → recovery-required **且禁止自动重试** / T-A14 成本配额与目的地白名单 / T-A15 结构化字符串注入不改变行为 / T-A16 三事件缺一不出结论 / T-A18 并发 accept 走 CAS 冲突→刷新消解 |
 
 ## 变异自检（09 §10.2）

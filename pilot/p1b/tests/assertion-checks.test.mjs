@@ -224,3 +224,13 @@ test('speechAct=complete：用户明确确认「已完成，确认」构成证�
   });
   assert.equal(r.ok, true);
 });
+
+test('speechAct=complete：英文疑问式（无问号）也不算确认（B6 回归）', () => {
+  for (const q of ['is everything finished', 'did you complete the deploy', '完成了没有呢']) {
+    const r = checkAssertion({
+      claim: claim({ type: 'task-state', assertion: { speechAct: 'complete', about: 'x' } }),
+      evidence: [ev({ role: 'user', quote: q })],
+    });
+    assert.equal(r.ok, false, `"${q}" 是提问，不应算确认`);
+  }
+});

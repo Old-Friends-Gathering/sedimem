@@ -62,6 +62,9 @@ export function semanticKey(meta) {
     a.subject ?? '',
     a.predicate ?? '',
     String(a.value ?? ''),
+    meta.type ?? '',
+    meta.status ?? '',
+    a.speechAct ?? '',
     normalizeClaim(meta.claimText ?? ''),
   ].join('\u0000');
 }
@@ -244,9 +247,14 @@ export function createPipeline({
     return { decision: 'accept', reason: correctionApplied ? 'correction-applied' : 'policy-accept', rulesHit };
   }
 
+  const TERMINAL = new Set(['rejected', 'failed', 'cancelled', 'superseded']);
+
   function decide(candidateId, ctx = {}) {
     const c = candidates.get(candidateId);
     if (!c) throw new Error(`E_CANDIDATE_NOT_FOUND:${candidateId}`);
+    // 01 §2：终态禁止任何迁出；accepted 只允许经 supersede 修订
+    if (TERMINAL.has(c.state)) throw new Error(`E_ILLEGAL_TRANSITION:${c.state}`);
+    if (c.state === 'accepted' && !ctx.objection?.resolvable) throw new Error('E_ILLEGAL_TRANSITION:accepted');
 
     const decisionBase = {
       opId: ctx.opId ?? null,
@@ -260,6 +268,9 @@ export function createPipeline({
     // 行 8：异议可消解 → 生成 relations 后**真正重入**矩阵（行 1–7 全量重评）
     let r = evaluate(c);
     let correctionApplied = false;
+    if (ctx.objection?.resolvable && r.decision === 'accept') {
+      r.rulesHit.push('objection-without-target');
+    }
     if ((r.decision === 'hold' || r.decision === 'reject') && ctx.objection?.resolvable) {
       correctionApplied = true;
       c.meta.relations = [
@@ -300,6 +311,7 @@ export function createPipeline({
       c.state = 'pending'; // accept 不等于落库：提交点仍是 R7
     }
 
+    c.lastDecision = { decision: r.decision, reason: r.reason, at: clock() };
     auditOf({ kind: 'decision', candidateId, decision: r.decision, reason: r.reason });
     return { ...decisionBase, decision: r.decision, reason: r.reason, rulesHit: r.rulesHit, ...(r.violations ? { violations: r.violations } : {}) };
   }
@@ -319,6 +331,17 @@ export function createPipeline({
       throw new Error('E_AUDIT_PENDING');
     }
 
+    // 矩阵约束 R7：未被 accept 的候选不得落真相层（09 §6 命中即停）
+    if (!c.lastDecision || c.lastDecision.decision !== 'accept') {
+      throw new Error(`E_NOT_ACCEPTED:${c.lastDecision?.decision ?? 'none'}`);
+    }
+    if (c.hold && !(c.meta.relations ?? []).some((rel) => rel.kind === 'supersedes')) {
+      throw new Error('E_HOLD_UNRESOLVED');
+    }
+    if (c.state === 'accepted' && !(c.meta.relations ?? []).some((rel) => rel.kind === 'supersedes')) {
+      throw new Error('E_ILLEGAL_TRANSITION:accepted');
+    }
+
     // 锁内重查 epoch（撤销优先于 CAS）
     if (revoked.has(c.meta.sourceEpoch)) {
       c.state = 'cancelled';
@@ -332,8 +355,12 @@ export function createPipeline({
       let ok = casMatch(c, expected);
       while (!ok && refreshed < cfg.maxCasRefresh) {
         refreshed += 1;
-        // 真实刷新：重跑决策，版本递增，然后重新比对
-        decide(candidateId, { opId });
+        // 真实刷新：重跑决策（可能得出新的 reject/hold，须采用），版本递增，再比对
+        const re = decide(candidateId, { opId });
+        if (re.decision !== 'accept') {
+          auditOf({ kind: 'commit', candidateId, opId, reason: `refresh-${re.decision}`, refreshed });
+          return { kind: re.decision === 'hold' ? 'hold' : 'rejected', reason: re.reason, refreshed };
+        }
         c.meta.version += 1;
         ok = casMatch(c, expected);
       }
@@ -362,12 +389,25 @@ export function createPipeline({
       evidenceHash: c.meta.evidenceHash ?? null,
       claim: c.meta.claimText,
       scope: c.meta.scope,
+      type: c.meta.type,
+      status: c.meta.status,
       assertion: c.meta.assertion,
       relations: c.meta.relations ?? [],
       trust: 'T2',
       committedAt: clock(),
     };
     truth.push(record);
+    // B2：relations.supersedes 必须真正生效（01 §2 accepted──supersede──▶superseded）
+    for (const rel of record.relations.filter((x) => x.kind === 'supersedes' && x.targetRecordId)) {
+      const target = truth.find((t) => t.recordId === rel.targetRecordId);
+      if (target) {
+        target.superseded = true;
+        target.supersededBy = record.recordId;
+        target.supersededAt = clock();
+        const tc = candidates.get(target.candidateId);
+        if (tc) tc.state = 'superseded';
+      }
+    }
     receipts.set(opId, { recordId: record.recordId, revision: record.revision, evidenceHash: record.evidenceHash });
     c.state = 'accepted';
     return { kind: 'committed', recordId: record.recordId, revision: record.revision };
@@ -376,9 +416,8 @@ export function createPipeline({
   function casMatch(c, expected) {
     const versionOk = expected.candidateVersion === c.meta.version;
     const revOk = expected.expectedTruthRevision === truthRevision;
-    const hashOk = expected.evidenceHash === undefined || expected.evidenceHash === null
-      ? true
-      : expected.evidenceHash === (c.meta.evidenceHash ?? null);
+    // 三元组的 hash 维必须显式给出（null 视为冲突，不允许降维成二元 CAS）
+    const hashOk = expected.evidenceHash != null && expected.evidenceHash === (c.meta.evidenceHash ?? null);
     return versionOk && revOk && hashOk;
   }
 
@@ -435,7 +474,15 @@ export function createPipeline({
     reconcile: (opId) => {
       if (receipts.has(opId)) return { kind: 'noop-receipt', recordId: receipts.get(opId).recordId };
       const found = truth.find((t) => t.opId === opId);
-      if (!found) return { kind: 'recovery-required', reason: 'no-record-for-op' };
+      if (!found) {
+        // 审计先行失败（真相层未追加）：解除 pending，允许原位重放（09 §8 补偿重放）
+        if (auditPending.has(opId)) {
+          auditPending.delete(opId);
+          auditOf({ kind: 'reconcile', opId, reason: 'audit-recovered-replay-allowed' });
+          return { kind: 'replay-allowed' };
+        }
+        return { kind: 'recovery-required', reason: 'no-record-for-op' };
+      }
       const dup = truth.filter((t) => t.opId === opId);
       if (dup.length > 1) return { kind: 'recovery-required', reason: 'duplicate-records' };
       receipts.set(opId, {

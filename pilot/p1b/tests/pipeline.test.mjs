@@ -345,5 +345,109 @@ test('T-C17 真相层记录必须带 opId / relations / candidateVersion 且 tru
   assert.equal(Array.isArray(rec.relations), true);
   assert.equal(rec.candidateVersion >= 1, true);
   assert.equal(rec.trust, 'T2');
-  assert.equal(semanticKey({ scope: rec.scope, assertion: rec.assertion, claimText: rec.claim }), rec.key);
+  assert.equal(
+    semanticKey({ scope: rec.scope, type: rec.type, status: rec.status, assertion: rec.assertion, claimText: rec.claim }),
+    rec.key,
+  );
+});
+
+// —— R3 审核 B1–B9 回归（真实路径，无后门） ——
+test('T-C18 R7 不得绕过矩阵：rejected 候选 commit 必须被拒（B1）', () => {
+  const fx = baseFixture();
+  fx.events.set('S1-m001', { eventId: 'S1-m001', role: null, ts: '', text: USER_TEXT });
+  const p = createPipeline(fx);
+  const c = p.ingest({ runKey: 'r1', claims: [claimOf()] });
+  assert.equal(p.decide(c[0].candidateId).reason, 'identity-unknown');
+  assert.throws(() => p.commit(c[0].candidateId, { opId: 'op-1' }), /E_NOT_ACCEPTED/);
+  assert.equal(p.truthRecords().length, 0);
+});
+
+test('T-C18b hold 候选在未消解前不得提交（B1）', () => {
+  const p = createPipeline(baseFixture());
+  const a = p.ingest({ runKey: 'r1', claims: [claimOf({ value: '8080' })] });
+  p.decide(a[0].candidateId);
+  p.commit(a[0].candidateId, { opId: 'op-0' });
+  const b = p.ingest({ runKey: 'r2', claims: [claimOf({ claim: '端口是 9090', value: '9090', quote: '端口是 8080' })] });
+  assert.equal(p.decide(b[0].candidateId).decision, 'hold');
+  assert.throws(() => p.commit(b[0].candidateId, { opId: 'op-1' }), /E_NOT_ACCEPTED|E_HOLD_UNRESOLVED/);
+  assert.equal(p.truthRecords().length, 1);
+});
+
+test('T-C19 修订生效后旧记录标记 superseded、旧候选转 superseded（B2）', () => {
+  const p = createPipeline(baseFixture());
+  const a = p.ingest({ runKey: 'r1', claims: [claimOf({ value: '8080' })] });
+  p.decide(a[0].candidateId);
+  const first = p.commit(a[0].candidateId, { opId: 'op-1' });
+
+  const b = p.ingest({ runKey: 'r2', claims: [claimOf({ claim: '端口是 9090', value: '9090', quote: '端口是 8080' })] });
+  p.decide(b[0].candidateId);
+  const r = p.decide(b[0].candidateId, { objection: { resolvable: true, targetRecordId: first.recordId } });
+  assert.equal(r.reason, 'correction-applied');
+  p.commit(b[0].candidateId, { opId: 'op-2' });
+
+  const oldRec = p.truthRecords().find((t) => t.recordId === first.recordId);
+  assert.equal(oldRec.superseded, true);
+  assert.equal(p.get(a[0].candidateId).state, 'superseded');
+});
+
+test('T-C20 审计先失败 → reconcile 解除 pending 允许重放（B3）', () => {
+  const p = createPipeline(baseFixture());
+  const c = p.ingest({ runKey: 'r1', claims: [claimOf()] });
+  p.decide(c[0].candidateId);
+  p.failAuditOnOp('op-1');
+  assert.throws(() => p.commit(c[0].candidateId, { opId: 'op-1' }), /E_AUDIT_PENDING/);
+  assert.equal(p.reconcile('op-1').kind, 'replay-allowed');
+  assert.deepEqual(p.auditPendingOps(), []);
+  const ok = p.commit(c[0].candidateId, { opId: 'op-1' });
+  assert.equal(ok.kind, 'committed');
+});
+
+test('T-C21 语义键含 status/type：撤回或类型变化不得被 noop 吞掉（B4）', () => {
+  const p = createPipeline(baseFixture());
+  const a = p.ingest({ runKey: 'r1', claims: [claimOf()] });
+  p.decide(a[0].candidateId);
+  p.commit(a[0].candidateId, { opId: 'op-1' });
+
+  const retract = p.ingest({
+    runKey: 'r2',
+    claims: [claimOf({ status: 'retracted', speechAct: 'retract' })],
+  });
+  assert.equal(retract[0].created, 1, '撤回是语义变化，必须产生新候选而不是 noop');
+});
+
+test('T-C22 终态候选不得再 decide（B9）', () => {
+  const fx = baseFixture();
+  fx.events.set('S1-m001', { eventId: 'S1-m001', role: null, ts: '', text: USER_TEXT });
+  const p = createPipeline(fx);
+  const c = p.ingest({ runKey: 'r1', claims: [claimOf()] });
+  p.decide(c[0].candidateId); // identity-unknown → failed
+  assert.throws(() => p.decide(c[0].candidateId), /E_ILLEGAL_TRANSITION/);
+});
+
+test('T-C23 已 accepted 候选的再次 decide 只允许走 supersede 修订（B9）', () => {
+  const p = createPipeline(baseFixture());
+  const c = p.ingest({ runKey: 'r1', claims: [claimOf()] });
+  p.decide(c[0].candidateId);
+  p.commit(c[0].candidateId, { opId: 'op-1' });
+  assert.throws(() => p.decide(c[0].candidateId), /E_ILLEGAL_TRANSITION/);
+});
+
+test('T-C24 CAS hash 维不得降级（null 视为冲突）（B8）', () => {
+  const p = createPipeline(baseFixture());
+  const c = p.ingest({ runKey: 'r1', claims: [claimOf()] });
+  p.decide(c[0].candidateId);
+  const r = p.commit(c[0].candidateId, {
+    opId: 'op-1',
+    expected: { candidateVersion: 1, evidenceHash: null, expectedTruthRevision: 0 },
+  });
+  assert.equal(r.kind, 'hold');
+  assert.equal(r.reason, 'cas-conflict');
+});
+
+test('T-C25 异议无纠正对象时记 objection-without-target 但不改变 accept（B7）', () => {
+  const p = createPipeline(baseFixture());
+  const c = p.ingest({ runKey: 'r1', claims: [claimOf()] });
+  const r = p.decide(c[0].candidateId, { objection: { resolvable: true } });
+  assert.equal(r.decision, 'accept');
+  assert.equal(r.rulesHit.includes('objection-without-target'), true);
 });
