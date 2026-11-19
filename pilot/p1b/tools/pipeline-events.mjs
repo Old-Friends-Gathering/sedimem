@@ -20,8 +20,7 @@ export function createEventLog({ clock } = {}) {
         throw new Error(`E_EVENT_KIND:${kind}`);
       }
       for (const field of REQUIRED_FIELDS[kind]) {
-        // usage.amountCny 允许 undefined/null（= 成本未知）；runStatus 计入 missing，绝不填 0。
-        if (kind === 'usage' && field === 'amountCny') continue;
+        // usage.amountCny 必填键；成本未知用 null 表达（runStatus 计入 missing，绝不填 0）。
         if (payload[field] === undefined) {
           throw new Error(`E_EVENT_FIELDS:${field}`);
         }

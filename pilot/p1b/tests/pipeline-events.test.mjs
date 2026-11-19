@@ -115,16 +115,22 @@ test('usage.amountCny = null → counts as usage missing, never 0', () => {
   assert.equal(r.missing.includes(0), false);
 });
 
-test('usage with amountCny key omitted → 允许写入但 runStatus 判 missing（同 null 语义）', () => {
+test('usage 缺 amountCny 键 → E_EVENT_FIELDS:amountCny（成本未知须显式 null）', () => {
   const log = createEventLog({ clock });
   const { amountCny, ...rest } = fullUsage();
   assert.equal(amountCny, 0.42);
+  assert.throws(() => log.record('usage', rest), /E_EVENT_FIELDS:amountCny/);
+});
+
+test('usage amountCny=null → 记入 missing 且不填 0', () => {
+  const log = createEventLog({ clock });
   log.record('extraction', fullExtraction());
   log.record('decision', fullDecision());
-  assert.doesNotThrow(() => log.record('usage', rest));
+  log.record('usage', { ...fullUsage(), amountCny: null });
   const st = runStatus(log, 'run-1');
   assert.equal(st.observability, 'missing');
   assert.ok(st.missing.includes('usage'));
+  assert.equal(log.all().some((e) => e.kind === 'usage' && e.amountCny === 0), false);
 });
 
 // ---------- 4. policy-blocked ----------
@@ -198,12 +204,11 @@ test('missing extraction field throws E_EVENT_FIELDS:<field>', () => {
   );
 });
 
-test('usage 缺 amountCny 不抛错但计入 missing（成本未知不得填 0）', () => {
+test('usage amountCny=null 与缺失键口径一致：都不产生 0', () => {
   const log = createEventLog({ clock });
-  const { amountCny, ...rest } = fullUsage();
   log.record('extraction', fullExtraction());
   log.record('decision', fullDecision());
-  assert.doesNotThrow(() => log.record('usage', rest));
+  log.record('usage', { ...fullUsage(), amountCny: null });
   const st = runStatus(log, 'run-1');
   assert.equal(st.observability, 'missing');
   assert.ok(st.missing.includes('usage'));
