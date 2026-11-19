@@ -48,6 +48,8 @@ function overlapScore(a, b) {
   return n;
 }
 
+export const TARGET_MIN_SCORE = 2;
+
 function pickTarget(truth, { text, scope }) {
   const tb = bigrams(text);
   const nums = numbersIn(text);
@@ -66,7 +68,8 @@ function pickTarget(truth, { text, scope }) {
       bestScore = score;
     }
   }
-  if (best) return { target: best, matcher: 'exact' };
+  // 阈值 ≥2：单一 bigram 偶然重合不足以决定覆盖目标
+  if (best && bestScore >= TARGET_MIN_SCORE) return { target: best, matcher: 'exact' };
 
   // 退化：缺 predicate 时按 scope + 文本重合
   let degradedHit = null;
@@ -78,7 +81,7 @@ function pickTarget(truth, { text, scope }) {
       degradedScore = score;
     }
   }
-  if (degradedHit) return { target: degradedHit, matcher: 'degraded' };
+  if (degradedHit && degradedScore >= TARGET_MIN_SCORE) return { target: degradedHit, matcher: 'degraded' };
   return { target: null, matcher: 'exact' };
 }
 
@@ -87,17 +90,79 @@ function pickTarget(truth, { text, scope }) {
  *   { kind, targetRecordId, newValue, matcher, reason }
  * kind ∈ CORRECTION_KINDS ∪ {null}
  */
+// M4：newValue 只在更正标记之后的窗口内取数，并剔除被否定/被对照的值与旧值本身
+export const CORRECTION_WINDOW = 40;
+
+/** 找出更正标记的位置（取最靠后一个，接近真实修订表述） */
+function markerIndex(t) {
+  const re = /改成|改为|应为|应该改为|纠正为|correct(?:ed)?\s+to|should\s+be|change\s+to/giu;
+  let idx = -1;
+  for (const m of t.matchAll(re)) idx = m.index;
+  return idx;
+}
+
+/**
+ * 在标记窗口内取新值：先排除旧值与「而不是/not」之后的数字。
+ * @param {string} t 文本
+ * @param {string|null} existingValue 既有值
+ * @returns {string|null}
+ */
+const KEEP_RE = /保持|不变|仍用|继续用|维持|still|keep\s+(?:it\s+)?(?:at|as)/giu;
+
+/**
+ * 文本是否声明「既有的这个值保持不变」（示例：「端口保持 8080」「8080 不变」）。
+ * @param {string} t 文本
+ * @param {string} v 既有值
+ * @returns {boolean}
+ */
+export function isKept(t, v) {
+  const s = String(t ?? '');
+  const target = String(v ?? '');
+  if (!s || !target) return false;
+  const idx = s.indexOf(target);
+  if (idx < 0) return false;
+  const before = s.slice(Math.max(0, idx - 12), idx);
+  const after = s.slice(idx + target.length, idx + target.length + 8);
+  return KEEP_RE.test(before) || KEEP_RE.test(after);
+}
+
+export function pickNewValue(t, existingValue) {
+  const idx = markerIndex(t);
+  const windowText = idx >= 0 ? t.slice(idx, idx + CORRECTION_WINDOW) : t;
+  const negated = new Set();
+  const negRe = /而不是|不是|而非|not|instead\s+of/giu;
+  for (const m of windowText.matchAll(negRe)) {
+    const tail = windowText.slice(m.index + m[0].length, m.index + m[0].length + CORRECTION_WINDOW);
+    for (const n of numbersIn(tail)) negated.add(n);
+  }
+  const inWindow = numbersIn(windowText).filter((n) => n !== existingValue && !negated.has(n));
+  if (inWindow.length) return inWindow[0];
+  // 窗口内无可用值时退化到全文（仍排除旧值与被否定值）
+  const fallback = numbersIn(t).filter((n) => n !== existingValue && !negated.has(n));
+  return fallback[0] ?? null;
+}
+
 export function matchCorrection({ text, truth = [], scope = null, role = 'user' } = {}) {
   const t = String(text ?? '');
   if (!t.trim()) return { kind: null, targetRecordId: null, newValue: null, matcher: 'exact', reason: '空文本' };
 
   const { target, matcher } = pickTarget(truth, { text: t, scope });
+  // m3：目标须有足够置信（打分 ≥2），否则视为无目标（避免 supersede 同名错记录）
   const targetRecordId = target?.recordId ?? null;
-  const nums = numbersIn(t);
   const existingValue = target?.assertion?.value != null ? String(target.assertion.value) : null;
-  const newValue = nums.find((n) => n !== existingValue) ?? null;
+  // N3 补：文本声明「保持/不变/仍用 <既有值>」时不得覆盖该记录（无人值守 fail-closed，交人工复核）
+  if (existingValue && isKept(t, existingValue)) {
+    if (RETRACTION_RE.test(t)) {
+      return { kind: 'retraction', targetRecordId, newValue: null, matcher, confidence: 0.9, reason: '撤回式：既有值保持不变' };
+    }
+    // 非撤回式但显式保持 → 不覆盖、不产候选（交人工复核）
+    return { kind: null, targetRecordId: null, newValue: null, matcher: 'exact', confidence: 0.5, reason: '既有值被显式保持' };
+  }
+  const newValue = pickNewValue(t, existingValue);
 
-  const base = { targetRecordId, newValue, matcher };
+  // m5：确定性置信度（exact 依赖 predicate/值精确命中，degraded 走 text+about 退化）
+  const confidence = matcher === 'exact' ? 0.9 : 0.6;
+  const base = { targetRecordId, newValue, matcher, confidence };
 
   // 1) retraction：撤回式且没有可用的新值
   if (RETRACTION_RE.test(t) && newValue === null) {

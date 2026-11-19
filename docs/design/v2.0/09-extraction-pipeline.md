@@ -173,6 +173,9 @@ R0 范围确定 → R1 锁外抽取 → R2 结构校验 → R3 证据核对 → 
 - **证据绑定（审核 M3）**：`correction` 的新值必须出现在某条证据引文中（纠正消息本身先入 events/snapshots）；否则 `reject(evidence-unsupported, detail=new-value-not-in-evidence)`，不得把新值挂在旧引文上进真相层。
 - **newValue 取窗口（审核 M4）**：优先取更正标记后 40 字符窗口内的数字（排除旧值），避免抓到句中无关数值；`confidence` 为确定性值（exact 0.9 / degraded 0.6），不做概率推断。
 - **目标阈值（审核 m3）**：`pickTarget` 需打分 ≥2（文本重合 + 值命中）才认定目标，低于阈值视为无目标。
+- **显式保持不覆盖（R2-N3）**：「保持/不变/仍用/继续用/维持 <既有值>」出现在既有值附近时，不得覆盖该记录（撤回式「别改」归 `retraction`；其余不产候选、不写真相层，交人工复核）。
+- **数字口径（R2-N1/N2）**：新值绑定证据用**数值集合**精确比较（禁止字符串子串——`8080` 不得证明 `80`）；中文数字（「八千零八十」）与阿拉伯数字等价，比较前统一归一，避免中文引文被误判值缺失。
+- **可消解方向统一（R2-N7）**：`quote-value-mismatch` 与 `value-conflict` 同口径——有更正标记且**全部声明数字**在文本中出现才可消解；仅部分出现即不可消解（hold，交人工）。
 - **无人值守部署（审核 m6）**：`cross-scope` 纠正要求管线配置 `sourceScope`；未配置时 fail-closed 拒绝（`cross-scope-leak / source-scope-unbound`），不靠伪造 `${scope}#foreign` 通过行 2。
 - 入口 `pipeline.correct({text, scope, role, evidence, opId})`：matcher → 七类候选形态（`correction` 带 `relations.supersedes` 且 `status=active`；`retraction` 带 `status=retracted`；`quote` 的 `assertion.speaker=quoted`；`assistant-claim` 为 `task-state/not-done` 且不覆盖既有值；`tool-failure` 为 `task-state/not-done`；`cross-scope` 的 `scope` 与来源绑定不同，由行 2 拒绝）→ `ingest` → `decide`。提交仍由调用方显式 `commit(opId)`。
 - 带 `relations.supersedes` 的候选被接受时，`reason` 必须如实为 `correction-applied`（不是 `policy-accept`），以便回执/看板区分「首次接纳」与「修订生效」。

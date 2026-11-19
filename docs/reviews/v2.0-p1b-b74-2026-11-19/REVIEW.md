@@ -46,6 +46,21 @@
 - `correct()` 的 `quote`/`assistant-claim`/`tool-failure` 三类只落「不覆盖既有值」的候选形态，其真实语义覆盖仍需 B7.6 用参考集验证。
 - 矩阵九行的**语义正确性**仍依赖 R4 生成器与 R4.5 断言机判两条独立实现；二者同源偏差须在 REVIEW 声明。
 
-## R2 delta 复核
+## R2 delta 复核（r2-b74-delta）
 
-（待填）
+- 结论：**不通过（blocker 0 / major 4 / minor 4）** —— 其中 3 条是「虚报落地」：M4（`corrections.mjs:96-98` 仍是 `nums.find(...)`，`CORRECTION_WINDOW` 全仓 0 命中）、m3（`pickTarget` 无阈值）、m5（无 `confidence`）在修订清单与规格里写了、代码没有实现。
+
+| 编号 | 严重度 | 发现 | 修订 |
+|---|---|---|---|
+| N4 | major | M4/m3/m5 假落地，规格与代码漂移 | 补实现：`CORRECTION_WINDOW=40` + `pickNewValue()`（标记窗口内取数、剔除被否定值与旧值）、`TARGET_MIN_SCORE=2`、`confidence`（exact 0.9 / degraded 0.6）；新增 C-10~C-13 |
+| N1 | major | M1 与 `quote-value-mismatch` 叠加：引文用中文数字「八千零八十」+ 无关日期 → 误判值缺失 → 永久 hold，无消解路径 | `objection.mjs` 新增 `zhToNumber()` 并把中文数字并入 `numbersIn()`；新增 R4-8、T-C33 |
+| N2 | major | M3 用 `quote.includes(newValue)` 子串判定：旧引文「配置是 8080」证明新值 80 → 真相层被改错 | 改为数值集合精确匹配（`numbersIn` 全包含），新增 T-C32 |
+| N3 | major | M4 未修的直接后果：抓到被否定值 / 无关字段值 | `pickNewValue()` 否定式剔除（而不是/不是/而非/not/instead of）+ 旧值排除；另加 `isKept()`：文本显式「保持/不变/仍用」既有值时不得覆盖（fail-closed 交人工） |
+| N5 | minor | reject 路径不带 `objectionKind` | 拒绝路径同样标注；新增 T-C34 |
+| N6 | minor | T-C31 缺行 4、行 8 | 补行 4（role 为 null 的真实信号）；行 8 由 T-C8/T-C27 覆盖并在此注明 |
+| N7 | minor | `quote-value-mismatch` 可消解方向与 `value-conflict` 相反（要求「全部缺失」） | 统一为「更正标记 + 全部声明数字在文本中出现」；新增 R4-9 |
+| N8 | minor | `get()` 不透出决策/hold | `get()` 返回 `lastDecision` 与 `hold` |
+
+修订后验证：p1b **138 条**、p1a 158 条、合计 **296 条全绿**；quality 15/15、security 9/9、docs-drift 无 finding（45 文档）。
+
+保留门禁不变：本批只证明异议与纠正链路的机制正确；参考集重跑与七类严重错误零容忍复核属 B7.6。

@@ -10,7 +10,7 @@
 //   - accept 不提权：truth 记录恒 T2，trustWrites() 恒空。
 import { createHash } from 'node:crypto';
 import { resolveEvidence } from './evidence.mjs';
-import { generateObjection } from './objection.mjs';
+import { generateObjection, numbersIn } from './objection.mjs';
 import { matchCorrection } from './corrections.mjs';
 import { checkAssertion } from './assertion-checks.mjs';
 
@@ -150,7 +150,15 @@ export function createPipeline({
 
   const get = (candidateId) => {
     const c = candidates.get(candidateId);
-    return c ? { candidateId, state: c.state, claim: c.meta.claim, meta: c.meta } : null;
+    if (!c) return null;
+    return {
+      candidateId,
+      state: c.state,
+      claim: c.meta.claim,
+      meta: c.meta,
+      lastDecision: c.meta.lastDecision ?? null,
+      hold: c.meta.hold ?? null,
+    };
   };
 
   const isInjection = (text) => INJECTION_PATTERNS.some((re) => re.test(text));
@@ -345,7 +353,13 @@ export function createPipeline({
 
     // M3：修订/撤回必须让新值出现在证据引文中（纠正消息自身应是事件），否则证据悬空
     if (m.kind === 'correction') {
-      const bound = (evidence ?? []).some((e) => String(e.quote ?? '').includes(String(m.newValue ?? '')));
+      // N2：数值集合精确匹配（禁子串——旧引文「配置是 8080」不得证明新值 80）
+      const newNums = numbersIn(String(m.newValue ?? ''));
+      const bound = (evidence ?? []).some((e) => {
+        const quoteNums = numbersIn(String(e.quote ?? ''));
+        if (newNums.size === 0) return false;
+        return [...newNums].every((n) => quoteNums.has(n));
+      });
       if (!bound) {
         return { kind: 'correction', matcher: m.matcher, decision: 'reject', reason: 'evidence-unsupported', detail: 'new-value-not-in-evidence' };
       }
@@ -384,14 +398,19 @@ export function createPipeline({
       r.rulesHit.push('objection-without-target');
     }
     // M1：不可消解异议必须拦住 accept（规格 §5「不可消解 → hold(unresolved)」）
-    if (objection && objection.resolvable === false && r.decision === 'accept') {
-      r = {
-        row: 6,
-        decision: rowDecision(6),
-        reason: 'unresolved',
-        rulesHit: [...r.rulesHit, 'objection-unresolvable'],
-        objectionKind: objection.kind,
-      };
+    if (objection && objection.resolvable === false) {
+      if (r.decision === 'accept') {
+        r = {
+          row: 6,
+          decision: rowDecision(6),
+          reason: 'unresolved',
+          rulesHit: [...r.rulesHit, 'objection-unresolvable'],
+          objectionKind: objection.kind,
+        };
+      } else {
+        // N5：拒绝路径同样标注异议类型，便于审计「因何被拒」
+        r = { ...r, objectionKind: objection.kind };
+      }
     }
     if ((r.decision === 'hold' || r.decision === 'reject') && objection?.resolvable) {
       c.meta.relations = [

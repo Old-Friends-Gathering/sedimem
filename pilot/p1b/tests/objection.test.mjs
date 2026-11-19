@@ -64,3 +64,32 @@ test('R4-7 生成器不接受调用方布尔开关（生产入口不得注入）
   const r = generateObjection({ claim: claimOf({ claim: '端口是 8080', value: '8080', quote: '端口是 8080' }), truth, objection: { resolvable: true } });
   assert.equal(r.ignoredCallerObjection, true, '调用方 objection 必须被忽略并声明');
 });
+
+// —— R2 delta 回归（N1 中文数字、N7 可消解方向）——
+
+test('R4-8 N1 引文用中文数字（八千零八十）不得误判值缺失', () => {
+  const claim = {
+    claim: '端口是 8080',
+    scope: 'repo:demo',
+    assertion: { subject: 'deploy-service', predicate: 'port', value: '8080' },
+    evidence: [{ eventId: 'S1-m1', quote: '2026-11-19 部署完成，端口是八千零八十', ts: '2026-11-19T01:00:00Z' }],
+  };
+  const r = generateObjection({ claim, truth: [], sourceScope: 'repo:demo' });
+  assert.equal(r.objection, null);
+});
+
+test('R4-9 N7 可消解方向与 value-conflict 统一：部分数字在正文出现也可消解', () => {
+  const claim = {
+    claim: '端口应为 8080、超时 30',
+    scope: 'repo:demo',
+    assertion: { subject: 'deploy-service', predicate: 'port', value: '8080' },
+    evidence: [{ eventId: 'S1-m1', quote: '端口是 8081', ts: '2026-11-19T01:00:00Z' }],
+  };
+  const truth = [
+    { recordId: 'tr-1', scope: 'repo:demo', claim: '端口是 8080', assertion: { subject: 'deploy-service', predicate: 'port', value: '8080' } },
+  ];
+  const r = generateObjection({ claim, truth, sourceScope: 'repo:demo' });
+  // 引文缺 8080 → quote-value-mismatch；正文含更正标记且声明值在文本出现 → 可消解
+  assert.equal(r.objection?.kind, 'quote-value-mismatch');
+  assert.equal(r.objection?.resolvable, true);
+});

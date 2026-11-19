@@ -11,6 +11,43 @@ const NOT_BUT_RE = /不是[^。；;\n]{0,20}(而是|应|改成|改为)/u;
 
 const DIGITS_RE = /\d+(?:\.\d+)?/gu;
 
+const ZH_DIGITS = { 零: 0, 〇: 0, 一: 1, 二: 2, 两: 2, 三: 3, 四: 4, 五: 5, 六: 6, 七: 7, 八: 8, 九: 9 };
+const ZH_UNITS = { 十: 10, 百: 100, 千: 1000, 万: 10000 };
+
+/**
+ * 中文数字串转阿拉伯数字（支持 三十 / 一百二十 / 八千零八十；不支持小数与「亿」级）。
+ * @param {string} zh 中文数字串
+ * @returns {number|null} 无法解析返回 null
+ */
+export function zhToNumber(zh) {
+  const s = String(zh ?? '');
+  if (!s) return null;
+  let total = 0;
+  let section = 0;
+  let digit = 0;
+  let seen = false;
+  for (const ch of s) {
+    if (ch in ZH_DIGITS) {
+      digit = ZH_DIGITS[ch];
+      seen = true;
+      continue;
+    }
+    const unit = ZH_UNITS[ch];
+    if (unit === undefined) return null;
+    seen = true;
+    if (unit === 10000) {
+      section = (section + digit) * unit;
+      total += section;
+      section = 0;
+      digit = 0;
+    } else {
+      section += (digit || 1) * unit;
+      digit = 0;
+    }
+  }
+  return seen ? total + section + digit : null;
+}
+
 // m2：数字归一再比较（v2.0 → 2，30.0 → 30），避免同值不同写法误报
 function normalizeNumber(raw) {
   const t = String(raw).replace(/^[vV]/u, '');
@@ -18,11 +55,18 @@ function normalizeNumber(raw) {
   return t;
 }
 
-function numbersIn(text) {
+const ZH_NUMBER_RE = /[零〇一二两三四五六七八九十百千万]{1,12}/gu;
+
+export function numbersIn(text) {
   const raw = String(text ?? '');
   const out = new Set();
   for (const m of raw.match(DIGITS_RE) ?? []) out.add(normalizeNumber(m));
   for (const m of raw.match(/[vV]\d+(?:\.\d+)?/gu) ?? []) out.add(normalizeNumber(m));
+  // N1：中文数字同样计入（「八千零八十」等价 8080），否则中文引文会误判值缺失
+  for (const m of raw.match(ZH_NUMBER_RE) ?? []) {
+    const n = zhToNumber(m);
+    if (n != null) out.add(String(n));
+  }
   return out;
 }
 
@@ -99,7 +143,9 @@ export function generateObjection({ claim, truth = [], sourceScope = null, objec
     const declared = numbersIn(String(a.value));
     const missing = [...declared].filter((n) => !quoted.has(n));
     if (quoted.size > 0 && missing.length > 0) {
-      const resolvable = hasCorrectionMarker(texts.join(' ')) && missing.length === declared.size;
+      // N7：与 value-conflict 统一——有更正标记且全部声明数字在文本中出现（不再要求「全部缺失」）
+      const mentioned = numbersIn(texts.join(' '));
+      const resolvable = hasCorrectionMarker(texts.join(' ')) && declared.size > 0 && [...declared].every((n) => mentioned.has(n));
       out.objection = {
         kind: 'quote-value-mismatch',
         resolvable,
