@@ -175,16 +175,16 @@ test('T-C8 矩阵第 8 行：冲突可由纠正消解 → 真重入后 accept(co
   p.decide(first[0].candidateId);
   const committed = p.commit(first[0].candidateId, { opId: 'op-1' });
 
-  const second = p.ingest({ runKey: 'r2', claims: [claimOf({ claim: '端口是 9090', value: '9090', quote: '端口是 8080' })] });
-  const before = p.decide(second[0].candidateId);
-  assert.equal(before.decision, 'hold');
-
-  const r = p.decide(second[0].candidateId, {
-    objection: { resolvable: true, reason: 'user corrected to 9090', targetRecordId: committed.recordId },
+  const second = p.ingest({
+    runKey: 'r2',
+    claims: [claimOf({ claim: '刚才说错了，端口应为 9090', value: '9090', quote: '端口是 8080' })],
   });
+  // R4 异议由生成器从证据/正文自动产生（不传 ctx.objection），单次 decide 内完成行 6→行 8 重入
+  const r = p.decide(second[0].candidateId);
   assert.equal(r.decision, 'accept');
   assert.equal(r.reason, 'correction-applied');
   assert.equal(r.rulesHit.includes('conflict-superseded'), true);
+  assert.equal(committed.recordId.startsWith('tr-'), true);
 });
 
 test('T-C9 矩阵第 9 行：全部通过 → accept(policy-accept)，trust 仍 T2', () => {
@@ -379,9 +379,8 @@ test('T-C19 修订生效后旧记录标记 superseded、旧候选转 superseded�
   p.decide(a[0].candidateId);
   const first = p.commit(a[0].candidateId, { opId: 'op-1' });
 
-  const b = p.ingest({ runKey: 'r2', claims: [claimOf({ claim: '端口是 9090', value: '9090', quote: '端口是 8080' })] });
-  p.decide(b[0].candidateId);
-  const r = p.decide(b[0].candidateId, { objection: { resolvable: true, targetRecordId: first.recordId } });
+  const b = p.ingest({ runKey: 'r2', claims: [claimOf({ claim: '刚才说错了，端口应为 9090', value: '9090', quote: '端口是 8080' })] });
+  const r = p.decide(b[0].candidateId); // 生成器给出可消解异议 → hold 后重入 accept
   assert.equal(r.reason, 'correction-applied');
   p.commit(b[0].candidateId, { opId: 'op-2' });
 
@@ -447,7 +446,51 @@ test('T-C24 CAS hash 维不得降级（null 视为冲突）（B8）', () => {
 test('T-C25 异议无纠正对象时记 objection-without-target 但不改变 accept（B7）', () => {
   const p = createPipeline(baseFixture());
   const c = p.ingest({ runKey: 'r1', claims: [claimOf()] });
-  const r = p.decide(c[0].candidateId, { objection: { resolvable: true } });
+  // 回放入口：只有测试/回放可以注入异议，生产入口由生成器决定
+  const r = p.decide(c[0].candidateId, { replayObjection: { resolvable: true } });
   assert.equal(r.decision, 'accept');
   assert.equal(r.rulesHit.includes('objection-without-target'), true);
+});
+
+test('T-C26 生产入口不得注入异议：传 ctx.objection 默认被忽略（09 §5）', () => {
+  const p = createPipeline(baseFixture());
+  const first = p.ingest({ runKey: 'r1', claims: [claimOf({ value: '8080' })] });
+  p.decide(first[0].candidateId);
+  p.commit(first[0].candidateId, { opId: 'op-1' });
+
+  const second = p.ingest({ runKey: 'r2', claims: [claimOf({ claim: '端口是 9090', value: '9090', quote: '端口是 8080' })] });
+  const r = p.decide(second[0].candidateId, { objection: { resolvable: true } });
+  assert.equal(r.decision, 'hold'); // 无更正式 → 生成器不给出可消解异议
+});
+
+test('T-C27 correct()：聊天纠正经 matcher → 新候选 → 矩阵 → 提交 supersede 旧记录', () => {
+  const p = createPipeline(baseFixture());
+  const a = p.ingest({ runKey: 'r1', claims: [claimOf({ value: '8080' })] });
+  p.decide(a[0].candidateId);
+  const first = p.commit(a[0].candidateId, { opId: 'op-1' });
+
+  const r = p.correct({
+    text: '刚才说错了，端口应为 8081',
+    scope: 'repo:demo',
+    evidence: [{ eventId: 'S1-m001', quote: '端口是 8080，超时改成 30 秒。' }],
+    opId: 'op-2',
+  });
+  assert.equal(r.kind, 'correction');
+  assert.equal(r.decision, 'accept');
+  assert.equal(r.reason, 'correction-applied');
+
+  const committed = p.commit(r.candidateId, { opId: 'op-2' });
+  assert.equal(committed.kind, 'committed');
+  const oldRec = p.truthRecords().find((t) => t.recordId === first.recordId);
+  assert.equal(oldRec.superseded, true);
+  assert.equal(p.truthRecords().find((t) => t.recordId === committed.recordId).assertion.value, '8081');
+});
+
+test('T-C28 correct()：不可判定 → 只落 hold 注解，不产生候选、不写真相层', () => {
+  const p = createPipeline(baseFixture());
+  const r = p.correct({ text: 'A 说是 8080，B 说是 9090，不知道哪个对', scope: 'repo:demo' });
+  assert.equal(r.kind, 'disputed');
+  assert.equal(r.decision, 'hold');
+  assert.equal(p.holdAnnotations().some((h) => h.kind === 'disputed'), true);
+  assert.equal(p.truthRecords().length, 0);
 });

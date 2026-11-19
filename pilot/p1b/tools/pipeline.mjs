@@ -10,6 +10,8 @@
 //   - accept 不提权：truth 记录恒 T2，trustWrites() 恒空。
 import { createHash } from 'node:crypto';
 import { resolveEvidence } from './evidence.mjs';
+import { generateObjection } from './objection.mjs';
+import { matchCorrection } from './corrections.mjs';
 import { checkAssertion } from './assertion-checks.mjs';
 
 export const POLICY_VERSION = 'policy:auto-memory-r2/1';
@@ -84,7 +86,7 @@ export function createPipeline({
   policy = {},
   clock = () => new Date().toISOString(),
 } = {}) {
-  const cfg = { maxCasRefresh: 2, quotaExceeded: false, ...policy };
+  const cfg = { maxCasRefresh: 2, quotaExceeded: false, allowCallerObjection: false, ...policy };
 
   const candidates = new Map();
   const truth = [];
@@ -243,8 +245,98 @@ export function createPipeline({
     }
     rulesHit.push('quota-ok');
 
-    if (correctionApplied) rulesHit.push('correction-applied');
-    return { decision: 'accept', reason: correctionApplied ? 'correction-applied' : 'policy-accept', rulesHit };
+    // 带 supersedes 关系的候选本身即修订路径，reason 应如实体现（09 §6 行 8）
+    const correctedByRelation = (meta.relations ?? []).some((rel) => rel.kind === 'supersedes');
+    if (correctionApplied || correctedByRelation) rulesHit.push('correction-applied');
+    return {
+      decision: 'accept',
+      reason: correctionApplied || correctedByRelation ? 'correction-applied' : 'policy-accept',
+      rulesHit,
+    };
+  }
+
+  // R4 异议生产入口：默认由生成器独立核对；调用方注入仅测试/回放（09 §5）
+  function resolveObjection(c, ctx) {
+    if (ctx.replayObjection !== undefined) return ctx.replayObjection;
+    if (ctx.objection !== undefined && cfg.allowCallerObjection) return ctx.objection;
+    const meta = c.meta;
+    const { objection } = generateObjection({
+      claim: {
+        claim: meta.claimText,
+        scope: meta.scope,
+        assertion: meta.assertion,
+        evidence: (meta.evidence ?? []).map((e) => ({ eventId: e.eventId, quote: e.quote ?? '', ts: events.get(e.eventId)?.ts ?? null })),
+      },
+      truth: truth.map((t) => ({ recordId: t.recordId, scope: t.scope, assertion: t.assertion })),
+      sourceScope,
+    });
+    return objection;
+  }
+
+  // 聊天纠正入口（09 §7）：matcher → 候选形态 → 走矩阵 → 由调用方决定提交
+  function correct({ text, scope, role = 'user', evidence = [], runKey = 'chat-correction', opId = null }) {
+    const m = matchCorrection({
+      text,
+      truth: truth.map((t) => ({ recordId: t.recordId, scope: t.scope, claim: t.claim, assertion: t.assertion })),
+      scope,
+      role,
+    });
+    if (!m.kind) return { kind: null, matcher: m.matcher, targetRecordId: m.targetRecordId };
+    const target = m.targetRecordId ? truth.find((t) => t.recordId === m.targetRecordId) ?? null : null;
+    const assertionBase = target?.assertion ? { ...target.assertion } : {};
+
+    // 不可判定：只落 hold 注解，不进矩阵、不产生候选
+    if (m.kind === 'disputed') {
+      holds.push({ policyVersion: POLICY_VERSION, reason: 'unresolved', kind: 'disputed', targetRecordId: m.targetRecordId, at: clock() });
+      return { kind: 'disputed', decision: 'hold', reason: 'unresolved', targetRecordId: m.targetRecordId };
+    }
+
+    let claim;
+    if (m.kind === 'correction') {
+      claim = {
+        claim: text,
+        scope,
+        type: target?.type ?? 'fact',
+        status: 'active',
+        assertion: { ...assertionBase, value: m.newValue },
+        relations: target ? [{ kind: 'supersedes', targetRecordId: target.recordId }] : [],
+        evidence,
+      };
+    } else if (m.kind === 'retraction') {
+      claim = {
+        claim: text,
+        scope,
+        type: target?.type ?? 'fact',
+        status: 'retracted',
+        assertion: { ...assertionBase },
+        relations: target ? [{ kind: 'supersedes', targetRecordId: target.recordId }] : [],
+        evidence,
+      };
+    } else if (m.kind === 'quote') {
+      claim = { claim: text, scope, type: 'fact', status: 'active', assertion: { ...assertionBase, speaker: 'quoted' }, relations: [], evidence };
+    } else if (m.kind === 'assistant-claim') {
+      claim = {
+        claim: text,
+        scope,
+        type: 'task-state',
+        status: 'not-done',
+        assertion: { ...assertionBase, speaker: 'assistant' },
+        relations: [],
+        evidence,
+      };
+    } else if (m.kind === 'tool-failure') {
+      claim = { claim: text, scope, type: 'task-state', status: 'not-done', assertion: { ...assertionBase }, relations: [], evidence };
+    } else if (m.kind === 'cross-scope') {
+      // 跨项目表述：scope 与来源绑定不同，由行 2 拒绝（允许并存，不跨边界覆盖）
+      claim = { claim: text, scope: `${scope}#foreign`, type: 'fact', status: 'active', assertion: { ...assertionBase }, relations: [], evidence };
+    }
+
+    const [ingested] = ingest({ runKey, claims: [claim] });
+    if (!ingested || ingested.noop) {
+      return { kind: m.kind, matcher: m.matcher, candidateId: ingested?.candidateId ?? null, decision: 'noop', noopReason: ingested?.noopReason ?? null };
+    }
+    const decision = decide(ingested.candidateId, { opId });
+    return { kind: m.kind, matcher: m.matcher, candidateId: ingested.candidateId, decision: decision.decision, reason: decision.reason, targetRecordId: m.targetRecordId };
   }
 
   const TERMINAL = new Set(['rejected', 'failed', 'cancelled', 'superseded']);
@@ -254,7 +346,8 @@ export function createPipeline({
     if (!c) throw new Error(`E_CANDIDATE_NOT_FOUND:${candidateId}`);
     // 01 §2：终态禁止任何迁出；accepted 只允许经 supersede 修订
     if (TERMINAL.has(c.state)) throw new Error(`E_ILLEGAL_TRANSITION:${c.state}`);
-    if (c.state === 'accepted' && !ctx.objection?.resolvable) throw new Error('E_ILLEGAL_TRANSITION:accepted');
+    const objection = resolveObjection(c, ctx);
+    if (c.state === 'accepted' && !objection?.resolvable) throw new Error('E_ILLEGAL_TRANSITION:accepted');
 
     const decisionBase = {
       opId: ctx.opId ?? null,
@@ -267,16 +360,16 @@ export function createPipeline({
 
     // 行 8：异议可消解 → 生成 relations 后**真正重入**矩阵（行 1–7 全量重评）
     let r = evaluate(c);
-    if (ctx.objection?.resolvable && r.decision === 'accept') {
+    if (objection?.resolvable && r.decision === 'accept') {
       r.rulesHit.push('objection-without-target');
     }
-    if ((r.decision === 'hold' || r.decision === 'reject') && ctx.objection?.resolvable) {
+    if ((r.decision === 'hold' || r.decision === 'reject') && objection?.resolvable) {
       c.meta.relations = [
         ...c.meta.relations,
         {
           kind: 'supersedes',
-          targetRecordId: ctx.objection.targetRecordId ?? r.conflict ?? null,
-          reason: ctx.objection.reason ?? 'correction',
+          targetRecordId: objection.targetRecordId ?? r.conflict ?? null,
+          reason: objection.reason ?? 'correction',
           at: clock(),
         },
       ];
@@ -433,6 +526,7 @@ export function createPipeline({
         .filter((t) => ![...candidates.values()].some((c) => c.candidateId === t.candidateId && revoked.has(c.meta.sourceEpoch)))
         .map((t) => ({ ...t, sourceMark: t.trust })),
     quarantine: () => quarantined.slice(),
+    correct,
     holdAnnotations: () => holds.slice(),
     auditPendingOps: () => [...auditPending],
     failAuditOnOp: (opId) => {
