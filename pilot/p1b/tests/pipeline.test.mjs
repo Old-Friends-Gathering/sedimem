@@ -647,3 +647,25 @@ test('T-C34 N5：不可消解异议叠加 reject 时也标注 objectionKind', ()
   assert.equal(r.decision, 'reject');
   assert.equal(r.objectionKind, 'scope-alias');
 });
+
+test('T-C35 N8：get() 透出 lastDecision / hold（decide 后真实可读）', () => {
+  const p = createPipeline(baseFixture());
+  const a = p.ingest({ runKey: 'r1', claims: [claimOf()] });
+  const r = p.decide(a[0].candidateId);
+  const g = p.get(a[0].candidateId);
+  assert.equal(g.lastDecision?.decision, r.decision);
+  assert.equal(g.lastDecision?.row, r.row);
+  assert.equal(g.hold, null);
+});
+
+test('T-C36 「应为 X 而不是 Y」是合法更正，不得被断言机判误拒', () => {
+  const events = new Map([['S1-m001', { eventId: 'S1-m001', role: 'user', ts: '2026-11-19T00:00:00Z', text: '端口应为 8080 而不是 9090。' }]]);
+  const snapshots = createSnapshotStore();
+  snapshots.put({ sourceId: 'src-1', sourceEpoch: 1, eventId: 'S1-m001', text: '端口应为 8080 而不是 9090。' });
+  const p = createPipeline({ events, snapshots, sourceId: 'src-1', sourceEpoch: 1, sourceScope: 'repo:demo' });
+  const seed = p.ingest({ runKey: 'r0', claims: [claimOf({ claim: '端口是 9090', value: '9090', quote: '端口应为 8080 而不是 9090', eventId: 'S1-m001' })] });
+  assert.ok(seed.length >= 1);
+  const r = p.correct({ text: '端口应为 8080 而不是 9090', scope: 'repo:demo', evidence: [{ eventId: 'S1-m001', quote: '端口应为 8080 而不是 9090' }], runKey: 'r1', opId: 'op-1' });
+  assert.notEqual(r.detail, 'new-value-not-in-evidence');
+  assert.notEqual(r.reason, 'assertion-mismatch');
+});

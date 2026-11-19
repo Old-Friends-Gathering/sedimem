@@ -63,4 +63,18 @@
 
 修订后验证：p1b **138 条**、p1a 158 条、合计 **296 条全绿**；quality 15/15、security 9/9、docs-drift 无 finding（45 文档）。
 
+## R3 delta 终核（r3-b74-final）
+
+- 结论：**不通过（blocker 1 / major 1 / minor 1）**——前两轮 7 条真落地，但终核抓到两处测试盲区：
+
+| 编号 | 严重度 | 发现 | 修订 |
+|---|---|---|---|
+| B1 | **blocker** | `corrections.mjs` 的 `KEEP_RE` 带 `/g` 且用于 `.test()` → `lastIndex` 跨调用残留，同输入连续调用返回 `true, false, true`；失效时「端口保持 8080」会被当成 correction 走到 accept 并 supersede 真相层（**会产生脏写**，非 fail-closed） | 去 `/g`（改为 `iu`）+ 注释禁止 g/y；新增 C-14（同输入连续三次结果一致） |
+| M1 | major | N8 假落地同型复发：`get()` 读 `c.meta.lastDecision/hold`，而 `decide()` 写的是 `c.lastDecision/c.hold` → 恒返回 `null`，且无测试 | 改读 `c.lastDecision ?? c.meta.lastDecision`；`lastDecision` 记录补 `row`；新增 T-C35 断言真实可读 |
+| m1 | minor | `assertion-checks.mjs` 的否定豁免白名单缺「而不是」→ 合法否定式纠正（应为 X 而不是 Y）端到端被 `reject(assertion-mismatch)`（fail-closed 但误伤） | 白名单补「而不是/而不是说」；新增 T-C36 |
+
+终核后验证：p1b **141 条**、p1a 158 条、合计 **299 条全绿**；quality 15/15、security 9/9、docs-drift 无 finding（45 文档）。
+
+**本轮教训（写入保留门禁）**：① 正则对象复用 `.test()` 时不得带 `g/y`——这类缺陷测试单次调用必绿；② 「假落地」连续两轮同型（M4/m3/m5 → N8），说明**修订清单必须逐条附带可执行断言**，否则「写了没做」会重复发生。
+
 保留门禁不变：本批只证明异议与纠正链路的机制正确；参考集重跑与七类严重错误零容忍复核属 B7.6。

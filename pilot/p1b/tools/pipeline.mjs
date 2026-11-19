@@ -156,8 +156,8 @@ export function createPipeline({
       state: c.state,
       claim: c.meta.claim,
       meta: c.meta,
-      lastDecision: c.meta.lastDecision ?? null,
-      hold: c.meta.hold ?? null,
+      lastDecision: c.lastDecision ?? c.meta.lastDecision ?? null,
+      hold: c.hold ?? c.meta.hold ?? null,
     };
   };
 
@@ -451,7 +451,7 @@ export function createPipeline({
       c.state = 'pending'; // accept 不等于落库：提交点仍是 R7
     }
 
-    c.lastDecision = { decision: r.decision, reason: r.reason, at: clock() };
+    c.lastDecision = { row: r.row, decision: r.decision, reason: r.reason, at: clock() };
     auditOf({ kind: 'decision', candidateId, decision: r.decision, reason: r.reason });
     return {
       ...decisionBase,

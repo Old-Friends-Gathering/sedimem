@@ -107,7 +107,8 @@ function markerIndex(t) {
  * @param {string|null} existingValue 既有值
  * @returns {string|null}
  */
-const KEEP_RE = /保持|不变|仍用|继续用|维持|still|keep\s+(?:it\s+)?(?:at|as)/giu;
+// 注意：该正则用于 .test()，**禁止**加 g/y 标志（lastIndex 残留会让结果随调用次数翻转）
+const KEEP_RE = /保持|不变|仍用|继续用|维持|still|keep\s+(?:it\s+)?(?:at|as)/iu;
 
 /**
  * 文本是否声明「既有的这个值保持不变」（示例：「端口保持 8080」「8080 不变」）。

@@ -93,3 +93,12 @@ test('C-13 m3 目标阈值 ≥2：单个 bigram 偶然重合不命中目标', ()
   const r = matchCorrection({ text: '端口应为 8081', truth: weakTruth, scope: 'repo:demo' });
   assert.equal(r.targetRecordId, null);
 });
+
+test('C-14 keep 守卫确定性：同输入连续三次调用结果一致（正则禁 /g）', () => {
+  const text = '超时改成 30，端口保持 8080';
+  const runs = [1, 2, 3].map(() => matchCorrection({ text, truth, scope: 'repo:demo' }));
+  const kinds = runs.map((r) => r.kind);
+  assert.deepEqual(kinds, [kinds[0], kinds[0], kinds[0]]);
+  assert.equal(kinds[0], null);
+  assert.match(String(runs[0].reason), /保持/u);
+});
