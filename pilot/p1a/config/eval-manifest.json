@@ -1,7 +1,7 @@
 {
-  "manifestVersion": 5,
+  "manifestVersion": 6,
   "frozenAt": "2026-11-19T12:30:00Z",
-  "revisionNote": "v5（2026-11-19）：粒度规范升 granularity@v2（S1b/S6b、U4 单属性多值枚举、形态不豁免、I3′ 空串≠缺失）；校准集 18→20 条（新增 cal-19/20 为 U4 回归，源自独立复核）；语料 gold 347→353（5 条复合 gold 按规则拆分）；数字口径未变。",
+  "revisionNote": "v6（2026-11-20，B7.6）：新增 timingMetrics 时序指标冻结（纯闸门阶段，不含 LLM 抽取），数值来源 docs/reviews/v2.0-p1b-b76-2026-11-20/BASELINE.md §5；并记录 gateBaseline 参考集重跑基线（accept 率、假阴性归因、七类严重错误 0 的口径限制）。",
   "spec": "docs/design/v2.0/05-threshold-manifest.md",
   "stage": "pilot",
   "thresholds": {
@@ -185,6 +185,61 @@
       "value": "granularity@v2",
       "source": "06 §1.1（两遍盲评 claim 重合仅 5.6% 的主因是粒度未定义）；校准集 pilot/p1a/granularity/calibration.jsonl",
       "rollback": "改规则必须升版本（granularity@v2）+ 重跑全部参考集与校准集，原成绩只读保留"
+    },
+    "timingMetrics": {
+      "source": "docs/reviews/v2.0-p1b-b76-2026-11-20/BASELINE.md §5（2026-11-20 实测）",
+      "scope": "纯闸门开销：R2 ingest（按场景）、R6 decide（按候选）、R7 commit（按接受候选）；不含 LLM 抽取，禁止与抽取延迟混算",
+      "environment": "本机 Node 24、单进程、内存快照、无 LLM",
+      "measured": {
+        "ingestMs": {
+          "n": 164,
+          "p50": 0.009,
+          "p90": 0.018,
+          "p99": 0.145,
+          "max": 1.218
+        },
+        "decideMs": {
+          "n": 353,
+          "p50": 0.011,
+          "p90": 0.017,
+          "p99": 0.222,
+          "max": 0.885
+        },
+        "commitMs": {
+          "n": 277,
+          "p50": 0.001,
+          "p90": 0.002,
+          "p99": 0.086,
+          "max": 0.544
+        }
+      },
+      "regressionGate": {
+        "rule": "p90 不得超过冻结值 3 倍；p99 不得超过 10 倍；超限须在评审记录中给出原因与处置",
+        "rollback": "修订阈值或复测口径必须版本化 diff + 维护者签署；禁止为了让实现过关而事后放宽"
+      }
+    },
+    "gateBaseline": {
+      "source": "docs/reviews/v2.0-p1b-b76-2026-11-20/BASELINE.md",
+      "pipelineVersion": "pipeline@b7.6-oracle-gate",
+      "corpus": {
+        "scenarios": 218,
+        "gold": 353,
+        "referenceSet": "goldset-v1",
+        "annotationMode": "model-dual-blinded"
+      },
+      "measured": {
+        "accept": 277,
+        "hold": 17,
+        "reject": 59,
+        "acceptRate": 0.7847,
+        "rejectsByReason": {
+          "assertion-mismatch": 53,
+          "cross-scope-leak": 5,
+          "injection-suspected": 1
+        }
+      },
+      "limitation": "七类严重错误实测 0 属构造性结果（输入为 gold claim），不得当作抽取+闸门整体质量结论；正式零容忍验证在 B7.7 真抽取器接入后重跑并版本化",
+      "rollback": "参考集/管线版本变化必须重跑并更新本块；禁止只改数字不附报告"
     }
   }
 }

@@ -20,14 +20,18 @@
 | `tools/pipeline-events.mjs` | **B7.3 真实现**：§9 R8 三类事件 + `runStatus`/`verdictAllowed` 枚举映射 |
 | `tools/objection.mjs` | **B7.4 真实现**：§5 R4 异议生成器（`value-conflict`/`quote-value-mismatch`/`scope-alias`/`temporal-drift`），生产入口由管线自行调用，调用方注入默认被忽略 |
 | `tools/corrections.mjs` | **B7.5 真实现**：§7 聊天纠正七类 matcher（retraction → cross-scope 守卫 → correction → quote → assistant-claim → tool-failure → disputed），缺 predicate 退化为 `matcher=degraded` |
+| `tools/reference-run.mjs` | **B7.6 真实现**：参考集重跑（oracle gate 口径）——把 goldset 的 gold claim 当抽取输出喂真管线，只测闸门；产物含逐场景行级结果与 contentDigest |
 | `tools/r2-sim.mjs` | r2 自动决策模拟器（`createR2Sim`）：R0/R1 摄取与证据解析、R3 五条机判、自动决策矩阵 9 行、聊天纠正 7 类、R7 提交/CAS/恢复、R8 事件与配额闸门 |
 | `pilot/p1a/tools/protocol-sim.mjs` | 复用的候选状态机与幂等协议模拟器（`createSim`），r2-sim 在其上实现决策与提交 |
 
 常用命令：
 
 ```bash
-# 全部 p1b 测试（141 条：20 条 r2 保护测试 + 121 条真实现测试）
+# 全部 p1b 测试（148 条：20 条 r2 保护测试 + 128 条真实现测试）
 node --test pilot/p1b/tests/*.test.mjs
+
+# 参考集重跑（gate 口径，产物进 gitignored out/）
+node pilot/p1b/tools/reference-run.mjs --corpus pilot/p1a/corpus --out pilot/p1b/out/ref-run
 
 # 只跑决策与断言机判
 node --test pilot/p1b/tests/r2-decisions.test.mjs

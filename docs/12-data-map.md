@@ -88,5 +88,6 @@ P1a 的评测资产存放在仓库 [`pilot/p1a/`](../pilot/p1a/corpus/README.md)
 | P1b 保护测试与模拟器 | `pilot/p1b/tools/r2-sim.mjs` + `tests/r2-*.test.mjs`（19 条），纯内存、不落真相层 | 测试产物不入资产面；模拟器不写文件、不联网 | 已落地（2026-11-19，pilot/p1b） |
 | P1b 管线真实现（证据/矩阵/事件） | `pilot/p1b/tools/{evidence,pipeline,assertion-checks,pipeline-events}.mjs` | 内存实现，只读语料；不写 `~/.memo` | 测试与评审证据；`p1b/pipeline` 分支 | doc-kind contract 规格见 09 |
 | P1b 异议与纠正（R4/R7） | `pilot/p1b/tools/{objection,corrections}.mjs` + `tests/{objection,corrections}.test.mjs`（16 条） | 异议由生成器独立核对，调用方注入默认忽略；纠正只归类不写真相层 | 内存；hold 注解 `{kind:'disputed'}` 仅存在于运行期 | 09 §5（R4 生成器）/§7（七类 matcher） |
+| P1b 参考集重跑（gate 口径） | `pilot/p1b/tools/reference-run.mjs` + `tests/reference-run.test.mjs`（7 条） | 把 goldset 的 gold claim 当抽取输出喂真管线，只测闸门；跑分产物落 gitignored `pilot/p1b/out/ref-run/` | 跑分 JSON 含逐场景行级结果，保留期与删除随 runner 目录处置；不写真相层 | 09 §11（放行条件）+ B7.6 报告 `docs/reviews/v2.0-p1b-b76-2026-11-20/BASELINE.md` |
 | 决策收据与恢复状态 | `pilot/p1b` 内存（P1b 前不落盘） | 收据 `opId→recordId`、`audit-pending` 集合、`recovery-required` | 内存；落盘形态在 P1b 实现阶段登记 | 09 §8 |
 
