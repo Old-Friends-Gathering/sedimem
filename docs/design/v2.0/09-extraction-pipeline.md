@@ -87,6 +87,27 @@ R0 范围确定 → R1 锁外抽取 → R2 结构校验 → R3 证据核对 → 
 
 > 取舍声明：这五条只能挡住**可机判**的形态错误；语义级误归属仍由 R4 异议 + 评测兜底。该取舍写入 §10 的 T-A19 断言（构造四类反例，断言 `reject(assertion-mismatch)`）。
 
+**R4 异议生成器（B7.4 落地，替换「调用方声明 objection」）**：异议由**独立于决策矩阵的第二遍核对**产生，不读决策矩阵的中间状态，也不允许调用方注入布尔开关：
+
+| 异议类型 | 生成判据（确定性，不看语义相似度） | 可消解条件 |
+|---|---|---|
+| `value-conflict` | 真相层存在同 `scope+subject+predicate`、`value` 不同的记录 | 候选正文/引文含更正式（`改成/改为/应为/纠正/不是…而是/correct to/should be`）且更正后的值等于候选 `assertion.value` |
+| `quote-value-mismatch` | 引文字面数字/单位与 `assertion.value` 不一致 | 同上（更正式存在且与 `value` 一致） |
+| `scope-alias` | 候选 `scope` 与来源绑定 `scope` 不同但主体同名 | 不可消解（转行 2 `cross-scope-leak`） |
+| `temporal-drift` | 证据事件 `ts` 早于 `assertion.assertedValidFrom` | 不可消解 |
+
+- 生成器输出 `{objection: {kind, resolvable, reason, targetRecordId} | null}`；`null` 表示未发现异议。
+- 可消解 → 进入决策矩阵行 8（追加 `relations.supersedes` 后**真重入**行 1–7）；不可消解 → 行 6 `hold(unresolved)`。
+- **效力对称（审核 M1）**：不可消解异议必须**主动拦截 accept**（`decide()` 中 `objection.resolvable === false && 决策为 accept` → 转 `hold(unresolved)`，`rulesHit` 记 `objection-unresolvable`、结果带 `objectionKind`）；只对可消解异议生效等于生成器形同虚设。
+- **可消解判据不得被正文伪造（审核 M2）**：裸「不是」不算更正标记，必须是否定式更正（`不是…而是/应…`）或显式改写词（改成/改为/应为/纠正/而应/instead/correct to/should be/rather than）；且声明值的**全部**数字都要在正文/引文中出现，只中第一个不放行。
+- **数字归一（审核 m2）**：比较前做归一（`v2.0→2`、`30.0→30`），避免同值不同写法误报；单位核对不在本批（若后续需要，按 manifest 版本化补）。
+- **回放门禁（审核 m1）**：`replayObjection` 需 policy `allowReplayObjection=true`，否则抛 `E_REPLAY_NOT_ALLOWED`。
+- **裁判顺序**：`scope-alias` → `temporal-drift` → `quote-value-mismatch` → `value-conflict`，命中即停；`scope-alias` / `temporal-drift` 在行 1–2 已被拒绝，生成器的同名异议只作为**原因标注**，不改变行序。
+- **入口纪律**：生产入口由管线自己调用生成器（`pilot/p1b/tools/objection.mjs` 的 `generateObjection`）；调用方传 `objection` 仅在 `allowCallerObjection=true`（测试）或 `replayObjection`（回放）时生效，默认忽略并记 `ignoredCallerObjection`。
+- 落地用例：`pilot/p1b/tests/objection.test.mjs`（R4-1..R4-7）+ `pilot/p1b/tests/pipeline.test.mjs` 的 T-C8/T-C19（真重入）/T-C26（禁止注入）。
+- 生成器与被审查路径**共享代码 = 同源偏差**：报告须声明（[08 §5](08-auto-memory-and-correction.md)），且 §11.3 的同源偏差披露对 R4 同样适用。
+- 调用方传入 `objection` 仅在测试/回放场景允许，生产入口由管线自己生成；规格层面把它列为**不得作为生产输入**。
+
 ## 6. R5/R6：自动决策矩阵（r2，替代人工复核）
 
 **判定顺序**（自上而下，命中即停；矩阵必须穷尽，见下方「穷尽性」）：
@@ -140,6 +161,24 @@ R0 范围确定 → R1 锁外抽取 → R2 结构校验 → R3 证据核对 → 
 | 两个合法来源冲突且关系不可判定 | 双方进 `disputed`/`unresolved`（`workflow.hold`），退出肯定回答 | 不得猜赢家、不得发人工审批请求 |
 
 纠正同样走 R2–R7 全链（证据、scope、幂等、CAS、epoch），**不因「是纠正」而跳过校验**。
+
+**纠正 matcher（B7.5 落地）**：输入是新事件文本 + 现有真相层，输出 `{kind, targetRecordId, newValue, confidence}`，`kind` 取上表七类的闭集：`correction` / `retraction` / `quote` / `assistant-claim` / `cross-scope` / `tool-failure` / `disputed`。判定顺序固定：`retraction`（撤回式且无新值）→ **`cross-scope` 守卫**（出现「另一个项目/其他项目/other project」等跨项目表述时，一律不得作为本 scope 记录的纠正，先于其它类判定）→ `correction`（更正式且新值可解析）→ `quote`（引用标记）→ `assistant-claim`（角色=assistant 自称完成）→ `tool-failure`（退出码非 0/失败词）→ `disputed`（两来源冲突且不可判定）→ 不命中则 `null`（不是纠正）。
+
+- `disputed` 的落地语义：**只落 hold 注解**（`holdAnnotations()` 记 `{kind:'disputed', reason:'unresolved'}`），不产生候选、不写真相层——不可判定不是「可消解异议」，不得进入行 8。
+- 目标定位打分：优先 `predicate` 记录，按 claim 二元组重合 + 值数字命中打分取最高；无 `predicate` 记录时才退化 `scope+文本重合` 并标 `matcher=degraded`（`degraded` 不改变类判定结果，只影响审计口径）。
+- 落地用例：`pilot/p1b/tests/corrections.test.mjs`（C-1..C-9）+ `pilot/p1b/tests/pipeline.test.mjs` 的 T-C27（`correct()` 全链）/T-C28（`disputed` 只 hold）。
+
+- 匹配键优先 `scope+subject+predicate`；缺 `predicate` 时退化为 `scope+about+归一文本`，并在 run 事件标 `correctionMatcher=degraded`（本批落地后仍为 degraded，因为 01 的 `predicate` 是 planned 扩展）。
+- matcher 只做归类与目标定位，**不写真相层**；写入仍由 R7 提交路径完成（CAS/收据/epoch 全套校验）。
+- **证据绑定（审核 M3）**：`correction` 的新值必须出现在某条证据引文中（纠正消息本身先入 events/snapshots）；否则 `reject(evidence-unsupported, detail=new-value-not-in-evidence)`，不得把新值挂在旧引文上进真相层。
+- **newValue 取窗口（审核 M4）**：优先取更正标记后 40 字符窗口内的数字（排除旧值），避免抓到句中无关数值；`confidence` 为确定性值（exact 0.9 / degraded 0.6），不做概率推断。
+- **目标阈值（审核 m3）**：`pickTarget` 需打分 ≥2（文本重合 + 值命中）才认定目标，低于阈值视为无目标。
+- **显式保持不覆盖（R2-N3）**：「保持/不变/仍用/继续用/维持 <既有值>」出现在既有值附近时，不得覆盖该记录（撤回式「别改」归 `retraction`；其余不产候选、不写真相层，交人工复核）。
+- **数字口径（R2-N1/N2）**：新值绑定证据用**数值集合**精确比较（禁止字符串子串——`8080` 不得证明 `80`）；中文数字（「八千零八十」）与阿拉伯数字等价，比较前统一归一，避免中文引文被误判值缺失。
+- **可消解方向统一（R2-N7）**：`quote-value-mismatch` 与 `value-conflict` 同口径——有更正标记且**全部声明数字**在文本中出现才可消解；仅部分出现即不可消解（hold，交人工）。
+- **无人值守部署（审核 m6）**：`cross-scope` 纠正要求管线配置 `sourceScope`；未配置时 fail-closed 拒绝（`cross-scope-leak / source-scope-unbound`），不靠伪造 `${scope}#foreign` 通过行 2。
+- 入口 `pipeline.correct({text, scope, role, evidence, opId})`：matcher → 七类候选形态（`correction` 带 `relations.supersedes` 且 `status=active`；`retraction` 带 `status=retracted`；`quote` 的 `assertion.speaker=quoted`；`assistant-claim` 为 `task-state/not-done` 且不覆盖既有值；`tool-failure` 为 `task-state/not-done`；`cross-scope` 的 `scope` 与来源绑定不同，由行 2 拒绝）→ `ingest` → `decide`。提交仍由调用方显式 `commit(opId)`。
+- 带 `relations.supersedes` 的候选被接受时，`reason` 必须如实为 `correction-applied`（不是 `policy-accept`），以便回执/看板区分「首次接纳」与「修订生效」。
 
 ## 8. R7：提交、并发与恢复
 

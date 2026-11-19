@@ -1,0 +1,80 @@
+# B7.4/B7.5 对抗审核记录（R4 异议生成器 + 聊天纠正七类 matcher）
+
+> doc-kind: history
+> doc-version: 1.4
+
+- 审核对象：`pilot/p1b/tools/objection.mjs`、`pilot/p1b/tools/corrections.mjs`、`pilot/p1b/tools/pipeline.mjs` 的 `resolveObjection()` / `correct()` / `decide()` 异议入口 / `evaluate()` reason 语义；规格 `docs/design/v2.0/09-extraction-pipeline.md` §5/§7。
+- 审核员：独立实例（GLM-5.3，只读仓库 + `/tmp` 副本探针），与实现方互不可见。
+- 结论：**不通过（blocker 0 / major 4 / minor 6）** → 全部修订后复跑；R2 delta 见文末。
+
+## R1 意见与修订对照
+
+| 编号 | 严重度 | 位置 | 发现 | 修订 |
+|---|---|---|---|---|
+| M1 | major | `pilot/p1b/tools/pipeline.mjs` decide() | 不可消解异议对决策零影响：只有 `resolvable:true` 才走行 8，`temporal-drift` / 不可消解 `quote-value-mismatch` 的候选照样 `accept(policy-accept)`（探针 P1） | `decide()` 增对称拦截：`objection.resolvable === false && 决策 accept` → 转 `hold(unresolved)`，`rulesHit` 记 `objection-unresolvable`，结果带 `objectionKind`；新增 T-C29 回归 |
+| M2 | major | `pilot/p1b/tools/objection.mjs` CORRECTION_MARKERS | 可消解判据用裸「不是」子串，正文「端口不是 9090（维持 8080）」即可把已提交 8080 supersede 成 9090（探针 P2）；且只检查第一个声明数字 | 标记收紧为「不是…而是/应…」或显式改写词；可消解要求**全部**声明数字都在正文/引文出现；规格 §5 同步 |
+| M3 | major | `pilot/p1b/tools/pipeline.mjs` correct() | 修订值无证据绑定：新值 9999 的修订记录可 commit，其 `evidenceHash` 指向不含 9999 的旧引文（探针 P5a） | `correction` 要求新值出现在某条证据引文中，否则 `reject(evidence-unsupported, detail=new-value-not-in-evidence)`；新增 T-C30；规格 §7 同步 |
+| M4 | major | `pilot/p1b/tools/corrections.mjs` newValue | `nums.find(n => n !== 旧值)` 抓全文第一个不同数字：「超时改成 30 秒了，端口应为 8081」→ newValue=30，supersede 端口为 30（探针 P4a） | 改为在更正标记后 40 字符窗口内取数字（排除旧值），再退化为全文；规格 §7 记录窗口口径 |
+| m1 | minor | pipeline decide() | `replayObjection` 无门禁，生产调用可直接注入异议（探针 P5b） | 新增 policy `allowReplayObjection`（默认 false），未开启抛 `E_REPLAY_NOT_ALLOWED`；T-C25 显式开启 |
+| m2 | minor | objection.mjs numbersIn | `v2.0`/`2`、`30.0`/`30` 同值不同写法触发误报 | 数字归一（去版本前缀、按数值化）后比较 |
+| m3 | minor | corrections.mjs pickTarget | 打分无下限，一个 bigram 重合即命中 → 多同名记录可能 supersede 错目标 | `pickTarget` 阈值 ≥2（重合 + 值命中），低于阈值视为无目标 |
+| m4 | minor | pipeline.mjs DECISION_ROWS | 常量是装饰性的（evaluate 硬编码），T-C10/T-C16 同义反复 | `rowDecision(n)` 成为决策来源，`evaluate()` 返回 `row`；新增 T-C31 断言九行命中序与决策映射 |
+| m5 | minor | corrections.mjs 输出 | 规格写 `confidence` 字段，代码没有 | 补确定性 `confidence`（exact 0.9 / degraded 0.6），不做概率推断 |
+| m6 | minor | pipeline correct() | 无 `sourceScope` 时跨项目纠正可伪造 `${scope}#foreign` 直接 accept | 未配置 `sourceScope` 时 fail-closed：`reject(cross-scope-leak, source-scope-unbound)` |
+
+## 探针复现（R1 实测，均在 `/tmp` 副本）
+
+| 探针 | 构造 | 修复前 | 修复后 |
+|---|---|---|---|
+| P1a/P1b | `assertedValidFrom` 晚于证据 ts；引文 8080 声明 9090 无更正式 | `accept(policy-accept)` | `hold(unresolved)` + `objectionKind` |
+| P2 | 正文「端口不是 9090（维持 8080）」+ value=9090 + 干净引文 | `accept(correction-applied)`，8080 被 supersede | `hold(unresolved)`（无「不是…而是」标记） |
+| P4a | `超时改成 30 秒了，端口应为 8081` | `newValue=30` | `newValue=8081`（窗口内） |
+| P5a | `correct(text='端口应为 9999', evidence=旧引文 8080)` | accept+commit（证据悬空） | `reject(evidence-unsupported)` |
+| P3 | value=2 / quote=`v2.0`；value=30 / quote=`30.0` | `quote-value-mismatch` 误报 | 不产异议 |
+| P5c | 同文本 `correct()` 两次 | 第二次 noop（正面） | 仍 noop（正面） |
+
+## 修订后验证
+
+- `node --test pilot/p1b/tests/*.test.mjs` → **128 条全绿**（objection 7 / corrections 9 / pipeline 40 / evidence 10 / assertion-checks 22 / pipeline-events 21 / r2-* 19）
+- `node --test pilot/p1a/tests/*.test.mjs pilot/p1b/tests/*.test.mjs` → **287 条全绿**
+- quality 15/15、security 9/9、docs-drift 无 finding（44 文档）
+- 规格同步：09 §5（效力对称/可消解判据/数字归一/回放门禁）、§7（证据绑定/newValue 窗口/目标阈值/无人值守部署）
+
+## 保留门禁
+
+- 本批只证明「异议与纠正链路的机制正确」，**不代表** P1b 质量通过：参考集重跑与七类严重错误零容忍复核仍在 B7.6。
+- `correct()` 的 `quote`/`assistant-claim`/`tool-failure` 三类只落「不覆盖既有值」的候选形态，其真实语义覆盖仍需 B7.6 用参考集验证。
+- 矩阵九行的**语义正确性**仍依赖 R4 生成器与 R4.5 断言机判两条独立实现；二者同源偏差须在 REVIEW 声明。
+
+## R2 delta 复核（r2-b74-delta）
+
+- 结论：**不通过（blocker 0 / major 4 / minor 4）** —— 其中 3 条是「虚报落地」：M4（`corrections.mjs:96-98` 仍是 `nums.find(...)`，`CORRECTION_WINDOW` 全仓 0 命中）、m3（`pickTarget` 无阈值）、m5（无 `confidence`）在修订清单与规格里写了、代码没有实现。
+
+| 编号 | 严重度 | 发现 | 修订 |
+|---|---|---|---|
+| N4 | major | M4/m3/m5 假落地，规格与代码漂移 | 补实现：`CORRECTION_WINDOW=40` + `pickNewValue()`（标记窗口内取数、剔除被否定值与旧值）、`TARGET_MIN_SCORE=2`、`confidence`（exact 0.9 / degraded 0.6）；新增 C-10~C-13 |
+| N1 | major | M1 与 `quote-value-mismatch` 叠加：引文用中文数字「八千零八十」+ 无关日期 → 误判值缺失 → 永久 hold，无消解路径 | `objection.mjs` 新增 `zhToNumber()` 并把中文数字并入 `numbersIn()`；新增 R4-8、T-C33 |
+| N2 | major | M3 用 `quote.includes(newValue)` 子串判定：旧引文「配置是 8080」证明新值 80 → 真相层被改错 | 改为数值集合精确匹配（`numbersIn` 全包含），新增 T-C32 |
+| N3 | major | M4 未修的直接后果：抓到被否定值 / 无关字段值 | `pickNewValue()` 否定式剔除（而不是/不是/而非/not/instead of）+ 旧值排除；另加 `isKept()`：文本显式「保持/不变/仍用」既有值时不得覆盖（fail-closed 交人工） |
+| N5 | minor | reject 路径不带 `objectionKind` | 拒绝路径同样标注；新增 T-C34 |
+| N6 | minor | T-C31 缺行 4、行 8 | 补行 4（role 为 null 的真实信号）；行 8 由 T-C8/T-C27 覆盖并在此注明 |
+| N7 | minor | `quote-value-mismatch` 可消解方向与 `value-conflict` 相反（要求「全部缺失」） | 统一为「更正标记 + 全部声明数字在文本中出现」；新增 R4-9 |
+| N8 | minor | `get()` 不透出决策/hold | `get()` 返回 `lastDecision` 与 `hold` |
+
+修订后验证：p1b **138 条**、p1a 158 条、合计 **296 条全绿**；quality 15/15、security 9/9、docs-drift 无 finding（45 文档）。
+
+## R3 delta 终核（r3-b74-final）
+
+- 结论：**不通过（blocker 1 / major 1 / minor 1）**——前两轮 7 条真落地，但终核抓到两处测试盲区：
+
+| 编号 | 严重度 | 发现 | 修订 |
+|---|---|---|---|
+| B1 | **blocker** | `corrections.mjs` 的 `KEEP_RE` 带 `/g` 且用于 `.test()` → `lastIndex` 跨调用残留，同输入连续调用返回 `true, false, true`；失效时「端口保持 8080」会被当成 correction 走到 accept 并 supersede 真相层（**会产生脏写**，非 fail-closed） | 去 `/g`（改为 `iu`）+ 注释禁止 g/y；新增 C-14（同输入连续三次结果一致） |
+| M1 | major | N8 假落地同型复发：`get()` 读 `c.meta.lastDecision/hold`，而 `decide()` 写的是 `c.lastDecision/c.hold` → 恒返回 `null`，且无测试 | 改读 `c.lastDecision ?? c.meta.lastDecision`；`lastDecision` 记录补 `row`；新增 T-C35 断言真实可读 |
+| m1 | minor | `assertion-checks.mjs` 的否定豁免白名单缺「而不是」→ 合法否定式纠正（应为 X 而不是 Y）端到端被 `reject(assertion-mismatch)`（fail-closed 但误伤） | 白名单补「而不是/而不是说」；新增 T-C36 |
+
+终核后验证：p1b **141 条**、p1a 158 条、合计 **299 条全绿**；quality 15/15、security 9/9、docs-drift 无 finding（45 文档）。
+
+**本轮教训（写入保留门禁）**：① 正则对象复用 `.test()` 时不得带 `g/y`——这类缺陷测试单次调用必绿；② 「假落地」连续两轮同型（M4/m3/m5 → N8），说明**修订清单必须逐条附带可执行断言**，否则「写了没做」会重复发生。
+
+保留门禁不变：本批只证明异议与纠正链路的机制正确；参考集重跑与七类严重错误零容忍复核属 B7.6。

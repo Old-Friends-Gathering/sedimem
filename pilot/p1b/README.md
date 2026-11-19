@@ -18,13 +18,15 @@
 | `tools/pipeline.mjs` | **B7.2 真实现（v2）**：决策矩阵 9 行（`DECISION_ROWS`，命中即停）+ 真实判据（来源 scope/证据 role/事件全文注入面/epoch 撤销）+ R7 提交（收据幂等/锁内 epoch 重查/CAS 三含 evidenceHash/真刷新重评/audit-pending 阻塞/恢复分支） |
 | `tools/assertion-checks.mjs` | **B7.3 真实现（唯一断言权威，pipeline 直接 import）**：§5 R4.5 五条断言机判（speaker/negated/suggest/complete/retract）；否定按词边界、疑问句不算用户确认 |
 | `tools/pipeline-events.mjs` | **B7.3 真实现**：§9 R8 三类事件 + `runStatus`/`verdictAllowed` 枚举映射 |
+| `tools/objection.mjs` | **B7.4 真实现**：§5 R4 异议生成器（`value-conflict`/`quote-value-mismatch`/`scope-alias`/`temporal-drift`），生产入口由管线自行调用，调用方注入默认被忽略 |
+| `tools/corrections.mjs` | **B7.5 真实现**：§7 聊天纠正七类 matcher（retraction → cross-scope 守卫 → correction → quote → assistant-claim → tool-failure → disputed），缺 predicate 退化为 `matcher=degraded` |
 | `tools/r2-sim.mjs` | r2 自动决策模拟器（`createR2Sim`）：R0/R1 摄取与证据解析、R3 五条机判、自动决策矩阵 9 行、聊天纠正 7 类、R7 提交/CAS/恢复、R8 事件与配额闸门 |
 | `pilot/p1a/tools/protocol-sim.mjs` | 复用的候选状态机与幂等协议模拟器（`createSim`），r2-sim 在其上实现决策与提交 |
 
 常用命令：
 
 ```bash
-# 全部 p1b 测试（105 条：20 条 r2 保护测试 + 85 条真实现测试）
+# 全部 p1b 测试（141 条：20 条 r2 保护测试 + 121 条真实现测试）
 node --test pilot/p1b/tests/*.test.mjs
 
 # 只跑决策与断言机判

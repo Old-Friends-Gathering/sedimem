@@ -58,6 +58,8 @@ const ZH_NEG_EXCLUDES = [
   '不仅', '不但', '不光', '不只', '不过', '不确定', '不仅不', '不管',
   '没问题', '没错', '没什么', '没关系', '没影响', '没准', '没多久',
   '无论', '无论什么', '未必', '未定',
+  // 对照式更正（应为 X 而不是 Y）不是否定：不豁免会让合法纠正被 reject(assertion-mismatch)
+  '而不是', '而不是说',
 ];
 
 const EN_NEG_EXCLUDES = [/not only/giu, /not just/giu, /no longer/giu, /no doubt/giu];
