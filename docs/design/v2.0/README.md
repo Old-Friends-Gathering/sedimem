@@ -49,7 +49,7 @@
 ## 冻结说明（2026-11-18）
 
 - **冻结日期**：2026-11-18（九项全部 frozen，见上表逐行状态）。
-- **冻结前置 = 保护测试绿**，实测：pilot 测试 79/79 绿（`pilot/p1a/tests/` 下 protocol-sim、corpus-validate、baseline-runner、score、review、split-corpus、annotation-pass 七个文件）；exit 语料校验 0 errors（218 场景 / 347 gold / split 校验通过）；门禁 quality 15/15 + security 9/9 + docs-drift 无 finding。设计审核 R1/R2/R3 三轮通过（[REVIEW.md](../../reviews/v2.0-design-spec-2026-11-18/REVIEW.md)）。
+- **冻结前置 = 保护测试绿**，实测：pilot 测试 79/79 绿（`pilot/p1a/tests/` 下 protocol-sim、corpus-validate、baseline-runner、score、review、split-corpus、annotation-pass 七个文件）；exit 语料校验 0 errors（218 场景 / 353 gold（G1 粒度拆分后） / split 校验通过）；门禁 quality 15/15 + security 9/9 + docs-drift 无 finding。设计审核 R1/R2/R3 三轮通过（[REVIEW.md](../../reviews/v2.0-design-spec-2026-11-18/REVIEW.md)）。
 - **冻结 ≠ 实现完成**：P1b 起按本规格包实现；任何规格修订须出新版本并保留旧版（[docs/11](../../11-doc-governance.md) 规划契约暂存区条款）。
 - **历史r1说明**：当时要求人工标注；该要求现已由用户取消，旧产物保留原annotationMode，不能冒充人工真值。
 

@@ -31,6 +31,8 @@
 
 **范围声明（消除引用悬空）**：保留期、条数/字节上限、扫描路径等**数据治理数值不在本 manifest**——归属 docs/12-data-map.md，登记框架见 [02-evidence-and-deletion.md](02-evidence-and-deletion.md) §8 逐资产登记表。本 manifest 只冻结评测阈值。
 
+**frozenAt 惯例**：manifestVersion 每次变更（新增键或改数值）都必须刷新 `frozenAt` 并在 `revisionNote` 说明改了什么——冻结时间是「这一版内容」的冻结时刻，沿用上一版时间会误导审计者。
+
 ## 3. 加载与校验
 
 - corpus-validate 与 scorer **必须**加载 manifest 并校验语料/结果；manifest 缺失或解析失败 = 工具拒绝运行（fail-closed）。

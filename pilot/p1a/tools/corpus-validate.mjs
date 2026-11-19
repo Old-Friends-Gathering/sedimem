@@ -3,6 +3,7 @@
 // 证据 span 由 quote 在事件文本中唯一定位派生（Unicode 码点 offset，02 文件口径），hash = sha256(event text)。
 import { createHash } from 'node:crypto';
 import { readFile, readdir } from 'node:fs/promises';
+import { isAtomic, splitHints } from './granularity-check.mjs';
 
 export const TYPE_CLOSED_SET = ['fact', 'decision', 'preference', 'gotcha', 'task-state', 'hypothesis'];
 export const SPEECH_ACT_SET = ['state', 'suggest', 'agree', 'decide', 'complete', 'retract'];
@@ -104,6 +105,8 @@ export function validateScenario(s, { manifest } = {}) {
     assertCond(errs, typeof g.claim === 'string' && g.claim.length > 0, `${tag}: claim 必填`);
     assertCond(errs, typeof g.claim === 'string' && g.claim.length <= claimMax, `${tag}: claim 超 ${claimMax} 字符（claimMaxChars，单句上限）`);
     assertCond(errs, checkSingleSentence(g.claim), `${tag}: 复合命题禁止（一句一条）`);
+    const granularityHits = splitHints(g.claim).filter((h) => ['S1', 'S1b', 'S2', 'S3', 'S6b'].includes(h));
+    assertCond(errs, isAtomic(g.claim), `${tag}: 粒度违规（命中 ${granularityHits.join('+') || 'S*'}，06 §1.1 要求拆成多条）`);
     // R2-F7：status×speechAct×type 最小合法组合表（manifest thresholds.candidateComboRules）
     const comboBad = [];
     if (g.assertion?.speechAct && comboRules.suggest?.status && g.assertion.speechAct === 'suggest') {

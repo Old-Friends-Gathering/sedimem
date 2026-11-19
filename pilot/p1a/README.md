@@ -37,6 +37,9 @@ node pilot/p1a/tools/split-corpus.mjs pilot/p1a/corpus pilot/p1a/config/eval-man
 # 自动双遍盲评参考工作流（标来源）：导出盲评包 → 第二个模型执行体独立标注 → 导入校验 → 一致性 → 裁决工作表
 node pilot/p1a/tools/annotation-pass.mjs export --corpus pilot/p1a/corpus --out pilot/p1a/out/blind
 node pilot/p1a/tools/annotation-pass.mjs import --file pilot/p1a/out/blind/pass2.jsonl --package pilot/p1a/out/blind
+# 命题粒度校准（granularity@v2）
+node pilot/p1a/tools/granularity-check.mjs pilot/p1a/granularity/calibration.jsonl
+
 node pilot/p1a/tools/annotation-pass.mjs compare --a pilot/p1a/out/blind/pass1.jsonl --b pilot/p1a/out/blind/pass2.jsonl
 node pilot/p1a/tools/annotation-pass.mjs worksheet --a pilot/p1a/out/blind/pass1.jsonl --b pilot/p1a/out/blind/pass2.jsonl --out pilot/p1a/out/blind/adjudication.json
 # 自动版本化裁决策略填充 adjudication.json 的 resolution 后：
@@ -60,6 +63,7 @@ node pilot/p1a/tools/review.mjs show pilot/p1a/out/baseline/<runId>/candidates.j
 | adjudicate.mjs | 裁决表的记录化策略（union-policy@v1）：单侧 claim 取该侧、字段分歧 merge、不覆盖人工裁决；输出双遍确认统计 | 06-annotation-spec §3.1 |
 | contract-guards.mjs | 三项冻结守卫：双时间互斥/asOf 穿越、tokenizer 计数快照与声明、成本闸门 | 01 §5 / adr-101 / adr-102 |
 | split-corpus.mjs | 家族分层 dev/test 切分 + 跨集近重复（Dice）校验 | 04-scoring-and-splits §1 |
+| granularity-check.mjs | 命题粒度规则 granularity@v2：原子性/拆分规则（S1–S6b）/不可拆（U1–U4）/同一性判定 + 20 条校准集校验 | 06-annotation-spec §1.1 |
 | annotation-pass.mjs | 双遍盲评**自动参考**工作流：盲评包/导入校验/一致性报告/裁决工作表/goldset 生成（fail-closed，未裁决一律拒绝）；不出 pass/fail；不再要求人工标注 | 06-annotation-spec §2/§3 |
 
 ## 红线
