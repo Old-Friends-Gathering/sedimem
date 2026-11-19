@@ -15,8 +15,8 @@
 | 文件 | 作用 |
 |---|---|
 | `tools/evidence.mjs` | **B7.1 真实现**：R3 五条机判（码点 span/代理对边界/quote 唯一且 ≤200/快照 hash 比对/stale） |
-| `tools/pipeline.mjs` | **B7.2 真实现**：决策矩阵 9 行（`DECISION_ROWS`）+ R7 提交（收据幂等/锁内 epoch 重查/CAS 刷新/审计先行/恢复三分支） |
-| `tools/assertion-checks.mjs` | **B7.3 真实现**：§5 R4.5 五条断言机判（speaker/negated/suggest/complete/retract） |
+| `tools/pipeline.mjs` | **B7.2 真实现（v2）**：决策矩阵 9 行（`DECISION_ROWS`，命中即停）+ 真实判据（来源 scope/证据 role/事件全文注入面/epoch 撤销）+ R7 提交（收据幂等/锁内 epoch 重查/CAS 三含 evidenceHash/真刷新重评/audit-pending 阻塞/恢复分支） |
+| `tools/assertion-checks.mjs` | **B7.3 真实现（唯一断言权威，pipeline 直接 import）**：§5 R4.5 五条断言机判（speaker/negated/suggest/complete/retract）；否定按词边界、疑问句不算用户确认 |
 | `tools/pipeline-events.mjs` | **B7.3 真实现**：§9 R8 三类事件 + `runStatus`/`verdictAllowed` 枚举映射 |
 | `tools/r2-sim.mjs` | r2 自动决策模拟器（`createR2Sim`）：R0/R1 摄取与证据解析、R3 五条机判、自动决策矩阵 9 行、聊天纠正 7 类、R7 提交/CAS/恢复、R8 事件与配额闸门 |
 | `pilot/p1a/tools/protocol-sim.mjs` | 复用的候选状态机与幂等协议模拟器（`createSim`），r2-sim 在其上实现决策与提交 |
@@ -24,7 +24,7 @@
 常用命令：
 
 ```bash
-# 全部测试（63 条：20 保护测试 + 43 真实现测试）
+# 全部 p1b 测试（97 条：20 条 r2 保护测试 + 77 条真实现测试）
 node --test pilot/p1b/tests/*.test.mjs
 
 # 只跑决策与断言机判
@@ -52,10 +52,10 @@ node --test pilot/p1b/tests/r2-decisions.test.mjs
 
 ## 已知的声明式占位（真实现阶段必须换成机判）
 
-以下三项在桩里由调用方传布尔，模拟器自己不判定，属**声明式占位**，不得当作已验证机制：
+B7 v2 已关闭两项（身份不明改用**证据 role** 判定；`redactionOk` 开关移出管线，脱敏/成本闸门归 `pilot/p1a/tools/contract-guards.mjs` 的 `checkCostGate`）。**仍有一项**：
 
-1. `decide(id, { identityUnknown })` —— 说话人身份未定应由抽取/核对阶段解析，不能靠调用方声明；
-2. `decide(id, { resolveObjection })` —— 异议能否被正文消解（09 §5 R4 异议生成器）尚无实现；
-3. `decide(id, { redactionOk })` —— 脱敏结果应由脱敏器回报，不是外部开关。
+1. `decide(id, { objection: { resolvable, targetRecordId } })` —— 异议**能否被正文消解**仍由调用方声明（09 §5 R4 异议生成器尚未实现）；管线侧只保证：行 8 在行 1–7 之后、命中即真重入重评、且 generate 出 `relations.supersedes` 落到真相层。
+
+另：`policy.quotaExceeded` 是策略配置项（配额由 policy 决定，不是候选自身的属性），不属于声明式占位，但 P1b 放行前必须由 adr-102 成本闸门真实驱动。
 
 对应审核编号见 [B6 审核报告](../../docs/reviews/v2.0-p1b-tests-2026-11-18/REVIEW.md)（R4/R6/R7/R8 属真实现阶段关闭项）。

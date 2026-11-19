@@ -50,29 +50,26 @@ function checkSpeaker(assertion, evidence) {
 }
 
 // —— negated（规格表第 2 行）——
-const NEG_MARKERS = ['不', '未', '没有', '没', 'never', 'not', 'no'];
-const NEG_EXCLUDES = ['不仅', '不过', '不确定', 'not only'];
+// 判据是「引文含否定标记」——标记是**词**不是子串：英文用词边界，中文先剔除只含「不/没/未」
+// 却表否定缺席的组合词（不仅/不过/没问题/没错…），避免 note / cannot / 没错 被误判为否定。
+const EN_NEG_RE = /\b(?:not|never|no|none|cannot|won't|isn't|aren't|doesn't|didn't)\b/iu;
+const ZH_NEG_MARKERS = ['不', '未', '没', '别'];
+const ZH_NEG_EXCLUDES = [
+  '不仅', '不但', '不光', '不只', '不过', '不确定', '不仅不', '不管',
+  '没问题', '没错', '没什么', '没关系', '没影响', '没准', '没多久',
+  '无论', '无论什么', '未必', '未定',
+];
+
+const EN_NEG_EXCLUDES = [/not only/giu, /not just/giu, /no longer/giu, /no doubt/giu];
 
 function hasNegation(text) {
-  const t = text || '';
-  const window = (marker) => t.split(marker).length - 1 > 0;
-  for (const marker of NEG_MARKERS) {
-    let idx = t.indexOf(marker);
-    while (idx !== -1) {
-      // 排除不表否定的组合词：检查 marker 前后是否构成排除词
-      const excluded = NEG_EXCLUDES.some((ex) => {
-        const p = t.indexOf(ex);
-        while (p !== -1) {
-          if (ex.includes(marker) && p <= idx && idx < p + ex.length) return true;
-          p = t.indexOf(ex, p + 1);
-        }
-        return false;
-      });
-      if (!excluded) return true;
-      idx = t.indexOf(marker, idx + 1);
-    }
-  }
-  return false;
+  // 先剔除英文里含 not/no 却不表否定的短语，再按词边界判英文标记
+  let masked = text || '';
+  for (const re of EN_NEG_EXCLUDES) masked = masked.replace(re, '\u25a1');
+  if (EN_NEG_RE.test(masked)) return true;
+  // 中文：先把「不仅/没问题/没错」类组合词替换成占位符，再扫单字标记
+  for (const ex of ZH_NEG_EXCLUDES) masked = masked.split(ex).join('\u25a1');
+  return ZH_NEG_MARKERS.some((m) => masked.includes(m));
 }
 
 function checkNegated(assertion, evidence) {
@@ -106,7 +103,8 @@ function checkSuggest(assertion, status, evidence) {
 }
 
 // —— speechAct=complete（规格表第 4 行）——
-const USER_CONFIRM_MARKERS = ['已', '完成', 'done', '完成了吗', '确认'];
+const USER_CONFIRM_MARKERS = ['已', '完成', 'done', 'confirm', '确认', '修好', '搞定'];
+const QUESTION_RE = /[?？]|吗|呢|是否/u;
 
 function checkComplete(claimObj, assertion, evidence) {
   if (assertion.speechAct !== 'complete') return [];
@@ -118,7 +116,9 @@ function checkComplete(claimObj, assertion, evidence) {
   for (const e of evidence) {
     const role = e.role || '';
     const isTool = role === 'tool' || role.startsWith('tool:');
-    const isUserConfirm = role === 'user' && USER_CONFIRM_MARKERS.some((m) => (e.quote || '').includes(m));
+    // 用户确认必须是**确认式**表述：含确认词且不是疑问（「完成了吗」是提问，不构成完成证据）
+    const quote = e.quote || '';
+    const isUserConfirm = role === 'user' && USER_CONFIRM_MARKERS.some((m) => quote.includes(m)) && !QUESTION_RE.test(quote);
     if (isTool || isUserConfirm) continue;
     if (role === 'assistant') {
       violations.push({ check: 'speechAct-complete', reason: `evidence ${e.eventId}: 助手自称完成不得作为 complete 证据` });

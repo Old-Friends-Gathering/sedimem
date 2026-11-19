@@ -186,3 +186,41 @@ test('多证据：任一证据不符即 ok=false，violations 逐条记录', () 
   assert.equal(r.violations.length, 1);
   assert.equal(r.violations[0].check, 'speaker');
 });
+
+// —— B7 审核 M9/M10 回归：否定误报与「疑问句当确认」 ——
+test('negated: note/cannot/没错 等子串不得被当否定标记（M9 回归）', () => {
+  for (const q of ['note: port is 8080', 'the note says 8080', '没错，这个方案没问题', '没问题，照旧']) {
+    const r = checkAssertion({
+      claim: claim({ assertion: { speechAct: 'state', negated: false, about: 'x' } }),
+      evidence: [ev({ quote: q })],
+    });
+    assert.equal(r.ok, true, `quote="${q}" 不应被判否定`);
+  }
+});
+
+test('negated: 真正的英文/中文否定仍必须被识别', () => {
+  for (const q of ['it does not work', 'never deployed', '还没有上线', 'we cannot reproduce it']) {
+    const r = checkAssertion({
+      claim: claim({ assertion: { speechAct: 'state', negated: false, about: 'x' } }),
+      evidence: [ev({ quote: q })],
+    });
+    assert.equal(r.ok, false, `quote="${q}" 应判否定违规`);
+  }
+});
+
+test('speechAct=complete：疑问句「完成了吗」不构成用户确认（M10 回归）', () => {
+  const r = checkAssertion({
+    claim: claim({ type: 'task-state', assertion: { speechAct: 'complete', about: 'x' } }),
+    evidence: [ev({ role: 'user', quote: '完成了吗' })],
+  });
+  assert.equal(r.ok, false);
+  assert.equal(r.violations[0].check, 'speechAct-complete');
+});
+
+test('speechAct=complete：用户明确确认「已完成，确认」构成证据', () => {
+  const r = checkAssertion({
+    claim: claim({ type: 'task-state', assertion: { speechAct: 'complete', about: 'x' } }),
+    evidence: [ev({ role: 'user', quote: '已完成，确认' })],
+  });
+  assert.equal(r.ok, true);
+});

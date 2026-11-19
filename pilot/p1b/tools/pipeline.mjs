@@ -1,17 +1,19 @@
-// pipeline.mjs —— P1b 真管线：R5/R6 自动决策矩阵（r2，替代人工复核）+ R7 提交路径
-// 规格：docs/design/v2.0/09-extraction-pipeline.md §6（9 行矩阵、穷尽性）、§8（提交/并发/恢复）
-// 约束：
-//   - 决策矩阵必须穷尽：未命中任何行 → fail-closed 抛 E_MATRIX_NOT_EXHAUSTIVE 并入审计；
-//   - accept 不等于提权：truth 记录 trust 恒 T2，trustWrites() 恒空；
-//   - 提交点 = 真相层成功追加；审计未落盘不得进真相层（fail-closed）；
-//   - 锁内必须重查 sourceEpoch，撤销优先于 CAS；
-//   - noop/merge 留持久收据，重放不产生第二条事实。
+// pipeline.mjs —— P1b 真管线：R5/R6 自动决策矩阵（r2）+ R7 提交路径
+// 规格：docs/design/v2.0/09-extraction-pipeline.md §6（9 行矩阵、命中即停、穷尽性）、§8（提交/并发/恢复）
+// 设计要点（对应 B7 对抗审核 B1/M1–M10 的落地）：
+//   - candidateId 仍按 01 §3.1 内容四元组派生，但**写入幂等按语义键去重**（跨 runKey 同 claim → noop）；
+//   - 行 2/4 用真实信号（来源绑定 scope、证据 role），不依赖调用方传 ctx 后门；
+//   - 行 8（可消解异议）在行 1–7 之后，且**真正重入**矩阵一次；
+//   - R3 查 epoch 撤销；R7 锁内再查一次，撤销优先于 CAS；
+//   - CAS 三元组含 evidenceHash；刷新=重跑决策并递增 candidateVersion，超限转 hold；
+//   - audit-pending 期间禁止任何新提交（fail-closed），reconcile 后解除；
+//   - accept 不提权：truth 记录恒 T2，trustWrites() 恒空。
 import { createHash } from 'node:crypto';
 import { resolveEvidence } from './evidence.mjs';
+import { checkAssertion } from './assertion-checks.mjs';
 
 export const POLICY_VERSION = 'policy:auto-memory-r2/1';
 
-// 矩阵固定顺序（§6）：自上而下，命中即停
 export const DECISION_ROWS = Object.freeze([
   { row: 1, condition: 'evidence-unsupported', decision: 'reject', reason: 'evidence-unsupported' },
   { row: 2, condition: 'cross-scope', decision: 'reject', reason: 'cross-scope-leak' },
@@ -32,19 +34,16 @@ const INJECTION_PATTERNS = [
   /无视.{0,4}(安全|策略)/u,
 ];
 
-const NEGATION_RE = /(?:^|[^不])不(?!仅|过|确定)|未|没有|没(?!有)|never|not(?! only)|\bno\b/iu;
-const SUGGEST_RE = /建议|可以|不妨|could|should|maybe/iu;
-const RETRACT_RE = /撤回|作废|取消|不对|说错了|ignore that|never mind/iu;
+const KNOWN_ROLES = new Set(['user', 'assistant', 'tool']);
 
 function normalizeClaim(text) {
-  return String(text).replace(/\s+/g, ' ').replace(/[。；;！!?？]+$/u, '').trim();
+  return String(text).replace(/\s+/gu, ' ').replace(/[。；;！!?？]+$/u, '').trim();
 }
 
 function makeCandidateId({ sourceEpoch, rangeId, inputHash }, claim) {
   const h = createHash('sha256')
     .update(`${sourceEpoch}|${rangeId}|${inputHash}|${normalizeClaim(claim)}`, 'utf8')
     .digest();
-  // 26 位 Crockford base32
   const alphabet = '0123456789ABCDEFGHJKMNPQRSTVWXYZ';
   let out = '';
   for (let i = 0; i < 26; i += 1) out += alphabet[h[i] % 32];
@@ -55,44 +54,22 @@ function hashInput(text) {
   return `sha256:${createHash('sha256').update(text, 'utf8').digest('hex')}`;
 }
 
-// R4.5 断言框架机判的最小确定性实现（完整版见 assertion-checks.mjs，二者判据一致）
-export function checkAssertionInline({ claim, assertion, evidence }) {
-  const violations = [];
-  const quote = (evidence || []).map((e) => e.quote || '').join(' ');
-  const roles = (evidence || []).map((e) => e.role);
-  if (!assertion || !evidence?.length) {
-    return { ok: false, violations: [{ check: 'input', reason: 'missing assertion or evidence' }] };
-  }
-  const negated = Boolean(assertion.negated);
-  const hasNeg = NEGATION_RE.test(quote);
-  if (!negated && hasNeg) violations.push({ check: 'negated', reason: '否定标记存在但 negated=false' });
-  if (negated && !hasNeg) violations.push({ check: 'negated', reason: '无否定标记但 negated=true' });
+// 语义键：跨 runKey 幂等与去重的依据（不含 model/configHash，也不含 rangeId）
+export function semanticKey(meta) {
+  const a = meta.assertion ?? {};
+  return [
+    meta.scope ?? '',
+    a.subject ?? '',
+    a.predicate ?? '',
+    String(a.value ?? ''),
+    normalizeClaim(meta.claimText ?? ''),
+  ].join('\u0000');
+}
 
-  if (assertion.speechAct === 'suggest') {
-    if (!SUGGEST_RE.test(quote)) violations.push({ check: 'speechAct', reason: 'suggest 缺建议式' });
-    if (!['suggestion-only', 'conditional'].includes(claim.status)) {
-      violations.push({ check: 'speechAct', reason: 'suggest 的 status 非法' });
-    }
-  }
-  if (assertion.speechAct === 'complete') {
-    if (claim.type !== 'task-state') violations.push({ check: 'speechAct', reason: 'complete 必须 type=task-state' });
-    const fromToolOrUser = roles.some((r) => r === 'tool' || String(r).startsWith('tool:')) ||
-      roles.some((r) => r === 'user');
-    if (!fromToolOrUser) violations.push({ check: 'speechAct', reason: 'complete 缺工具或用户直接证据' });
-    if (roles.includes('assistant') && !fromToolOrUser) {
-      violations.push({ check: 'speechAct', reason: '助手自称完成不得 complete' });
-    }
-  }
-  if (assertion.speechAct === 'retract') {
-    if (!RETRACT_RE.test(quote)) violations.push({ check: 'speechAct', reason: 'retract 缺撤回式' });
-    if (claim.status !== 'retracted') violations.push({ check: 'speechAct', reason: 'retract 的 status 必须 retracted' });
-  }
-  if (assertion.speaker && assertion.speaker !== 'quoted' && roles.length) {
-    const want = String(assertion.speaker);
-    const ok = roles.every((r) => r === want || (want.startsWith('tool') && String(r).startsWith('tool')));
-    if (!ok) violations.push({ check: 'speaker', reason: `speaker=${want} 与证据 role 不符` });
-  }
-  return { ok: violations.length === 0, violations };
+function roleIsKnown(role) {
+  if (!role) return false;
+  if (role.startsWith('tool:')) return true;
+  return KNOWN_ROLES.has(role);
 }
 
 export function createPipeline({
@@ -100,15 +77,13 @@ export function createPipeline({
   snapshots = null,
   sourceId = null,
   sourceEpoch = null,
+  sourceScope = null,
   policy = {},
   clock = () => new Date().toISOString(),
-  events_: _unused = null,
 } = {}) {
-  const cfg = {
-    maxCasRefresh: 2,
-    ...policy,
-  };
-  const candidates = new Map(); // candidateId → {state, claim, evidence, meta, hold}
+  const cfg = { maxCasRefresh: 2, quotaExceeded: false, ...policy };
+
+  const candidates = new Map();
   const truth = [];
   const receipts = new Map(); // opId → {recordId, revision}
   const audit = [];
@@ -116,84 +91,163 @@ export function createPipeline({
   const revoked = new Set();
   const quarantined = [];
   const holds = [];
-  const auditFailOps = new Set();
+
   let truthRevision = 0;
+  let seq = 0;
 
-  function bumpTruthRevision() {
-    truthRevision += 1;
-    return truthRevision;
-  }
+  const auditOf = (entry) => {
+    seq += 1;
+    audit.push({ seq, at: clock(), ...entry });
+  };
 
-  function ingest({ runKey, claims = [], events: overrideEvents } = {}) {
-    const evs = overrideEvents ?? events;
-    const inputHash = hashInput([...evs.values()].map((e) => `${e.eventId}:${e.text}`).join('\n'));
+  function ingest({ runKey, claims = [] }) {
+    const inputHash = hashInput([...events.values()].map((e) => `${e.eventId}:${e.text}`).join('\n'));
     const out = [];
     for (const claim of claims) {
-      const candidateId = makeCandidateId(
-        { sourceEpoch: sourceEpoch ?? claim?.sourceEpoch ?? 0, rangeId: runKey, inputHash },
-        claim.claim,
-      );
-      if (candidates.has(candidateId)) {
-        out.push({ candidateId, created: 0, noop: true });
+      const meta = {
+        claim,
+        claimText: claim.claim,
+        scope: claim.scope,
+        evidence: claim.evidence,
+        assertion: claim.assertion,
+        type: claim.type,
+        status: claim.status,
+        relations: claim.relations ?? [],
+        sourceEpoch: claim.sourceEpoch ?? sourceEpoch ?? 0,
+        inputHash,
+        version: 1,
+        provenance: { runKey, policyVersion: POLICY_VERSION, at: clock() },
+      };
+      const key = semanticKey(meta);
+
+      // 已提交的同语义 claim → noop(already-committed)；已有候选 → noop（跨 runKey 幂等，§2）
+      const inTruth = truth.find((t) => t.key === key);
+      if (inTruth) {
+        out.push({ candidateId: inTruth.candidateId, created: 0, noop: true, noopReason: 'already-committed' });
         continue;
       }
-      const rec = {
-        candidateId,
-        runKey,
-        claim,
-        meta: {
-          claim,
-          claimText: claim.claim,
-          scope: claim.scope,
-          evidence: claim.evidence,
-          assertion: claim.assertion,
-          type: claim.type,
-          status: claim.status,
-          inputHash,
-          version: 1,
-          provenance: { policyVersion: POLICY_VERSION, at: clock() },
-        },
-        state: 'pending',
-        hold: null,
-      };
+      const dup = [...candidates.values()].find((c) => c.key === key);
+      if (dup) {
+        out.push({ candidateId: dup.candidateId, created: 0, noop: true });
+        continue;
+      }
+
+      const candidateId = makeCandidateId({ sourceEpoch: meta.sourceEpoch, rangeId: runKey, inputHash }, claim.claim);
+      const rec = { candidateId, key, meta, state: 'pending', hold: null };
       candidates.set(candidateId, rec);
       out.push({ candidateId, created: 1, noop: false });
     }
     return out;
   }
 
-  function get(candidateId) {
+  const get = (candidateId) => {
     const c = candidates.get(candidateId);
     return c ? { candidateId, state: c.state, claim: c.meta.claim, meta: c.meta } : null;
-  }
+  };
 
-  function isInjection(text) {
-    return INJECTION_PATTERNS.some((re) => re.test(text));
-  }
+  const isInjection = (text) => INJECTION_PATTERNS.some((re) => re.test(text));
 
-  function findConflict(claimMeta) {
-    const { scope, assertion } = claimMeta;
-    if (!assertion?.subject || !assertion?.predicate) return null;
+  function findConflict(meta) {
+    const a = meta.assertion ?? {};
+    if (!a.subject || !a.predicate) return null;
     return (
       truth.find(
         (t) =>
-          t.scope === scope &&
-          t.assertion?.subject === assertion.subject &&
-          t.assertion?.predicate === assertion.predicate &&
-          String(t.assertion?.value ?? '') !== String(assertion.value ?? ''),
+          t.scope === meta.scope &&
+          t.assertion?.subject === a.subject &&
+          t.assertion?.predicate === a.predicate &&
+          String(t.assertion?.value ?? '') !== String(a.value ?? ''),
       ) ?? null
     );
+  }
+
+  // 单次矩阵求值（不含行 8）；返回 {decision, reason, rulesHit, ...}
+  function evaluate(c, { correctionApplied = false } = {}) {
+    const rulesHit = [];
+    const meta = c.meta;
+
+    // 行 1：证据存在 + R3 查 epoch 撤销
+    if (revoked.has(meta.sourceEpoch)) {
+      return { decision: 'reject', reason: 'evidence-unsupported', rulesHit: ['source-revoked'], failures: [{ reason: 'source-revoked' }] };
+    }
+    const evRes = resolveEvidence({
+      events,
+      evidence: meta.evidence ?? [],
+      snapshots,
+      sourceId,
+      sourceEpoch: meta.sourceEpoch,
+    });
+    if (!evRes.ok) {
+      return { decision: 'reject', reason: 'evidence-unsupported', rulesHit: ['evidence-failed'], failures: evRes.failures };
+    }
+    rulesHit.push('evidence-ok');
+    meta.evidenceHash = evRes.evidence.map((e) => `${e.eventId}@${e.span.start}-${e.span.end}#${e.hash}`).join(',');
+
+    // 行 2：跨 scope（真实判据：来源绑定的 scope）
+    if (sourceScope && meta.scope && meta.scope !== sourceScope) {
+      return { decision: 'reject', reason: 'cross-scope-leak', rulesHit: ['cross-scope'] };
+    }
+    const foreign = truth.find((t) => t.key !== c.key && t.scope !== meta.scope && t.assertion?.subject === meta.assertion?.subject && t.assertion?.predicate === meta.assertion?.predicate);
+    if (foreign) {
+      return { decision: 'reject', reason: 'cross-scope-leak', rulesHit: ['cross-scope-foreign-subject'], detail: foreign.recordId };
+    }
+    rulesHit.push('scope-ok');
+
+    // 行 3：注入
+    const cited = evRes.evidence
+      .map((e) => `${e.quote} ${events.get(e.eventId)?.text ?? ''}`)
+      .join(' ');
+    if (isInjection(meta.claimText) || isInjection(cited)) {
+      return { decision: 'reject', reason: 'injection-suspected', rulesHit: ['injection-detected'] };
+    }
+    rulesHit.push('no-injection');
+
+    // 行 4：身份/角色不明（真实判据：证据 role）
+    const unknown = evRes.evidence.filter((e) => !roleIsKnown(e.role));
+    if (unknown.length) {
+      return { decision: 'reject', reason: 'identity-unknown', rulesHit: ['identity-unknown'], detail: unknown.map((u) => u.eventId) };
+    }
+    rulesHit.push('identity-ok');
+
+    // 行 5：断言机判（权威实现 assertion-checks.mjs）
+    const as = checkAssertion({
+      claim: { claim: meta.claimText, type: meta.type, status: meta.status, assertion: meta.assertion },
+      assertion: meta.assertion,
+      evidence: evRes.evidence,
+    });
+    if (!as.ok) {
+      return { decision: 'reject', reason: 'assertion-mismatch', rulesHit: ['assertion-failed'], violations: as.violations };
+    }
+    rulesHit.push('assertion-ok');
+
+    // 行 6：冲突（若已有纠正关系指向该记录则可消解 → 继续往下走）
+    const conflict = findConflict(meta);
+    if (conflict) {
+      const superseded = (meta.relations ?? []).some(
+        (rel) => rel.kind === 'supersedes' && (rel.targetRecordId === conflict.recordId || rel.target === conflict.recordId),
+      );
+      if (!superseded) {
+        return { decision: 'hold', reason: 'unresolved', rulesHit: [...rulesHit, 'conflict-unresolvable'], conflict: conflict.recordId };
+      }
+      rulesHit.push('conflict-superseded');
+    } else {
+      rulesHit.push('no-conflict');
+    }
+
+    // 行 7：配额
+    if (cfg.quotaExceeded) {
+      return { decision: 'reject', reason: 'policy-blocked', rulesHit: [...rulesHit, 'quota-exceeded'] };
+    }
+    rulesHit.push('quota-ok');
+
+    if (correctionApplied) rulesHit.push('correction-applied');
+    return { decision: 'accept', reason: correctionApplied ? 'correction-applied' : 'policy-accept', rulesHit };
   }
 
   function decide(candidateId, ctx = {}) {
     const c = candidates.get(candidateId);
     if (!c) throw new Error(`E_CANDIDATE_NOT_FOUND:${candidateId}`);
-    if (ctx.forceUnmatched) {
-      audit.push({ kind: 'matrix-unmatched', candidateId, at: clock() });
-      throw new Error('E_MATRIX_NOT_EXHAUSTIVE');
-    }
 
-    const rulesHit = [];
     const decisionBase = {
       opId: ctx.opId ?? null,
       decider: POLICY_VERSION,
@@ -203,174 +257,129 @@ export function createPipeline({
       decidedAt: clock(),
     };
 
-    // 行 1：证据存在
-    const evRes = resolveEvidence({
-      events,
-      evidence: c.meta.evidence ?? [],
-      snapshots,
-      sourceId,
-      sourceEpoch,
-    });
-    if (!evRes.ok) {
-      c.state = 'failed';
-      audit.push({ kind: 'decision', candidateId, reason: 'evidence-unsupported', at: clock() });
-      return { ...decisionBase, decision: 'reject', reason: 'evidence-unsupported', rulesHit: ['evidence-failed'], failures: evRes.failures };
+    // 行 8：异议可消解 → 生成 relations 后**真正重入**矩阵（行 1–7 全量重评）
+    let r = evaluate(c);
+    let correctionApplied = false;
+    if ((r.decision === 'hold' || r.decision === 'reject') && ctx.objection?.resolvable) {
+      correctionApplied = true;
+      c.meta.relations = [
+        ...c.meta.relations,
+        {
+          kind: 'supersedes',
+          targetRecordId: ctx.objection.targetRecordId ?? r.conflict ?? null,
+          reason: ctx.objection.reason ?? 'correction',
+          at: clock(),
+        },
+      ];
+      c.meta.version += 1; // 修订产生新版本（CAS 依据）
+      r = evaluate(c, { correctionApplied: true });
     }
-    rulesHit.push('evidence-ok');
-    c.meta.evidenceHash = evRes.evidence.map((e) => e.hash).join(',');
 
-    // 行 2：跨 scope
-    const targetScope = ctx.targetScope ?? c.meta.scope;
-    if (targetScope && c.meta.scope && targetScope !== c.meta.scope) {
-      c.state = 'failed';
-      audit.push({ kind: 'decision', candidateId, reason: 'cross-scope-leak', at: clock() });
-      return { ...decisionBase, decision: 'reject', reason: 'cross-scope-leak', rulesHit: ['cross-scope'] };
+    // 穷尽性兜底：evaluate 必须给出九行之一，否则 fail-closed
+    if (!r || !r.reason || !['accept', 'reject', 'hold'].includes(r.decision)) {
+      auditOf({ kind: 'matrix-unmatched', candidateId });
+      throw new Error('E_MATRIX_NOT_EXHAUSTIVE');
     }
-    rulesHit.push('scope-ok');
 
-    // 行 3：注入
-    const cited = evRes.evidence.map((e) => e.quote).join(' ');
-    if (isInjection(c.meta.claimText) || isInjection(cited)) {
-      c.state = 'rejected';
-      quarantined.push({ candidateId, at: clock(), reason: 'injection-suspected' });
-      audit.push({ kind: 'decision', candidateId, reason: 'injection-suspected', at: clock() });
-      return { ...decisionBase, decision: 'reject', reason: 'injection-suspected', rulesHit: ['injection-detected'] };
-    }
-    rulesHit.push('no-injection');
-
-    // 行 4：身份不明
-    if (ctx.identityUnknown) {
-      c.state = 'rejected';
-      audit.push({ kind: 'decision', candidateId, reason: 'identity-unknown', at: clock() });
-      return { ...decisionBase, decision: 'reject', reason: 'identity-unknown', rulesHit: ['identity-unknown'] };
-    }
-    rulesHit.push('identity-ok');
-
-    // 行 5：断言机判
-    const as = checkAssertionInline({
-      claim: {
-        type: c.meta.type,
-        status: c.meta.status,
-        claim: c.meta.claimText,
-      },
-      assertion: c.meta.assertion,
-      evidence: evRes.evidence,
-    });
-    if (!as.ok) {
-      c.state = 'rejected';
-      audit.push({ kind: 'decision', candidateId, reason: 'assertion-mismatch', at: clock(), violations: as.violations });
-      return { ...decisionBase, decision: 'reject', reason: 'assertion-mismatch', rulesHit: ['assertion-failed'], violations: as.violations };
-    }
-    rulesHit.push('assertion-ok');
-
-    // 行 8 前置：可消解异议 → 走纠正（先生成 relations 语义，再重入第 1 行）
-    if (ctx.objection?.resolvable) {
-      rulesHit.push('correction-applied');
-      c.meta.relations = [...(c.meta.relations ?? []), { kind: 'supersedes', reason: ctx.objection.reason ?? 'correction' }];
-      audit.push({ kind: 'decision', candidateId, reason: 'correction-applied', at: clock() });
-      // 重入矩阵第 1 行：证据仍须可定位（上面已过），冲突按纠正处理
-      return {
-        ...decisionBase,
-        decision: 'accept',
-        reason: 'correction-applied',
-        rulesHit,
-        relations: c.meta.relations,
+    // 状态迁移 + hold 注解 + 隔离
+    if (r.decision === 'reject') {
+      c.state = r.reason === 'evidence-unsupported' ? 'failed' : 'rejected';
+      if (r.reason === 'injection-suspected') {
+        quarantined.push({ candidateId, at: clock(), reason: 'injection-suspected' });
+      }
+    } else if (r.decision === 'hold') {
+      c.state = 'pending';
+      c.hold = {
+        policyVersion: POLICY_VERSION,
+        reason: r.reason,
+        targetRecordId: r.conflict ?? null,
+        at: clock(),
       };
-    }
-
-    // 行 6：不可消解冲突
-    const conflict = findConflict(c.meta);
-    if (conflict) {
-      c.hold = { policyVersion: POLICY_VERSION, reason: 'unresolved', targetRecordId: conflict.recordId, at: clock() };
       holds.push(c.hold);
-      audit.push({ kind: 'decision', candidateId, reason: 'unresolved', at: clock() });
-      return { ...decisionBase, decision: 'hold', reason: 'unresolved', rulesHit: [...rulesHit, 'conflict-unresolvable'] };
+    } else {
+      c.state = 'pending'; // accept 不等于落库：提交点仍是 R7
     }
-    rulesHit.push('no-conflict');
 
-    // 行 7：超配额
-    if (cfg.quotaExceeded) {
-      c.state = 'rejected';
-      audit.push({ kind: 'decision', candidateId, reason: 'policy-blocked', at: clock() });
-      return { ...decisionBase, decision: 'reject', reason: 'policy-blocked', rulesHit: [...rulesHit, 'quota-exceeded'] };
-    }
-    rulesHit.push('quota-ok');
-
-    // 行 9：通过
-    audit.push({ kind: 'decision', candidateId, reason: 'policy-accept', at: clock() });
-    return { ...decisionBase, decision: 'accept', reason: 'policy-accept', rulesHit };
+    auditOf({ kind: 'decision', candidateId, decision: r.decision, reason: r.reason });
+    return { ...decisionBase, decision: r.decision, reason: r.reason, rulesHit: r.rulesHit, ...(r.violations ? { violations: r.violations } : {}) };
   }
 
-  function auditPendingOps() {
-    return [...auditPending];
-  }
-
-  function failAuditOnOp(opId) {
-    auditFailOps.add(opId);
-  }
-
-  // R7：提交
   function commit(candidateId, { opId, expected = null } = {}) {
     const c = candidates.get(candidateId);
     if (!c) throw new Error(`E_CANDIDATE_NOT_FOUND:${candidateId}`);
     if (!opId) throw new Error('E_OPID_REQUIRED');
 
-    // 收据幂等
     if (receipts.has(opId)) {
       const r = receipts.get(opId);
       return { kind: 'noop-receipt', recordId: r.recordId, revision: r.revision };
     }
 
+    // audit-pending 期间禁止任何新写入（fail-closed，§8）
+    if (auditPending.size > 0 && !auditPending.has(opId)) {
+      throw new Error('E_AUDIT_PENDING');
+    }
+
     // 锁内重查 epoch（撤销优先于 CAS）
-    if (revoked.has(c.meta.sourceEpoch ?? sourceEpoch ?? 1)) {
+    if (revoked.has(c.meta.sourceEpoch)) {
       c.state = 'cancelled';
-      audit.push({ kind: 'commit', candidateId, opId, reason: 'source-revoked', at: clock() });
+      auditOf({ kind: 'commit', candidateId, opId, reason: 'source-revoked' });
       return { kind: 'cancelled', reason: 'source-revoked' };
     }
 
-    // CAS
-    let refreshed = 0;
+    // CAS 三元组：candidateVersion + evidenceHash + expectedTruthRevision
     if (expected) {
-      const sameVersion = expected.candidateVersion === c.meta.version;
-      const samerev = expected.expectedTruthRevision === truthRevision;
-      while (!(sameVersion && samerev) && refreshed < cfg.maxCasRefresh) {
+      let refreshed = 0;
+      let ok = casMatch(c, expected);
+      while (!ok && refreshed < cfg.maxCasRefresh) {
         refreshed += 1;
-        const nowSame =
-          expected.candidateVersion === c.meta.version && expected.expectedTruthRevision === truthRevision;
-        if (nowSame) break;
+        // 真实刷新：重跑决策，版本递增，然后重新比对
+        decide(candidateId, { opId });
+        c.meta.version += 1;
+        ok = casMatch(c, expected);
       }
-      if (expected.candidateVersion !== c.meta.version || expected.expectedTruthRevision !== truthRevision) {
-        c.hold = { policyVersion: POLICY_VERSION, reason: 'cas-conflict', at: clock() };
+      if (!ok) {
+        c.state = 'pending';
+        c.hold = { policyVersion: POLICY_VERSION, reason: 'cas-conflict', refreshed, at: clock() };
         holds.push(c.hold);
-        audit.push({ kind: 'commit', candidateId, opId, reason: 'cas-conflict', refreshed, at: clock() });
+        auditOf({ kind: 'commit', candidateId, opId, reason: 'cas-conflict', refreshed });
         return { kind: 'hold', reason: 'cas-conflict', refreshed };
       }
     }
 
     // 审计先行（fail-closed）
-    if (auditFailOps.has(opId)) {
-      auditPending.add(opId);
-      throw new Error('E_AUDIT_PENDING');
-    }
-    audit.push({ kind: 'commit', candidateId, opId, at: clock() });
+    if (auditPending.has(opId)) throw new Error('E_AUDIT_PENDING');
+    auditOf({ kind: 'commit', candidateId, opId });
 
     // 真相层追加 = 提交点
-    const revision = bumpTruthRevision();
+    truthRevision += 1;
     const record = {
-      recordId: `tr-${revision}`,
+      recordId: `tr-${truthRevision}`,
       opId,
       candidateId,
-      revision,
+      key: c.key,
+      revision: truthRevision,
+      candidateVersion: c.meta.version,
+      evidenceHash: c.meta.evidenceHash ?? null,
       claim: c.meta.claimText,
       scope: c.meta.scope,
       assertion: c.meta.assertion,
+      relations: c.meta.relations ?? [],
       trust: 'T2',
       committedAt: clock(),
     };
     truth.push(record);
-    receipts.set(opId, { recordId: record.recordId, revision });
+    receipts.set(opId, { recordId: record.recordId, revision: record.revision, evidenceHash: record.evidenceHash });
     c.state = 'accepted';
-    return { kind: 'committed', recordId: record.recordId, revision };
+    return { kind: 'committed', recordId: record.recordId, revision: record.revision };
+  }
+
+  function casMatch(c, expected) {
+    const versionOk = expected.candidateVersion === c.meta.version;
+    const revOk = expected.expectedTruthRevision === truthRevision;
+    const hashOk = expected.evidenceHash === undefined || expected.evidenceHash === null
+      ? true
+      : expected.evidenceHash === (c.meta.evidenceHash ?? null);
+    return versionOk && revOk && hashOk;
   }
 
   return {
@@ -378,26 +387,35 @@ export function createPipeline({
     get,
     decide,
     commit,
+    semanticKey,
     truthRecords: () => truth.slice(),
     trustWrites: () => [],
     packInputs: () =>
       truth
         .filter((t) => !quarantined.some((q) => q.candidateId === t.candidateId))
+        .filter((t) => ![...candidates.values()].some((c) => c.candidateId === t.candidateId && revoked.has(c.meta.sourceEpoch)))
         .map((t) => ({ ...t, sourceMark: t.trust })),
     quarantine: () => quarantined.slice(),
     holdAnnotations: () => holds.slice(),
-    auditPendingOps,
-    failAuditOnOp,
+    auditPendingOps: () => [...auditPending],
+    failAuditOnOp: (opId) => {
+      auditPending.add(opId);
+    },
+    clearAuditPending: (opId) => {
+      auditPending.delete(opId);
+    },
     addTruthRecord: ({ claim, scope, assertion = null }) => {
-      const revision = bumpTruthRevision();
+      truthRevision += 1;
       const record = {
-        recordId: `tr-${revision}`,
-        opId: `seed-${revision}`,
+        recordId: `tr-${truthRevision}`,
+        opId: `seed-${truthRevision}`,
         candidateId: null,
-        revision,
+        key: `${scope}\u0000${assertion?.subject ?? ''}\u0000${assertion?.predicate ?? ''}\u0000${assertion?.value ?? ''}\u0000${normalizeClaim(claim)}`,
+        revision: truthRevision,
         claim,
         scope,
         assertion,
+        relations: [],
         trust: 'T2',
         committedAt: clock(),
       };
@@ -408,24 +426,26 @@ export function createPipeline({
       revoked.add(epoch);
       return { revoked: 1 };
     },
+    revokedEpochs: () => [...revoked],
     isPolicyBlocked: () => Boolean(cfg.quotaExceeded),
-    revokeEpochs: () => [...revoked],
     truthRevision: () => truthRevision,
     forceReceiptDrift: (opId) => {
-      if (receipts.has(opId)) receipts.delete(opId);
+      receipts.delete(opId);
     },
     reconcile: (opId) => {
       if (receipts.has(opId)) return { kind: 'noop-receipt', recordId: receipts.get(opId).recordId };
       const found = truth.find((t) => t.opId === opId);
-      if (found) {
-        receipts.set(opId, { recordId: found.recordId, revision: found.revision });
-        return { kind: 'receipt-repaired', recordId: found.recordId };
-      }
-      const anyForOp = truth.some((t) => t.opId === opId);
-      if (!anyForOp) return { kind: 'recovery-required', reason: 'no-record-for-op' };
-      return { kind: 'recovery-required', reason: 'revision-mismatch' };
+      if (!found) return { kind: 'recovery-required', reason: 'no-record-for-op' };
+      const dup = truth.filter((t) => t.opId === opId);
+      if (dup.length > 1) return { kind: 'recovery-required', reason: 'duplicate-records' };
+      receipts.set(opId, {
+        recordId: found.recordId,
+        revision: found.revision,
+        evidenceHash: found.evidenceHash ?? null,
+      });
+      auditPending.delete(opId);
+      return { kind: 'receipt-repaired', recordId: found.recordId };
     },
     auditLog: () => audit.slice(),
-    auditPending,
   };
 }
