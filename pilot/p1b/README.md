@@ -14,13 +14,17 @@
 
 | 文件 | 作用 |
 |---|---|
+| `tools/evidence.mjs` | **B7.1 真实现**：R3 五条机判（码点 span/代理对边界/quote 唯一且 ≤200/快照 hash 比对/stale） |
+| `tools/pipeline.mjs` | **B7.2 真实现**：决策矩阵 9 行（`DECISION_ROWS`）+ R7 提交（收据幂等/锁内 epoch 重查/CAS 刷新/审计先行/恢复三分支） |
+| `tools/assertion-checks.mjs` | **B7.3 真实现**：§5 R4.5 五条断言机判（speaker/negated/suggest/complete/retract） |
+| `tools/pipeline-events.mjs` | **B7.3 真实现**：§9 R8 三类事件 + `runStatus`/`verdictAllowed` 枚举映射 |
 | `tools/r2-sim.mjs` | r2 自动决策模拟器（`createR2Sim`）：R0/R1 摄取与证据解析、R3 五条机判、自动决策矩阵 9 行、聊天纠正 7 类、R7 提交/CAS/恢复、R8 事件与配额闸门 |
 | `pilot/p1a/tools/protocol-sim.mjs` | 复用的候选状态机与幂等协议模拟器（`createSim`），r2-sim 在其上实现决策与提交 |
 
 常用命令：
 
 ```bash
-# 全部保护测试（20 条）
+# 全部测试（63 条：20 保护测试 + 43 真实现测试）
 node --test pilot/p1b/tests/*.test.mjs
 
 # 只跑决策与断言机判
