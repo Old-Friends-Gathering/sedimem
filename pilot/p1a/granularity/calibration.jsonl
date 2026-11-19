@@ -1,0 +1,12 @@
+{"calibrationId": "cal-01", "language": "zh", "text": "端口是 8080，而且超时改成 30 秒", "expectedClaims": 2, "hits": ["S1"], "verdict": "must-split"}
+{"calibrationId": "cal-02", "language": "zh", "text": "A 部署在 cn，B 部署在 us", "expectedClaims": 2, "hits": ["S2"], "verdict": "must-split"}
+{"calibrationId": "cal-03", "language": "zh", "text": "端口 8080、超时 30s", "expectedClaims": 2, "hits": ["S3"], "verdict": "must-split"}
+{"calibrationId": "cal-04", "language": "zh", "text": "如果切换流量，QPS 会从 100 升到 200", "expectedClaims": 1, "hits": ["S4"], "verdict": "valid-atomic"}
+{"calibrationId": "cal-05", "language": "zh", "text": "根据文档，端口是 8080", "expectedClaims": 1, "hits": ["S5"], "verdict": "valid-atomic"}
+{"calibrationId": "cal-06", "language": "zh", "text": "cn 节点比 us 节点快 3 倍", "expectedClaims": 1, "hits": ["S6"], "verdict": "valid-atomic"}
+{"calibrationId": "cal-07", "language": "zh", "text": "db-primary-01 的端口是 8080", "expectedClaims": 1, "hits": [], "verdict": "valid-atomic"}
+{"calibrationId": "cal-08", "language": "zh", "text": "超时是 30 s", "expectedClaims": 1, "hits": [], "verdict": "valid-atomic"}
+{"calibrationId": "cal-09", "language": "zh", "text": "服务不支持 8081", "expectedClaims": 1, "hits": [], "verdict": "valid-atomic"}
+{"calibrationId": "cal-10", "language": "zh", "text": "我先看一下日志", "expectedClaims": 0, "hits": [], "verdict": "not-a-claim"}
+{"calibrationId": "cal-11", "language": "zh", "text": "health 接口返回 degraded", "expectedClaims": 1, "hits": [], "verdict": "valid-atomic"}
+{"calibrationId": "cal-12", "language": "zh", "text": "谢谢，辛苦了", "expectedClaims": 0, "hits": [], "verdict": "not-a-claim"}
