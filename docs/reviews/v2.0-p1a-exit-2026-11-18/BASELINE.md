@@ -15,6 +15,7 @@
 ## 方法论
 
 - **语料**：218 场景（test 100 / dev 118），gold 347 条，对抗 10 类 test 每类恰 10（详见 B3 审核报告修订后验证节）。
+- **口径变更（2026-11-19，G1）**：粒度规则 `granularity@v1` 冻结后，5 条复合 gold 被拆为 12 条（净 +6），语料 gold 由 347 变为 **353**；本报告下文表格中的 347/具体 P/R 数字是当时的运行记录（runId 见 §复现），不回溯改写。
 - **抽取器**：规则地板 baseline-runner（句子切分 + 线索词匹配，无 LLM 参与）。
 - **评分口径**：manifest v3（[04-scoring-and-splits.md](../../design/v2.0/04-scoring-and-splits.md) §3 六硬规则：TP/FP/FN 一对一匹配、零输出 precision 未定义、截断场景保留原分母）。**置信区间主口径 = 家族聚类 bootstrap**：`score.mjs` 已实现 `bootstrapCI`（重采样场景家族、保留簇内全部场景、percentile 法、2000 次、95%、seed=`20261118` 可复现）；Wilson 区间同时输出，仅作描述性对照，不得宣称独立样本置信。
 - **运行**：实测于 2026-11-18T12:21Z，产物在 `pilot/p1a/out/exit/exit-20261118T12-21-40Z/`（gitignored，按下方复现命令重建；目录不入库故不作站内链接）。
