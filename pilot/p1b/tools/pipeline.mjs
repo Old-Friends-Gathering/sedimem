@@ -267,12 +267,10 @@ export function createPipeline({
 
     // 行 8：异议可消解 → 生成 relations 后**真正重入**矩阵（行 1–7 全量重评）
     let r = evaluate(c);
-    let correctionApplied = false;
     if (ctx.objection?.resolvable && r.decision === 'accept') {
       r.rulesHit.push('objection-without-target');
     }
     if ((r.decision === 'hold' || r.decision === 'reject') && ctx.objection?.resolvable) {
-      correctionApplied = true;
       c.meta.relations = [
         ...c.meta.relations,
         {
